@@ -1,0 +1,20 @@
+{
+  "appId": "com.civitai.modelmanager",
+  "productName": "CivitAI Model Manager",
+  "copyright": "Copyright © 2026",
+  "directories": {
+    "output": "dist-app"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "win": {
+    "target": "nsis"
+  },
+  "mac": {
+    "target": "dmg"
+  },
+  "linux": {
+    "target": "AppImage"
+  }
+}
