@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-app/
+*.log
+*.sqlite
+*.db
+.DS_Store
+scratch/
