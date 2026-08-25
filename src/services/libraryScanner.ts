@@ -7,25 +7,50 @@ import { dbManager } from '../db/db';
 import { computeFileSHA256 } from '../utils/hash';
 import { logger } from '../utils/logger';
 
-const MODEL_EXTENSIONS = new Set(['.safetensors', '.ckpt', '.pt', '.bin', '.pth']);
+const MODEL_EXTENSIONS = new Set([
+  '.safetensors',
+  '.ckpt',
+  '.pt',
+  '.bin',
+  '.pth',
+  '.gguf',
+  '.sft',
+  '.onnx',
+  '.engine',
+  '.tensor',
+]);
 
 export class LibraryScanner {
   private watcher: FSWatcher | null = null;
   private isScanning = false;
 
   async scanDirectory(
-    rootPath: string,
+    rootPath: string | string[],
     onProgress?: (progress: ScanProgress) => void
   ): Promise<LocalModel[]> {
     if (this.isScanning) {
       throw new Error('A scan is already in progress');
     }
-    if (!rootPath || !fs.existsSync(rootPath)) {
-      throw new Error(`Invalid root directory path: ${rootPath}`);
+    const rootPaths = Array.isArray(rootPath) ? rootPath.filter(Boolean) : [rootPath].filter(Boolean);
+    if (rootPaths.length === 0) {
+      throw new Error('No folder paths provided for scanning. Please add model folders in Settings.');
+    }
+
+    const existingPaths = rootPaths.filter((p) => fs.existsSync(p));
+    const missingPaths = rootPaths.filter((p) => !fs.existsSync(p));
+
+    if (missingPaths.length > 0) {
+      logger.warn(`The following configured model folders do not exist on disk: ${missingPaths.join(', ')}`);
+    }
+
+    if (existingPaths.length === 0) {
+      throw new Error(
+        `None of your configured model folders exist on disk (${missingPaths.join(', ')}). Please verify your folder paths in Settings.`
+      );
     }
 
     this.isScanning = true;
-    logger.info(`Starting folder scan on root directory: ${rootPath}`);
+    logger.info(`Starting folder scan on directories: ${existingPaths.join(', ')}`);
 
     const progress: ScanProgress = {
       scannedFiles: 0,
@@ -36,8 +61,12 @@ export class LibraryScanner {
     if (onProgress) onProgress({ ...progress });
 
     try {
-      // 1. Collect all model files recursively
-      const allFiles = this.collectModelFiles(rootPath);
+      // 1. Collect all model files recursively across all existing root paths
+      const allFiles: string[] = [];
+      for (const p of existingPaths) {
+        allFiles.push(...this.collectModelFiles(p));
+      }
+
       progress.totalFiles = allFiles.length;
       if (onProgress) onProgress({ ...progress });
 
@@ -46,11 +75,22 @@ export class LibraryScanner {
 
       // 2. Process each file with Fast-Path Cache Check
       progress.status = 'hashing';
-      for (const filePath of allFiles) {
+      for (let i = 0; i < allFiles.length; i++) {
+        const filePath = allFiles[i];
+        progress.scannedFiles = i + 1;
         progress.currentFile = path.basename(filePath);
         if (onProgress) onProgress({ ...progress });
 
-        const stats = fs.statSync(filePath);
+        // Yield to Node event loop so Electron IPC progress messages stream live to UI
+        await new Promise((r) => setTimeout(r, 2));
+
+        let stats: fs.Stats;
+        try {
+          stats = fs.statSync(filePath);
+        } catch (e) {
+          continue;
+        }
+
         const modifiedAt = Math.floor(stats.mtimeMs);
         const fileSize = stats.size;
 
@@ -73,7 +113,7 @@ export class LibraryScanner {
         }
 
         const localId = cached?.id || `loc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        
+
         const localModel: LocalModel = {
           id: localId,
           filePath,
@@ -84,6 +124,8 @@ export class LibraryScanner {
           civitaiModelId: cached?.civitai_model_id,
           civitaiVersionId: cached?.civitai_version_id,
           isMatched: !!cached?.civitai_version_id,
+          previewUrl: cached?.preview_url || undefined,
+          modelType: cached?.model_type || undefined,
         };
 
         scannedModels.push(localModel);
@@ -91,8 +133,8 @@ export class LibraryScanner {
         // Save/Update in SQLite
         await dbManager.run(
           `INSERT OR REPLACE INTO local_models 
-            (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id, civitai_version_id, scanned_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+            (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id, civitai_version_id, scanned_at, preview_url, model_type)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)`,
           [
             localModel.id,
             localModel.filePath,
@@ -102,15 +144,14 @@ export class LibraryScanner {
             localModel.sha256,
             localModel.civitaiModelId || null,
             localModel.civitaiVersionId || null,
+            localModel.previewUrl || null,
+            localModel.modelType || null,
           ]
         );
 
         if (!localModel.isMatched && sha256) {
           hashesToLookup.push({ hash: sha256, localId });
         }
-
-        progress.scannedFiles++;
-        if (onProgress) onProgress({ ...progress });
       }
 
       // 3. Perform Bulk CivitAI Hash Lookup for unmatched models
@@ -144,10 +185,15 @@ export class LibraryScanner {
               item.civitaiModelId = matchedVersion.modelId;
               item.civitaiName = matchedVersion.name;
               item.civitaiBaseModel = matchedVersion.baseModel;
+              // Store preview image URL if available
+              const preview = matchedVersion.images && matchedVersion.images[0] ? matchedVersion.images[0].url : null;
+              item.previewUrl = preview || undefined;
+              // Model type is not directly in version; we could fetch model later. For now set null.
+              item.modelType = undefined;
 
               await dbManager.run(
-                'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ? WHERE id = ?',
-                [matchedVersion.modelId, matchedVersion.id, item.id]
+                'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ?, preview_url = ?, model_type = ? WHERE id = ?',
+                [matchedVersion.modelId, matchedVersion.id, preview, null, item.id]
               );
             }
           }
@@ -174,18 +220,30 @@ export class LibraryScanner {
 
   private collectModelFiles(dirPath: string): string[] {
     const results: string[] = [];
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    try {
+      if (!fs.existsSync(dirPath)) return results;
+      const entries = fs.readdirSync(dirPath);
 
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        results.push(...this.collectModelFiles(fullPath));
-      } else if (entry.isFile()) {
-        const ext = path.extname(entry.name).toLowerCase();
-        if (MODEL_EXTENSIONS.has(ext)) {
-          results.push(fullPath);
+      for (const entryName of entries) {
+        try {
+          const fullPath = path.join(dirPath, entryName);
+          // fs.statSync follows symlinks & junctions!
+          const stat = fs.statSync(fullPath);
+
+          if (stat.isDirectory()) {
+            results.push(...this.collectModelFiles(fullPath));
+          } else if (stat.isFile()) {
+            const ext = path.extname(entryName).toLowerCase();
+            if (MODEL_EXTENSIONS.has(ext)) {
+              results.push(fullPath);
+            }
+          }
+        } catch (itemErr) {
+          // Skip inaccessible or locked files
         }
       }
+    } catch (dirErr) {
+      logger.warn(`Could not read directory ${dirPath}:`, dirErr);
     }
 
     return results;

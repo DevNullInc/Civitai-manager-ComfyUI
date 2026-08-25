@@ -5,12 +5,16 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && tsc -p tsconfig.main.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder",
     "electron:preview": "npm run build && electron . --preview",
+    "cmm:start": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 start",
+    "cmm:stop": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 stop",
+    "cmm:restart": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 restart",
+    "cmm:status": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 status",
     "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
@@ -37,6 +41,7 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.13.4",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -44,6 +49,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vitest": "^3.0.6"

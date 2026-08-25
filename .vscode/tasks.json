@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "label": "npm: dev",
+      "detail": "vite"
+    },
+    {
+      "type": "npm",
+      "script": "electron:dev",
+      "isBackground": true,
+      "problemMatcher": [],
+      "label": "npm: electron:dev",
+      "detail": "npm run build && electron ."
+    }
+  ]
+}

@@ -33,12 +33,17 @@ const api = {
   checkUpdate: (localModel: any) => ipcRenderer.invoke('check-update', localModel),
   exportBackup: (filePath: string) => ipcRenderer.invoke('export-backup', filePath),
   importBackup: (filePath: string) => ipcRenderer.invoke('import-backup', filePath),
+  // Delete local model
+  deleteLocalModel: (id: string) => ipcRenderer.invoke('delete-local-model', id),
+   // App control
+   restartApp: () => ipcRenderer.invoke('restart-app'),
+   shutdownApp: () => ipcRenderer.invoke('shutdown-app'),
 };
 
 contextBridge.exposeInMainWorld('civitaiAPI', api);
 
 declare global {
   interface Window {
-    civitaiAPI: typeof api;
+    civitaiAPI: typeof api & { _isMock?: boolean };
   }
 }
