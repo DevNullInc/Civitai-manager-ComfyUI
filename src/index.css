@@ -1,12 +1,8 @@
-/* Modern UI Aesthetics System */
+@import "tailwindcss";
 
 :root {
   color-scheme: dark;
   --bg-dark: #07090e;
-  --bg-card: rgba(18, 24, 38, 0.7);
-  --border-card: rgba(255, 255, 255, 0.08);
-  --accent-purple: #8b5cf6;
-  --accent-indigo: #6366f1;
 }
 
 body {
@@ -20,26 +16,26 @@ body {
 
 /* Glassmorphism Panels & Cards */
 .glass-panel {
-  background: rgba(13, 18, 30, 0.75);
+  background: rgba(13, 18, 30, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-card {
-  background: rgba(22, 30, 48, 0.55);
+  background: rgba(22, 30, 48, 0.65);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
-  background: rgba(28, 38, 60, 0.8);
-  border-color: rgba(168, 85, 247, 0.35);
+  background: rgba(28, 38, 60, 0.85);
+  border-color: rgba(168, 85, 247, 0.4);
   transform: translateY(-3px);
-  box-shadow: 0 12px 28px -4px rgba(139, 92, 246, 0.15), 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 28px -4px rgba(139, 92, 246, 0.2), 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 /* Modern Gradient Text */
@@ -57,15 +53,15 @@ body {
 
 /* Pulsing & Glowing Accents */
 .glow-purple {
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.35);
 }
 
 .glow-emerald {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
 }
 
 .glow-amber {
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.35);
 }
 
 /* Custom Scrollbars */
@@ -85,14 +81,4 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(168, 85, 247, 0.6);
-}
-
-/* Micro Animations */
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.02); }
-}
-
-.animate-pulse-subtle {
-  animation: pulse-subtle 3s infinite ease-in-out;
 }

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
+import http from 'http';
 import { dbManager } from '../db/db';
 import { civitaiClient } from '../services/civitaiClient';
 import { folderRouter } from '../services/folderRouter';
@@ -15,6 +16,7 @@ import { AppConfig } from '../types/app';
 let mainWindow: BrowserWindow | null = null;
 let currentConfig: AppConfig = {
   comfyui_root: '',
+  comfyui_folders: [],
   civitai_api_key: '',
   folder_mappings: {},
   advanced_mappings: { filename_patterns: [] },
@@ -60,6 +62,10 @@ async function loadConfigFromDb() {
     });
 
     if (cfgObj.comfyui_root) currentConfig.comfyui_root = cfgObj.comfyui_root;
+    if (cfgObj.comfyui_folders) currentConfig.comfyui_folders = cfgObj.comfyui_folders;
+    if ((!currentConfig.comfyui_folders || currentConfig.comfyui_folders.length === 0) && currentConfig.comfyui_root) {
+      currentConfig.comfyui_folders = [currentConfig.comfyui_root];
+    }
     if (cfgObj.civitai_api_key) {
       const decrypted = decryptKey(cfgObj.civitai_api_key);
       currentConfig.civitai_api_key = decrypted;
@@ -74,7 +80,8 @@ async function loadConfigFromDb() {
     }
 
     folderRouter.updateConfig({
-      rootPath: currentConfig.comfyui_root,
+      rootPath: currentConfig.comfyui_root || currentConfig.comfyui_folders[0] || '',
+      folderPaths: currentConfig.comfyui_folders,
       folderMappings: currentConfig.folder_mappings,
       separateByBaseModel: currentConfig.organize_by.base_model,
       separateByCreator: currentConfig.organize_by.creator,
@@ -85,8 +92,154 @@ async function loadConfigFromDb() {
   }
 }
 
+function startHttpBridgeServer() {
+  const server = http.createServer(async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = req.url || '';
+
+    const getBody = (): Promise<any> =>
+      new Promise((resolve) => {
+        let data = '';
+        req.on('data', (chunk) => (data += chunk));
+        req.on('end', () => {
+          try {
+            resolve(data ? JSON.parse(data) : {});
+          } catch {
+            resolve({});
+          }
+        });
+      });
+
+    try {
+      if (url === '/api/config' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(currentConfig));
+      } else if (url === '/api/save-config' && req.method === 'POST') {
+        const body = await getBody();
+        currentConfig = { ...currentConfig, ...body };
+
+        if (body.comfyui_root !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['comfyui_root', JSON.stringify(body.comfyui_root)]
+          );
+        }
+        if (body.comfyui_folders !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['comfyui_folders', JSON.stringify(body.comfyui_folders)]
+          );
+        }
+        if (body.civitai_api_key !== undefined) {
+          const encrypted = encryptKey(body.civitai_api_key);
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['civitai_api_key', JSON.stringify(encrypted)]
+          );
+          civitaiClient.setApiKey(body.civitai_api_key);
+        }
+        if (body.folder_mappings) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['folder_mappings', JSON.stringify(body.folder_mappings)]
+          );
+        }
+        if (body.advanced_mappings) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['advanced_mappings', JSON.stringify(body.advanced_mappings)]
+          );
+        }
+
+        folderRouter.updateConfig({
+          rootPath: currentConfig.comfyui_root,
+          folderPaths: currentConfig.comfyui_folders,
+          folderMappings: currentConfig.folder_mappings,
+          separateByBaseModel: currentConfig.organize_by.base_model,
+          separateByCreator: currentConfig.organize_by.creator,
+          advancedMappings: currentConfig.advanced_mappings,
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(currentConfig));
+      } else if (url === '/api/scan-library' && req.method === 'POST') {
+        const body = await getBody();
+        const models = await libraryScanner.scanDirectory(body.rootPath);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(models));
+      } else if (url === '/api/local-models' && req.method === 'GET') {
+        const rows = await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
+        const models = rows.map((r: any) => ({
+          id: r.id,
+          filePath: r.file_path,
+          fileName: r.file_name,
+          fileSize: r.file_size,
+          modifiedAt: r.modified_at,
+          sha256: r.sha256,
+          civitaiModelId: r.civitai_model_id,
+          civitaiVersionId: r.civitai_version_id,
+          previewUrl: r.preview_url,
+          modelType: r.model_type,
+          isMatched: !!r.civitai_version_id,
+          isDuplicate: !!r.is_duplicate,
+        }));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(models));
+      } else if (url === '/api/search-models' && req.method === 'POST') {
+        const body = await getBody();
+        const result = await civitaiClient.fetchModels(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if (url === '/api/enums' && req.method === 'GET') {
+        const enums = await civitaiClient.fetchEnums();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(enums));
+      } else {
+        res.writeHead(404);
+        res.end('Not Found');
+      }
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+  });
+
+  server.listen(5174, () => {
+    logger.info('HTTP Native Server Bridge running on http://localhost:5174');
+  });
+}
+
 function registerIpcHandlers() {
   ipcMain.handle('get-config', () => currentConfig);
+
+  // Delete a local model from the database and filesystem
+  ipcMain.handle('delete-local-model', async (_event: unknown, modelId: string) => {
+    // Get model info first
+    const model = await dbManager.get('SELECT * FROM local_models WHERE id = ?', [modelId]);
+    if (!model) return { success: false, error: 'Model not found' };
+    try {
+      // Remove file from disk if it exists
+      const fs = require('fs');
+      if (fs.existsSync(model.file_path)) {
+        fs.unlinkSync(model.file_path);
+      }
+      // Delete from DB
+      await dbManager.run('DELETE FROM local_models WHERE id = ?', [modelId]);
+      return { success: true };
+    } catch (e: any) {
+      logger.error('Failed to delete model', e);
+      return { success: false, error: e?.message || 'Unknown error' };
+    }
+  });
 
   ipcMain.handle('save-config', async (_event, newConfig: Partial<AppConfig>) => {
     currentConfig = { ...currentConfig, ...newConfig };
@@ -104,6 +257,13 @@ function registerIpcHandlers() {
       await dbManager.run(
         'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
         ['comfyui_root', JSON.stringify(newConfig.comfyui_root)]
+      );
+    }
+
+    if (newConfig.comfyui_folders !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['comfyui_folders', JSON.stringify(newConfig.comfyui_folders)]
       );
     }
 
@@ -127,6 +287,7 @@ function registerIpcHandlers() {
 
     folderRouter.updateConfig({
       rootPath: currentConfig.comfyui_root,
+      folderPaths: currentConfig.comfyui_folders,
       folderMappings: currentConfig.folder_mappings,
       separateByBaseModel: currentConfig.organize_by.base_model,
       separateByCreator: currentConfig.organize_by.creator,
@@ -163,7 +324,21 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('get-local-models', async () => {
-    return await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
+    const rows = await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
+    return rows.map((r: any) => ({
+      id: r.id,
+      filePath: r.file_path,
+      fileName: r.file_name,
+      fileSize: r.file_size,
+      modifiedAt: r.modified_at,
+      sha256: r.sha256,
+      civitaiModelId: r.civitai_model_id,
+      civitaiVersionId: r.civitai_version_id,
+      previewUrl: r.preview_url,
+      modelType: r.model_type,
+      isMatched: !!r.civitai_version_id,
+      isDuplicate: !!r.is_duplicate,
+    }));
   });
 
   // Download Handlers
@@ -203,6 +378,17 @@ function registerIpcHandlers() {
     return downloadManager.getTasks();
   });
 
+  // Fetch version history for a given model ID
+  ipcMain.handle('fetch-versions', async (_event: unknown, modelId: number) => {
+    try {
+      const versions = await versionManager.getVersionHistory(modelId);
+      return versions;
+    } catch (e) {
+      logger.error('Failed to fetch versions', e);
+      return [];
+    }
+  });
+
   // Versioning & Backup
   ipcMain.handle('check-update', async (_event: unknown, localModel: any) => {
     return await versionManager.checkForUpdates(localModel);
@@ -215,6 +401,16 @@ function registerIpcHandlers() {
 
   ipcMain.handle('import-backup', async (_event: unknown, filePath: string) => {
     await backupService.importBackup(filePath);
+    return true;
+  });
+  // App control
+  ipcMain.handle('restart-app', () => {
+    app.relaunch();
+    app.exit(0);
+    return true;
+  });
+  ipcMain.handle('shutdown-app', () => {
+    app.quit();
     return true;
   });
 }
@@ -233,6 +429,7 @@ app.whenReady().then(async () => {
   await dbManager.init();
   await loadConfigFromDb();
   registerIpcHandlers();
+  startHttpBridgeServer();
   await createWindow();
 
   if (app.isPackaged) {
@@ -244,9 +441,4 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
-
-app.on('window-all-closed', () => {
-  dbManager.close().catch(() => {});
-  if (process.platform !== 'darwin') app.quit();
 });

@@ -1,5 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Compass, HardDrive, Download, Settings as SettingsIcon, Layers, Sparkles, Activity } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Compass,
+  HardDrive,
+  Download,
+  Settings as SettingsIcon,
+  Layers,
+  Sparkles,
+  ChevronUp,
+  Activity,
+} from 'lucide-react';
 import { BrowseTab } from './components/BrowseTab';
 import { LibraryTab } from './components/LibraryTab';
 import { DownloadsTab } from './components/DownloadsTab';
@@ -12,17 +21,49 @@ type Tab = 'browse' | 'library' | 'downloads' | 'settings';
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('browse');
   const [activeDownloadsCount, setActiveDownloadsCount] = useState<number>(0);
+  const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
+  const mainRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (window.civitaiAPI) {
       window.civitaiAPI.onDownloadProgress((tasks) => {
-        const downloading = tasks.filter(
+        const taskArr = Array.isArray(tasks) ? tasks : [];
+        const downloading = taskArr.filter(
           (t) => t.status === 'downloading' || t.status === 'pending' || t.status === 'verifying'
         );
         setActiveDownloadsCount(downloading.length);
       });
     }
+
+    const handleGlobalScroll = () => {
+      const mainTop = mainRef.current ? mainRef.current.scrollTop : 0;
+      const winTop = window.scrollY || document.documentElement.scrollTop || 0;
+      if (mainTop > 150 || winTop > 150) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleGlobalScroll, true);
+    return () => window.removeEventListener('scroll', handleGlobalScroll, true);
   }, []);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const scrollTop = e.currentTarget.scrollTop;
+    if (scrollTop > 150) {
+      setShowScrollTop(true);
+    } else {
+      setShowScrollTop(false);
+    }
+  };
+
+  const scrollToTop = () => {
+    if (mainRef.current) {
+      mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleQueueDownload = async (model: CivitAIModel, version: CivitAIModelVersion) => {
     const primaryFile = version.files?.[0];
@@ -52,114 +93,96 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#07090e] text-slate-100 overflow-hidden select-none">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 glass-panel border-r border-slate-800/60 flex flex-col justify-between p-4 flex-shrink-0 relative z-20">
-        <div className="space-y-6">
-          {/* Logo Branding Header */}
-          <div className="flex items-center gap-3 px-2 py-2">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 flex items-center justify-center">
-              <Layers size={22} />
-            </div>
-            <div>
-              <h1 className="font-bold text-sm text-slate-100 tracking-tight leading-none flex items-center gap-1.5">
-                <span>CivitAI Manager</span>
-              </h1>
-              <span className="text-[10px] gradient-text font-bold tracking-wider uppercase mt-1 block">
-                ComfyUI Edition
+    <div className="flex flex-col h-screen w-screen bg-[#07090e] text-slate-100 overflow-hidden select-none">
+      {/* Sticky 3-Column Top Navigation Bar */}
+      <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 backdrop-blur-xl px-8 py-3.5 shadow-2xl grid grid-cols-3 items-center w-full flex-shrink-0">
+        {/* Left: Brand Logo & Title */}
+        <div className="flex items-center gap-3 justify-self-start">
+          <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 flex items-center justify-center">
+            <Layers size={22} />
+          </div>
+          <div>
+            <h1 className="font-extrabold text-sm text-slate-100 tracking-tight leading-none">
+              CivitAI Manager
+            </h1>
+            <span className="text-[10px] gradient-text font-extrabold tracking-wider uppercase mt-0.5 block">
+              ComfyUI Edition
+            </span>
+          </div>
+        </div>
+
+        {/* Center: Perfectly Centered Fixed-Width Menu Buttons */}
+        <nav className="flex items-center justify-center gap-3 justify-self-center">
+          <button
+            onClick={() => setActiveTab('browse')}
+            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+              activeTab === 'browse'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
+            }`}
+          >
+            <Compass size={16} className={activeTab === 'browse' ? 'text-white' : 'text-purple-400'} />
+            <span>Browse Models</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('library')}
+            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+              activeTab === 'library'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
+            }`}
+          >
+            <HardDrive size={16} className={activeTab === 'library' ? 'text-white' : 'text-blue-400'} />
+            <span>Local Library</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('downloads')}
+            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative ${
+              activeTab === 'downloads'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
+            }`}
+          >
+            <Download size={16} className={activeTab === 'downloads' ? 'text-white' : 'text-emerald-400'} />
+            <span>Downloads</span>
+
+            {activeDownloadsCount > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 animate-pulse glow-amber">
+                {activeDownloadsCount}
               </span>
-            </div>
-          </div>
+            )}
+          </button>
 
-          {/* Navigation Links */}
-          <nav className="space-y-1.5">
-            <button
-              onClick={() => setActiveTab('browse')}
-              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                activeTab === 'browse'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-[1.02]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Compass size={18} className={activeTab === 'browse' ? 'text-white' : 'text-purple-400'} />
-                <span>Browse Models</span>
-              </div>
-              {activeTab === 'browse' && <Sparkles size={14} className="text-purple-200 animate-pulse" />}
-            </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+              activeTab === 'settings'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
+            }`}
+          >
+            <SettingsIcon size={16} className={activeTab === 'settings' ? 'text-white' : 'text-slate-400'} />
+            <span>Settings</span>
+          </button>
+        </nav>
 
-            <button
-              onClick={() => setActiveTab('library')}
-              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                activeTab === 'library'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-[1.02]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <HardDrive size={18} className={activeTab === 'library' ? 'text-white' : 'text-blue-400'} />
-                <span>Local Library</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('downloads')}
-              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                activeTab === 'downloads'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-[1.02]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Download size={18} className={activeTab === 'downloads' ? 'text-white' : 'text-emerald-400'} />
-                <span>Downloads Queue</span>
-              </div>
-
-              {activeDownloadsCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950 animate-pulse glow-amber">
-                  {activeDownloadsCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                activeTab === 'settings'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-[1.02]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <SettingsIcon size={18} className={activeTab === 'settings' ? 'text-white' : 'text-slate-400'} />
-                <span>Settings</span>
-              </div>
-            </button>
-          </nav>
+        {/* Right: Engine Status Badge */}
+        <div className="flex items-center gap-2 justify-self-end bg-slate-900/80 border border-slate-800 px-3.5 py-1.5 rounded-xl text-[11px] font-medium text-slate-400">
+          <Activity size={14} className="text-emerald-400" />
+          <span>ComfyUI Auto-Sorter Ready</span>
         </div>
+      </header>
 
-        {/* Footer Info Widget */}
-        <div className="p-3.5 rounded-2xl bg-slate-900/50 border border-slate-800/80 text-[11px] text-slate-400 space-y-1.5 backdrop-blur-md">
-          <div className="flex justify-between items-center">
-            <span className="flex items-center gap-1.5 text-slate-300 font-medium">
-              <Activity size={13} className="text-emerald-400" />
-              API Engine
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
-              Verified
-            </span>
-          </div>
-          <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1 border-t border-slate-800/60">
-            <span>ComfyUI Auto-Sorter</span>
-            <span className="font-mono text-purple-400">v1.0.0</span>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto bg-[#07090e] relative">
-        {/* Subtle background glow accents */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      {/* Scrollable Container */}
+      <main
+        ref={mainRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto bg-[#07090e] relative scroll-smooth"
+      >
+        {/* Background Radial Glow Accents */}
+        <div className="absolute top-10 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-10 left-1/3 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 min-h-full">
@@ -170,6 +193,17 @@ export default function App() {
             {activeTab === 'settings' && <SettingsTab />}
           </ErrorBoundary>
         </div>
+
+        {/* Floating Return to Top Button */}
+        {showScrollTop && (
+          <button
+            onClick={scrollToTop}
+            title="Return to Top"
+            className="fixed bottom-8 right-8 z-[100] p-4 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-2xl shadow-purple-600/50 hover:scale-110 active:scale-95 transition-all duration-200 border border-purple-400/40 glow-purple flex items-center justify-center cursor-pointer"
+          >
+            <ChevronUp size={24} className="stroke-[3]" />
+          </button>
+        )}
       </main>
     </div>
   );

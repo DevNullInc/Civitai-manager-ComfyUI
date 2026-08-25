@@ -20,7 +20,7 @@ export const DownloadsTab: React.FC = () => {
     const fetchDownloads = async () => {
       if (window.civitaiAPI) {
         const currentTasks = await window.civitaiAPI.getDownloads();
-        setTasks(currentTasks || []);
+        setTasks(Array.isArray(currentTasks) ? currentTasks : []);
       }
     };
 
@@ -28,7 +28,7 @@ export const DownloadsTab: React.FC = () => {
 
     if (window.civitaiAPI) {
       window.civitaiAPI.onDownloadProgress((updatedTasks) => {
-        setTasks(updatedTasks || []);
+        setTasks(Array.isArray(updatedTasks) ? updatedTasks : []);
       });
     }
   }, []);
