@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "dist/main",
+    "rootDir": "src",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "declaration": false,
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src/main/**/*",
+    "src/db/**/*",
+    "src/services/**/*",
+    "src/utils/**/*",
+    "src/types/**/*",
+    "migrations/**/*"
+  ],
+  "exclude": [
+    "src/components/**/*",
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/index.css"
+  ]
+}
