@@ -196,7 +196,7 @@ export function setupWebBridgeIfNeeded() {
 
       getSystemInfo: async () => {
         return {
-          version: '1.0.0',
+          version: '1.1.0',
           platform: navigator.platform || 'web',
           userAgent: navigator.userAgent,
         };
