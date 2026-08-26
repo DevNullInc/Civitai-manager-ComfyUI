@@ -161,7 +161,12 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
       alert('The library database is already empty.');
       return;
     }
-    if (!window.confirm(`Are you sure you want to clear the library database (${localModels.length} models)? This removes all indexed records from the manager cache without deleting your files on disk, allowing you to perform a clean refresh.`)) {
+    const confirmed = window.confirm(
+      `Are you sure you want to clear your current library?\n\n` +
+      `This will clear all ${localModels.length} cached model records and CivitAI metadata from the local database.\n\n` +
+      `Note: Your actual model files on disk will NOT be deleted.`
+    );
+    if (!confirmed) {
       return;
     }
 
