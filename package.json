@@ -1,6 +1,6 @@
 {
   "name": "civitai-model-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "The missing model manager for ComfyUI with verified CivitAI API integration and intelligent auto-sorting.",
   "main": "dist/main/index.js",
   "scripts": {

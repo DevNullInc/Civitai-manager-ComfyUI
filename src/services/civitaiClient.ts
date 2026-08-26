@@ -151,32 +151,32 @@ export class CivitAIClient {
     });
   }
 
-  async bulkLookupByHashes(hashes: string[]): Promise<CivitAIModelVersion[]> {
+  async bulkLookupByHashes(
+    hashes: string[],
+    onProgress?: (done: number, total: number) => void
+  ): Promise<CivitAIModelVersion[]> {
     if (hashes.length === 0) return [];
 
-    // CivitAI limits bulk lookup to max 100 hashes per request
-    const BATCH_SIZE = 100;
     const results: CivitAIModelVersion[] = [];
+    const CONCURRENCY = 4;
+    let completed = 0;
 
-    for (let i = 0; i < hashes.length; i += BATCH_SIZE) {
-      const chunk = hashes.slice(i, i + BATCH_SIZE);
-      await this.rateLimiter.executeWithRetry(async () => {
+    for (let i = 0; i < hashes.length; i += CONCURRENCY) {
+      const chunk = hashes.slice(i, i + CONCURRENCY);
+      const promises = chunk.map(async (hash) => {
         try {
-          const res = await this.axiosInstance.post('/model-versions/by-hash', chunk, {
-            headers: this.getHeaders(),
-          });
-          const returned = res.data;
-          if (Array.isArray(returned)) {
-            results.push(...returned);
-          } else if (returned && typeof returned === 'object') {
-            Object.values(returned).forEach((item: any) => {
-              if (item) results.push(item);
-            });
+          const version = await this.lookupByHash(hash);
+          if (version) {
+            results.push(version);
           }
         } catch (err) {
-          logger.error(`Error in bulk lookup batch starting at index ${i}:`, err);
+          logger.warn(`Hash lookup skipped/failed for ${hash}:`, err);
+        } finally {
+          completed++;
+          if (onProgress) onProgress(completed, hashes.length);
         }
       });
+      await Promise.all(promises);
     }
 
     return results;

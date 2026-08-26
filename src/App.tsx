@@ -28,11 +28,21 @@ import { DownloadsTab } from './components/DownloadsTab';
 import { SettingsTab } from './components/SettingsTab';
 import { AboutTab } from './components/AboutTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { FloatingScannerWidget } from './components/FloatingScannerWidget';
+import { ScanProvider } from './context/ScanContext';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
 
 type Tab = 'browse' | 'library' | 'downloads' | 'settings' | 'about';
 
 export default function App() {
+  return (
+    <ScanProvider>
+      <AppContent />
+    </ScanProvider>
+  );
+}
+
+function AppContent() {
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const saved = localStorage.getItem('civitai_active_tab');
     if (
@@ -257,6 +267,9 @@ export default function App() {
           </button>
         )}
       </main>
+
+      {/* Persistent Floating Scanner HUD */}
+      <FloatingScannerWidget />
 
       {/* Persistent Footer */}
       <footer className="sticky bottom-0 z-40 glass-panel border-t border-slate-800/80 backdrop-blur-xl px-6 py-2 shadow-2xl flex items-center justify-between text-xs text-slate-400 w-full flex-shrink-0">

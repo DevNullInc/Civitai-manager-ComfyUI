@@ -306,6 +306,14 @@ function startHttpBridgeServer() {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/cancel-scan' && req.method === 'POST') {
+        libraryScanner.cancelScan();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/get-scan-status' && req.method === 'GET') {
+        const status = libraryScanner.getScanStatus();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -435,6 +443,15 @@ function registerIpcHandlers() {
         mainWindow.webContents.send('scan-progress', progress);
       }
     });
+  });
+
+  ipcMain.handle('cancel-scan', () => {
+    libraryScanner.cancelScan();
+    return true;
+  });
+
+  ipcMain.handle('get-scan-status', () => {
+    return libraryScanner.getScanStatus();
   });
 
   ipcMain.handle('get-local-models', async () => {
