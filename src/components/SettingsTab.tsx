@@ -62,17 +62,25 @@ export const SettingsTab: React.FC = () => {
   const [copiedJson, setCopiedJson] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const normalizeFolderPath = (p: string): string => {
+    if (!p) return '';
+    return p.trim().replace(/\\{2,}/g, '\\');
+  };
+
   useEffect(() => {
     const loadConfig = async () => {
       if (window.civitaiAPI) {
         const loaded = await window.civitaiAPI.getConfig();
         if (loaded) {
-          const folders = loaded.comfyui_folders && loaded.comfyui_folders.length > 0
+          const rawFolders = loaded.comfyui_folders && loaded.comfyui_folders.length > 0
             ? loaded.comfyui_folders
             : (loaded.comfyui_root ? [loaded.comfyui_root] : []);
 
+          const folders = rawFolders.map(normalizeFolderPath).filter(Boolean);
+
           setConfig({
             ...loaded,
+            comfyui_root: normalizeFolderPath(loaded.comfyui_root || folders[0] || ''),
             comfyui_folders: folders,
             folder_mappings: { ...DEFAULT_FOLDER_MAP, ...(loaded.folder_mappings || {}) },
             advanced_mappings: {
@@ -94,12 +102,15 @@ export const SettingsTab: React.FC = () => {
         setSaving(false);
         return;
       }
-      const primaryRoot = config.comfyui_folders[0] || config.comfyui_root || '';
+      const normalizedFolders = config.comfyui_folders.map(normalizeFolderPath).filter(Boolean);
+      const primaryRoot = normalizedFolders[0] || normalizeFolderPath(config.comfyui_root || '');
       const payload = {
         ...config,
+        comfyui_folders: normalizedFolders,
         comfyui_root: primaryRoot,
       };
       await window.civitaiAPI.saveConfig(payload);
+      setConfig(payload);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err: any) {
@@ -133,7 +144,7 @@ export const SettingsTab: React.FC = () => {
   };
 
   const addFolder = () => {
-    const trimmed = newFolderInput.trim();
+    const trimmed = normalizeFolderPath(newFolderInput);
     if (!trimmed) return;
     if (config.comfyui_folders.includes(trimmed)) return;
 

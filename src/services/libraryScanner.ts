@@ -167,7 +167,21 @@ export class LibraryScanner {
         // Fast-path: if file size and modified timestamp match, skip SHA256 computation!
         if (!cached || cached.file_size !== fileSize || cached.modified_at !== modifiedAt || !sha256) {
           try {
-            sha256 = await computeFileSHA256(filePath);
+            let lastByteReport = Date.now();
+            sha256 = await computeFileSHA256(filePath, (bytesRead, totalBytes) => {
+              const now = Date.now();
+              if (now - lastByteReport > 200) {
+                lastByteReport = now;
+                const fileMb = (bytesRead / (1024 * 1024)).toFixed(0);
+                const totalMb = (totalBytes / (1024 * 1024)).toFixed(0);
+                emitProgress({
+                  scannedFiles: i + 1,
+                  totalFiles: allFiles.length,
+                  status: 'hashing',
+                  currentFile: `${path.basename(filePath)} (${fileMb}MB / ${totalMb}MB)`,
+                });
+              }
+            });
           } catch (hashErr) {
             logger.error(`Error hashing file ${filePath}:`, hashErr);
             continue;
