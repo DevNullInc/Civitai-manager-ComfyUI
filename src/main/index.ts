@@ -517,6 +517,26 @@ function registerIpcHandlers() {
     await backupService.importBackup(filePath);
     return true;
   });
+  // External Link & System Info
+  ipcMain.handle('open-external', async (_event: unknown, url: string) => {
+    if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+      await shell.openExternal(url);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle('get-system-info', () => {
+    return {
+      version: app.getVersion(),
+      electronVersion: process.versions.electron,
+      nodeVersion: process.versions.node,
+      chromeVersion: process.versions.chrome,
+      platform: process.platform,
+      arch: process.arch,
+    };
+  });
+
   // App control
   ipcMain.handle('restart-app', () => {
     app.relaunch();
@@ -539,26 +559,46 @@ setInterval(() => {
   }
 }, 500);
 
-app.whenReady().then(async () => {
-  await dbManager.init();
-  await loadConfigFromDb();
-  registerIpcHandlers();
-  startHttpBridgeServer();
+// Single Instance Lock: Ensure only one instance of the app runs at a time.
+// If a second instance is launched, focus and bring the existing window to the front.
+const gotTheLock = app.requestSingleInstanceLock();
 
-  const isHeadless = process.env.HEADLESS === 'true' || app.commandLine.hasSwitch('headless');
-  if (!isHeadless) {
-    await createWindow();
-  } else {
-    logger.info('Running in headless background mode (no Electron desktop window created).');
-  }
-
-  if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-      logger.warn('Auto-updater check failed:', err);
-    });
-  }
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+if (!gotTheLock) {
+  logger.info('Another instance of CivitAI Model Manager is already running. Focusing existing window and exiting.');
+  app.quit();
+} else {
+  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+    logger.info('Second instance detected. Restoring and focusing existing window.');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
-});
+
+  app.whenReady().then(async () => {
+    await dbManager.init();
+    await loadConfigFromDb();
+    registerIpcHandlers();
+    startHttpBridgeServer();
+
+    const isHeadless = process.env.HEADLESS === 'true' || app.commandLine.hasSwitch('headless');
+    if (!isHeadless) {
+      await createWindow();
+    } else {
+      logger.info('Running in headless background mode (no Electron desktop window created).');
+    }
+
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+        logger.warn('Auto-updater check failed:', err);
+      });
+    }
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}

@@ -167,6 +167,19 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      openExternal: async (url: string) => {
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return true;
+      },
+
+      getSystemInfo: async () => {
+        return {
+          version: '1.0.0',
+          platform: navigator.platform || 'web',
+          userAgent: navigator.userAgent,
+        };
+      },
+
       restartApp: async () => {
         try {
           await fetch(`${API_BASE}/restart-app`, { method: 'POST' });

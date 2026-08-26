@@ -36,6 +36,9 @@ const api = {
   // Delete local model
   deleteLocalModel: (id: string) => ipcRenderer.invoke('delete-local-model', id),
   openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
+  // External Link & System Info
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
   // App control
   restartApp: () => ipcRenderer.invoke('restart-app'),
   shutdownApp: () => ipcRenderer.invoke('shutdown-app'),

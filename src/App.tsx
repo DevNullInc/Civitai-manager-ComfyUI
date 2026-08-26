@@ -8,20 +8,28 @@ import {
   Sparkles,
   ChevronUp,
   Activity,
+  Info as InfoIcon,
 } from 'lucide-react';
 import { BrowseTab } from './components/BrowseTab';
 import { LibraryTab } from './components/LibraryTab';
 import { DownloadsTab } from './components/DownloadsTab';
 import { SettingsTab } from './components/SettingsTab';
+import { AboutTab } from './components/AboutTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
 
-type Tab = 'browse' | 'library' | 'downloads' | 'settings';
+type Tab = 'browse' | 'library' | 'downloads' | 'settings' | 'about';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const saved = localStorage.getItem('civitai_active_tab');
-    if (saved === 'browse' || saved === 'library' || saved === 'downloads' || saved === 'settings') {
+    if (
+      saved === 'browse' ||
+      saved === 'library' ||
+      saved === 'downloads' ||
+      saved === 'settings' ||
+      saved === 'about'
+    ) {
       return saved;
     }
     return 'browse';
@@ -122,34 +130,34 @@ export default function App() {
         </div>
 
         {/* Center: Perfectly Centered Fixed-Width Menu Buttons */}
-        <nav className="flex items-center justify-center gap-3 justify-self-center">
+        <nav className="flex items-center justify-center gap-2.5 justify-self-center flex-wrap">
           <button
             onClick={() => setActiveTab('browse')}
-            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
               activeTab === 'browse'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
             <Compass size={16} className={activeTab === 'browse' ? 'text-white' : 'text-purple-400'} />
-            <span>Browse Models</span>
+            <span>Browse</span>
           </button>
 
           <button
             onClick={() => setActiveTab('library')}
-            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
               activeTab === 'library'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
             <HardDrive size={16} className={activeTab === 'library' ? 'text-white' : 'text-blue-400'} />
-            <span>Local Library</span>
+            <span>Library</span>
           </button>
 
           <button
             onClick={() => setActiveTab('downloads')}
-            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative ${
+            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative ${
               activeTab === 'downloads'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -159,7 +167,7 @@ export default function App() {
             <span>Downloads</span>
 
             {activeDownloadsCount > 0 && (
-              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 animate-pulse glow-amber">
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 animate-pulse glow-amber">
                 {activeDownloadsCount}
               </span>
             )}
@@ -167,7 +175,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('settings')}
-            className={`w-44 py-2.5 px-4 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
               activeTab === 'settings'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -176,12 +184,24 @@ export default function App() {
             <SettingsIcon size={16} className={activeTab === 'settings' ? 'text-white' : 'text-slate-400'} />
             <span>Settings</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('about')}
+            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+              activeTab === 'about'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
+            }`}
+          >
+            <InfoIcon size={16} className={activeTab === 'about' ? 'text-white' : 'text-indigo-400'} />
+            <span>About</span>
+          </button>
         </nav>
 
         {/* Right: Engine Status Badge */}
         <div className="flex items-center gap-2 justify-self-end bg-slate-900/80 border border-slate-800 px-3.5 py-1.5 rounded-xl text-[11px] font-medium text-slate-400">
           <Activity size={14} className="text-emerald-400" />
-          <span>ComfyUI Auto-Sorter Ready</span>
+          <span>Auto-Sorter Ready</span>
         </div>
       </header>
 
@@ -201,6 +221,7 @@ export default function App() {
             {activeTab === 'library' && <LibraryTab onCheckUpdate={handleCheckUpdate} />}
             {activeTab === 'downloads' && <DownloadsTab />}
             {activeTab === 'settings' && <SettingsTab />}
+            {activeTab === 'about' && <AboutTab />}
           </ErrorBoundary>
         </div>
 
