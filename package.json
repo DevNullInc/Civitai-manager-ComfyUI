@@ -11,10 +11,16 @@
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder",
     "electron:preview": "npm run build && electron . --preview",
+    "dist": "npm run build && electron-builder --win",
+    "dist:portable": "npm run build && electron-builder --win portable",
+    "dist:installer": "npm run build && electron-builder --win nsis",
+    "dist:dir": "npm run build && electron-builder --dir",
+    "dist:all": "npm run build && electron-builder -mwl",
     "cmm:start": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 start",
     "cmm:stop": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 stop",
     "cmm:restart": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 restart",
     "cmm:status": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 status",
+    "cmm:package": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 package",
     "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
@@ -26,7 +32,7 @@
     "lora",
     "checkpoint"
   ],
-  "author": "",
+  "author": "DevNullInc",
   "license": "GPL-3.0",
   "dependencies": {
     "axios": "^1.7.9",
@@ -55,7 +61,7 @@
     "vitest": "^3.0.6"
   },
   "build": {
-    "appId": "com.yourusername.civitai-model-manager",
+    "appId": "com.devnullinc.civitai-manager-comfyui",
     "productName": "CivitAI Model Manager",
     "copyright": "Copyright © 2025",
     "directories": {
@@ -67,24 +73,37 @@
       "node_modules/**/*",
       "package.json"
     ],
-    "mac": {
-      "category": "public.app-category.graphics-design",
-      "target": [
-        "dmg",
-        "zip"
-      ]
-    },
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "${productName}-Standalone-v${version}.exe"
+    },
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": ["dmg", "zip"]
+    },
     "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
+      "target": ["AppImage", "deb"],
       "category": "Graphics"
     }
   }

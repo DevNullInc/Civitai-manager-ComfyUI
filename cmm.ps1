@@ -21,7 +21,7 @@
 
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('start', 'stop', 'restart', 'status')]
+  [ValidateSet('start', 'stop', 'restart', 'status', 'package', 'dist')]
   [string]$Action = 'start',
 
   [int]$Port = 5173,
@@ -228,6 +228,42 @@ function Show-Status {
 
 # -- Banner ----------------------------------------------------------------
 
+function Package-App {
+  Write-Status '>>' 'Building production assets...' 'Cyan'
+  
+  Write-Status '>>' 'Building renderer process with Vite...' 'Cyan'
+  npx vite build --base ./ --emptyOutDir false
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Vite build failed.'
+  }
+  Write-Status 'ok' 'Renderer built successfully.' 'Green'
+
+  Write-Status '>>' 'Building Electron main process...' 'Cyan'
+  npx tsc --project tsconfig.main.json
+  if ($LASTEXITCODE -ne 0) {
+    throw 'TypeScript main process compilation failed.'
+  }
+  Write-Status 'ok' 'TypeScript compilation succeeded.' 'Green'
+
+  Write-Status '>>' 'Packaging standalone Windows binary with electron-builder...' 'Cyan'
+  npx electron-builder --win portable nsis
+  if ($LASTEXITCODE -ne 0) {
+    throw 'electron-builder packaging failed.'
+  }
+
+  Write-Status 'ok' 'Standalone binary packaged successfully!' 'Green'
+  Write-Host ''
+  Write-Host '  Release Binaries in ./release/' -ForegroundColor Green
+  if (Test-Path (Join-Path $ProjectRoot 'release')) {
+    Get-ChildItem -Path (Join-Path $ProjectRoot 'release') -Filter '*.exe' | ForEach-Object {
+      Write-Host "    - $($_.Name)  ($([Math]::Round($_.Length / 1MB, 2)) MB)" -ForegroundColor Cyan
+    }
+  }
+  Write-Host ''
+}
+
+# -- Banner ----------------------------------------------------------------
+
 Write-Host ''
 Write-Host '  +----------------------------------------------+' -ForegroundColor Magenta
 Write-Host '  |   CivitAI Model Manager - ComfyUI Edition   |' -ForegroundColor Magenta
@@ -251,5 +287,11 @@ switch ($Action) {
   }
   'status' {
     Show-Status
+  }
+  'package' {
+    Package-App
+  }
+  'dist' {
+    Package-App
   }
 }

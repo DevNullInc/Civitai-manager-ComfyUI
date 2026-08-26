@@ -54,8 +54,10 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 
 ### Windows
 ```bash
-# Download the latest release from GitHub
-CivitAI-Model-Manager-Setup-1.0.0.exe
+# Download the latest release from GitHub (Assets)
+CivitAI-Model-Manager-Setup-<version>.exe
+# Or portable standalone:
+CivitAI-Model-Manager-Standalone-<version>.exe
 
 # Or install via winget (when available)
 winget install CivitAI.ModelManager
@@ -64,7 +66,7 @@ winget install CivitAI.ModelManager
 ### macOS
 ```bash
 # Download .dmg
-CivitAI-Model-Manager-1.0.0.dmg
+CivitAI-Model-Manager-<version>.dmg
 
 # Or via Homebrew (when available)
 brew install --cask civitai-model-manager
@@ -73,8 +75,8 @@ brew install --cask civitai-model-manager
 ### Linux
 ```bash
 # AppImage
-chmod +x CivitAI-Model-Manager-1.0.0.AppImage
-./CivitAI-Model-Manager-1.0.0.AppImage
+chmod +x CivitAI-Model-Manager-<version>.AppImage
+./CivitAI-Model-Manager-<version>.AppImage
 
 # Or build from source (see Contributing)
 ```
@@ -82,8 +84,8 @@ chmod +x CivitAI-Model-Manager-1.0.0.AppImage
 ### Build & Run from Source
 
 ```bash
-git clone https://github.com/yourusername/civitai-model-manager.git
-cd civitai-model-manager
+git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
+cd Civitai-manager-ComfyUI
 
 # Install dependencies
 npm install
@@ -107,18 +109,37 @@ The included `cmm.ps1` script is the primary launcher and controller for startin
 # 4. Check application running status and active process IDs
 .\cmm.ps1 status
 
-# 5. Rebuild and restart application
-.\cmm.ps1 restart
+# 6. Build standalone executable (.exe) and installer in ./release/
+.\cmm.ps1 package
 
-# 6. Stop all running application instances cleanly
+# 7. Stop all running application instances cleanly
 .\cmm.ps1 stop
 ```
+
+#### Packaging Standalone Binaries & Installers
+
+You can compile standalone binaries using `cmm.ps1` or npm scripts:
+
+```powershell
+# Build both Portable Standalone .exe and NSIS Setup installer
+.\cmm.ps1 package
+
+# Or via npm scripts:
+npm run dist:portable    # Single standalone .exe (runs directly without installation)
+npm run dist:installer   # Standard Windows Setup installer (.exe)
+npm run dist:dir         # Unpacked application folder
+npm run dist:all         # Multi-platform builds (Windows, Mac, Linux)
+```
+
+Outputs will be saved in the `release/` directory:
+- `CivitAI Model Manager-Standalone-v<version>.exe` (Portable binary)
+- `CivitAI Model Manager Setup <version>.exe` (Installer binary)
 
 #### Script Parameters & Flags Reference
 
 | Parameter / Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Action` | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, or `status`. |
+| `Action` | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, or `package` (`dist`). |
 | `-Port <int>` | `int` | `5173` | Port for the Vite web server & HTTP bridge. |
 | `-Headless` | `switch` | `false` | Runs background server and web UI without launching the Electron desktop window. Ideal for remote servers, Docker, WSL, or browser-only workflows. |
 | `-NoWindow` | `switch` | `false` | Alias for `-Headless`. |
@@ -388,8 +409,8 @@ By contributing to this project, you agree that your contributions will be licen
 
 ### Development Setup
 ```bash
-git clone https://github.com/yourusername/civitai-model-manager.git
-cd civitai-model-manager
+git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
+cd Civitai-manager-ComfyUI
 
 # Install dependencies
 npm install
@@ -441,9 +462,8 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 
 ## 📧 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/civitai-model-manager/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/civitai-model-manager/discussions)
-- **Discord**: [Join our server](https://discord.gg/yourinvite)
+- **Issues**: [GitHub Issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/DevNullInc/Civitai-manager-ComfyUI/discussions)
 
 ---
 
