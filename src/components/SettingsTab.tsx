@@ -321,37 +321,15 @@ export const SettingsTab: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* JSON Export Button */}
-          <button
-            onClick={handleExportJson}
-            title="Download settings configuration as JSON file"
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-purple-500/50 rounded-xl text-xs font-semibold transition-all shadow-md cursor-pointer group"
-          >
-            <Download size={15} className="text-purple-400 group-hover:scale-110 transition-transform" />
-            <span>Export JSON</span>
-          </button>
-
-          {/* JSON Import Button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            title="Import settings from a JSON file"
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-indigo-500/50 rounded-xl text-xs font-semibold transition-all shadow-md cursor-pointer group"
-          >
-            <Upload size={15} className="text-indigo-400 group-hover:scale-110 transition-transform" />
-            <span>Import JSON</span>
-          </button>
-
-          {/* Primary Save Button */}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95"
-          >
-            <Save size={16} />
-            <span>{saving ? 'Saving...' : 'Save Settings'}</span>
-          </button>
-        </div>
+        {/* Primary Save Button */}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95 shrink-0"
+        >
+          <Save size={18} />
+          <span>{saving ? 'Saving...' : 'Save Settings'}</span>
+        </button>
       </div>
 
       {/* Success / Feedback Banners */}
