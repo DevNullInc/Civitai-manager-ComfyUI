@@ -6,3 +6,7 @@ dist-app/
 *.db
 .DS_Store
 scratch/
+.cmm.pid
+tests/folderRouter.test.js
+tests/rateLimiter.test.js
+civitai_manager.sqlite-wal
