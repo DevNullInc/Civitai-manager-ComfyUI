@@ -12,7 +12,11 @@
 If you've been manually downloading models from CivitAI, creating folders, moving files, and losing track of what you have, this tool is for you. CMM acts as a **Steam-like library manager** for your AI models:
 
 - **Auto-organizes** downloads into the correct ComfyUI folders (checkpoints → `checkpoints/`, LoRAs → `loras/`, etc.)
+- **Persistent Background Scanning** - scan thousands of models in the background across tabs with a draggable, real-time HUD widget and instant cancellation
+- **Multi-Criteria Library Sorting** - sort local models by Name, Model Type, File Size, or Date Modified (Ascending / Descending)
 - **Tracks versions** - know when updates are available and downgrade if needed
+- **Cross-Browser JSON Sync** - portable JSON export/import and clipboard sync for multi-browser and multi-machine setups
+- **Single-Instance Windowing** - focuses existing running window automatically rather than spawning duplicate instances
 - **Dual-source support** - search both civitai.com and civitai.red
 - **Duplicate detection** - find identical models by hash across different folders and resolve with one-click cleanup
 - **Hardware-accelerated hash verification** - 64MB streaming buffer utilizing CPU SHA-NI / AVX-512
@@ -25,7 +29,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - Search across CivitAI's entire model database
 - Filter by **Base Model**: SD 1.5, SDXL 1.0, Illustrious, Flux.1 D, Pony, Qwen, Wan Video, and more
 - Filter by **Model Type**: Checkpoint, LoRA, LyCORIS, Embedding, VAE, ControlNet, Upscaler, etc.
-- Filter by **Rating**: SFW-only or include NSFW content
+- Filter by **Rating**: SFW-only or include NSFW content with configurable blur levels
 - Sort by: Most Downloaded, Highest Rated, Newest, Trending
 
 ### 📥 Download Management
@@ -35,12 +39,18 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **Queue system**: Download multiple models with priority management
 - **API key support**: Higher rate limits and access to gated content
 
-### 📁 Library Management
-- **Multi-folder support**: Scan and manage models across multiple drives/paths
-- **Duplicate detection & resolution**: Interactive keeper picker with full folder path comparison
-- **Version tracking**: See installed versions vs. latest available
-- **Update notifications**: One-click updates when new versions release
-- **Side-by-side versions**: Keep multiple versions of the same model
+### 📁 Library Management & Persistent Scanner
+- **Persistent Background Scanning**: Folder indexing continues seamlessly across tab switches
+- **Draggable Floating HUD**: Real-time progress percentage, active file status, and instant stop controls
+- **Multi-Folder Support**: Scan and manage models across multiple drives/paths simultaneously
+- **Multi-Criteria Sorting**: Sort by Name (A-Z), Model Type, File Size, or Date Modified (Asc / Desc) with saved preferences
+- **Duplicate Detection & Resolution**: Interactive keeper picker with full folder path comparison and safe disk cleanup
+- **Version Tracking**: See installed versions vs. latest available with side-by-side version preservation
+
+### ⚙️ Cross-Browser Sync & Diagnostics
+- **Cross-Browser JSON Sync**: Export/import settings via portable `.json` files or direct clipboard paste
+- **Console Feedback & Diagnostics**: Built-in system log capture and one-click diagnostic report generation for bug reports
+- **Single-Instance Management**: Automatically detects and focuses existing application windows
 
 ### 🔧 ComfyUI Integration
 - Recognizes **50+ specialized folders** (ipadapter, photomaker, pulid, reactor, sam3, ultralytics, etc.)
@@ -65,11 +75,14 @@ winget install CivitAI.ModelManager
 
 ### Linux
 ```bash
-# AppImage
+# Extract standalone Linux release bundle
+tar -xzf civitai-model-manager-<version>.tar.gz
+cd civitai-model-manager-<version>
+./civitai-model-manager
+
+# Or AppImage (when building on Linux/CI)
 chmod +x CivitAI-Model-Manager-<version>.AppImage
 ./CivitAI-Model-Manager-<version>.AppImage
-
-# Or build from source (see Contributing)
 ```
 
 ### Build & Run from Source
@@ -100,37 +113,45 @@ The included `cmm.ps1` script is the primary launcher and controller for startin
 # 4. Check application running status and active process IDs
 .\cmm.ps1 status
 
-# 6. Build standalone executable (.exe) and installer in ./release/
+# 5. Build standalone executables and release bundles in ./release/
 .\cmm.ps1 package
+# (alias: .\cmm.ps1 publish)
 
-# 7. Stop all running application instances cleanly
+# 6. Stop all running application instances cleanly
 .\cmm.ps1 stop
 ```
 
-#### Packaging Standalone Binaries & Installers
+#### Packaging Standalone Binaries & Cross-Platform Releases
 
-You can compile standalone binaries using `cmm.ps1` or npm scripts:
+You can compile standalone binaries using `cmm.ps1`, the dedicated release builder script `build-release.ps1`, or npm scripts:
 
 ```powershell
-# Build both Portable Standalone .exe and NSIS Setup installer
-.\cmm.ps1 package
+# Build Windows portable standalone .exe and NSIS setup installer
+.\build-release.ps1 -Target win
+
+# Build Linux standalone release bundle (.tar.gz)
+.\build-release.ps1 -Target linux
+
+# Build all cross-platform targets (Windows + Linux)
+.\build-release.ps1 -Target all
 
 # Or via npm scripts:
 npm run dist:portable    # Single standalone .exe (runs directly without installation)
 npm run dist:installer   # Standard Windows Setup installer (.exe)
-npm run dist:dir         # Unpacked application folder
-npm run dist:all         # Cross-platform builds (Windows & Linux)
+npm run dist:linux       # Standalone Linux archive (.tar.gz)
+npm run dist:all         # All release targets
 ```
 
 Outputs will be saved in the `release/` directory:
-- `CivitAI Model Manager-Standalone-v<version>.exe` (Portable binary)
-- `CivitAI Model Manager Setup <version>.exe` (Installer binary)
+- `CivitAI Model Manager-Standalone-v<version>.exe` (Windows Portable binary)
+- `CivitAI Model Manager Setup <version>.exe` (Windows Installer binary)
+- `civitai-model-manager-<version>.tar.gz` (Linux Standalone distribution)
 
 #### Script Parameters & Flags Reference
 
 | Parameter / Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Action` | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, or `package` (`dist`). |
+| `Action` | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, `package`, or `publish`. |
 | `-Port <int>` | `int` | `5173` | Port for the Vite web server & HTTP bridge. |
 | `-Headless` | `switch` | `false` | Runs background server and web UI without launching the Electron desktop window. Ideal for remote servers, Docker, WSL, or browser-only workflows. |
 | `-NoWindow` | `switch` | `false` | Alias for `-Headless`. |
@@ -273,32 +294,35 @@ CMM recognizes and manages models in these ComfyUI folders:
 3. Click **Download**
 4. File automatically routes to correct folder
 
-### Managing Your Library
-- **Library** tab shows all local models
-- Green check = Matched with CivitAI
-- Amber badge = Duplicate detected on disk
-- Gray question = Unidentified (not found on CivitAI)
+### Managing & Sorting Your Library
+- **Library** tab displays all indexed models across all configured ComfyUI directories.
+- **Sorting**: Use the sort dropdown to order models by:
+  - **Name (A-Z)**
+  - **Model Type** (Checkpoints, LoRAs, VAEs, Embeddings, etc.)
+  - **File Size** (Largest or Smallest files first)
+  - **Date Modified** (Recently updated files)
+- **Ascending / Descending Toggle**: Click the sort direction toggle button to reverse list ordering. Preferences persist automatically.
 
-### Resolving Duplicate Models
-1. In the **Library** tab, filter by "Duplicates" or click the amber **Duplicate (X)** badge on any model.
-2. The row expands inline to show all duplicate copies sharing the same SHA256 checksum.
-3. Inspect each copy's full folder location (`D:\ComfyUI\models\...`), file size, and last modified date.
-4. Click **Show in Folder** to open the containing folder and highlight the file in Windows Explorer.
-5. Select the **radio button** next to the copy you want to designate as the **Keeper**.
-6. Click **Keep Selected & Delete Other Copy(ies)** to safely delete non-keeper duplicates from disk and update the library.
+### 🔄 Persistent Background Scanning & Floating HUD
+1. Click **Scan ComfyUI Folders** in the Library tab.
+2. The scanner operates as a global background provider—you can switch between Browse, Downloads, Settings, or About tabs while scanning proceeds uninterrupted.
+3. A **draggable floating HUD widget** appears at the bottom of the screen displaying real-time progress, currently scanned file name, and indexing phase.
+4. **Instant Cancellation**: Stop scanning at any time by clicking the red **Stop Scanning** button in the Library tab or the **Stop** icon on the floating HUD.
 
-### Updating Models
-1. Go to **Library** tab
-2. Filter by "Updates Available"
-3. Select models to update
-4. Click **Update Selected**
-5. Choose: Replace existing or Keep both versions
+### 🔄 Cross-Browser Settings Sync (JSON)
+1. Go to the **Settings** tab.
+2. In the **Cross-Browser Configuration Sync & JSON Backup** card:
+   - **Download JSON**: Generates and downloads a portable `.json` backup of your directory paths, API credentials, and filename pattern rules.
+   - **Copy JSON**: Copies the serialized configuration payload directly to your system clipboard.
+   - **Upload JSON File**: Upload an existing JSON backup to restore or replicate settings across different browsers or machines.
+   - **Paste JSON**: Open the interactive paste modal to input raw JSON and apply settings instantly.
 
-### Version Management
-- Right-click any model → **View Versions**
-- See changelog between versions
-- Downgrade to previous version if needed
-- Install multiple versions side-by-side
+### ℹ️ About & Diagnostics Reporting
+1. Navigate to the **About** tab.
+2. View application version information, author credits (**TheStygianRenegade / /dev/null Inc**), license details (GPL-3.0), and active runtime telemetry.
+3. Under **Diagnostic Log & Console Feedback**:
+   - Inspect live system event logs, scanner output, and network diagnostics.
+   - Click **Copy Diagnostic Report** to generate a pre-formatted Markdown summary (including OS, version, active directory count, and recent console warnings/errors) ready to paste into GitHub Issues for instant troubleshooting.
 
 ---
 
@@ -443,8 +467,9 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 
 ---
 
-## 🙏 Acknowledgments
+## 🙏 Author & Acknowledgments
 
+- **Lead Developer / Maintainer**: **TheStygianRenegade** / **/dev/null Inc**
 - [CivitAI](https://civitai.com) for the amazing platform and API
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI) for the incredible node-based interface
 - The generative AI community for creating and sharing models
