@@ -302,6 +302,7 @@ CMM recognizes and manages models in these ComfyUI folders:
   - **File Size** (Largest or Smallest files first)
   - **Date Modified** (Recently updated files)
 - **Ascending / Descending Toggle**: Click the sort direction toggle button to reverse list ordering. Preferences persist automatically.
+- **Clear Library**: Click **Clear Library** next to the scan button to wipe cached SQLite records and perform a fresh, clean scan without deleting your physical files on disk.
 
 ### 🔄 Persistent Background Scanning & Floating HUD
 1. Click **Scan ComfyUI Folders** in the Library tab.

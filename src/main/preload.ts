@@ -26,6 +26,7 @@ const api = {
   cancelScan: () => ipcRenderer.invoke('cancel-scan'),
   getScanStatus: () => ipcRenderer.invoke('get-scan-status'),
   getLocalModels: () => ipcRenderer.invoke('get-local-models'),
+  clearLibrary: () => ipcRenderer.invoke('clear-library'),
   onScanProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('scan-progress', (_event: unknown, progress: any) => callback(progress));
   },

@@ -150,6 +150,37 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     await loadLocalModels();
   };
 
+  const [clearing, setClearing] = useState(false);
+
+  const handleClearLibrary = async () => {
+    if (isScanning) {
+      alert('Cannot clear library while scanning is in progress. Please stop the scan first.');
+      return;
+    }
+    if (localModels.length === 0) {
+      alert('The library database is already empty.');
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to clear the library database (${localModels.length} models)? This removes all indexed records from the manager cache without deleting your files on disk, allowing you to perform a clean refresh.`)) {
+      return;
+    }
+
+    setClearing(true);
+    try {
+      if (window.civitaiAPI && window.civitaiAPI.clearLibrary) {
+        await window.civitaiAPI.clearLibrary();
+      }
+      setLocalModels([]);
+      setResolutionFeedback('Library database cleared successfully. Click "Scan ComfyUI Folders" to perform a fresh scan.');
+      setTimeout(() => setResolutionFeedback(null), 6000);
+    } catch (err: any) {
+      console.error('Failed to clear library:', err);
+      alert(`Failed to clear library: ${err?.message || err}`);
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const filteredModels = localModels
     .filter((model) => {
       const matchesSearch =
@@ -198,25 +229,38 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
           </p>
         </div>
 
-        {isScanning ? (
+        <div className="flex items-center gap-3 flex-wrap">
+          {isScanning ? (
+            <button
+              onClick={cancelScan}
+              title="Stop Scanning ComfyUI Folders"
+              className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-rose-600/40 glow-rose cursor-pointer active:scale-95 animate-pulse"
+            >
+              <Square size={16} className="fill-white" />
+              <span>Stop Scanning</span>
+            </button>
+          ) : (
+            <button
+              onClick={startScan}
+              title="Scan ComfyUI Folders"
+              className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95"
+            >
+              <FolderSearch size={20} />
+              <span>Scan ComfyUI Folders</span>
+            </button>
+          )}
+
+          {/* Clear Library Button */}
           <button
-            onClick={cancelScan}
-            title="Stop Scanning ComfyUI Folders"
-            className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-rose-600/40 glow-rose cursor-pointer active:scale-95 animate-pulse"
+            onClick={handleClearLibrary}
+            disabled={isScanning || clearing}
+            title="Clear cached model records from database without deleting physical files from disk"
+            className="flex items-center gap-2 px-4.5 py-3 bg-slate-900/90 hover:bg-rose-950/40 border border-slate-700/80 hover:border-rose-500/50 text-slate-300 hover:text-rose-300 font-bold rounded-2xl text-sm transition-all shadow-md cursor-pointer disabled:opacity-50 active:scale-95"
           >
-            <Square size={16} className="fill-white" />
-            <span>Stop Scanning</span>
+            <Trash2 size={16} className="text-rose-400" />
+            <span>{clearing ? 'Clearing...' : 'Clear Library'}</span>
           </button>
-        ) : (
-          <button
-            onClick={startScan}
-            title="Scan ComfyUI Folders"
-            className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95"
-          >
-            <FolderSearch size={20} />
-            <span>Scan ComfyUI Folders</span>
-          </button>
-        )}
+        </div>
       </div>
 
       {/* Hero Scan Progress Bar Banner */}
