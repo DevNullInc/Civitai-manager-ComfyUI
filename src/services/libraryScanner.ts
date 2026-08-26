@@ -99,11 +99,12 @@ export class LibraryScanner {
     });
 
     try {
-      // 1. Collect all model files recursively across all existing root paths
+      // 1. Collect all model files recursively across all existing root paths (avoiding symlink/junction duplicates)
       const allFiles: string[] = [];
+      const seenRealPaths = new Set<string>();
       for (const p of existingPaths) {
         if (this.cancelRequested) break;
-        allFiles.push(...this.collectModelFiles(p));
+        allFiles.push(...this.collectModelFiles(p, seenRealPaths));
       }
 
       if (this.cancelRequested) {
@@ -155,9 +156,9 @@ export class LibraryScanner {
         const modifiedAt = Math.floor(stats.mtimeMs);
         const fileSize = stats.size;
 
-        // Check SQLite cache by filePath, fileSize, and modifiedAt
+        // Check SQLite cache by filePath, fileSize, and modifiedAt (case-insensitive for Windows)
         const cached: any = await dbManager.get(
-          'SELECT * FROM local_models WHERE file_path = ?',
+          'SELECT * FROM local_models WHERE file_path = ? COLLATE NOCASE',
           [filePath]
         );
 
@@ -270,7 +271,16 @@ export class LibraryScanner {
         }
       }
 
-      // 4. Mark duplicates (same hash across different file paths)
+      // 4. Purge stale / phantom records that are not in the current scan or missing from disk
+      const scannedRealPaths = new Set(scannedModels.map((m) => m.filePath.toLowerCase()));
+      const allDbRows: any[] = await dbManager.all('SELECT id, file_path FROM local_models');
+      for (const row of allDbRows) {
+        if (!scannedRealPaths.has(row.file_path.toLowerCase()) || !fs.existsSync(row.file_path)) {
+          await dbManager.run('DELETE FROM local_models WHERE id = ?', [row.id]);
+        }
+      }
+
+      // 5. Mark duplicates (only when same hash exists across distinct physical file paths)
       await this.flagDuplicates();
 
       emitProgress({
@@ -296,24 +306,48 @@ export class LibraryScanner {
     }
   }
 
-  private collectModelFiles(dirPath: string): string[] {
+  private collectModelFiles(dirPath: string, seenRealPaths: Set<string> = new Set()): string[] {
     const results: string[] = [];
     try {
       if (!fs.existsSync(dirPath)) return results;
+
+      // Canonical realpath check to avoid traversing symlink/junction aliases multiple times
+      let realDir: string;
+      try {
+        realDir = fs.realpathSync.native(dirPath);
+      } catch (e) {
+        realDir = path.resolve(dirPath);
+      }
+
+      const realDirKey = realDir.toLowerCase();
+      if (seenRealPaths.has(realDirKey)) {
+        return results;
+      }
+      seenRealPaths.add(realDirKey);
+
       const entries = fs.readdirSync(dirPath);
 
       for (const entryName of entries) {
         try {
           const fullPath = path.join(dirPath, entryName);
-          // fs.statSync follows symlinks & junctions!
           const stat = fs.statSync(fullPath);
 
           if (stat.isDirectory()) {
-            results.push(...this.collectModelFiles(fullPath));
+            results.push(...this.collectModelFiles(fullPath, seenRealPaths));
           } else if (stat.isFile()) {
             const ext = path.extname(entryName).toLowerCase();
             if (MODEL_EXTENSIONS.has(ext)) {
-              results.push(fullPath);
+              let realFile: string;
+              try {
+                realFile = fs.realpathSync.native(fullPath);
+              } catch (e) {
+                realFile = path.resolve(fullPath);
+              }
+              const realFileKey = realFile.toLowerCase();
+              if (!seenRealPaths.has(realFileKey)) {
+                seenRealPaths.add(realFileKey);
+                results.push(realFile);
+              }
             }
           }
         } catch (itemErr) {
@@ -333,7 +367,11 @@ export class LibraryScanner {
       UPDATE local_models 
       SET is_duplicate = 1 
       WHERE sha256 IN (
-        SELECT sha256 FROM local_models WHERE sha256 IS NOT NULL GROUP BY sha256 HAVING COUNT(*) > 1
+        SELECT sha256 
+        FROM local_models 
+        WHERE sha256 IS NOT NULL AND TRIM(sha256) != ''
+        GROUP BY sha256 
+        HAVING COUNT(DISTINCT file_path COLLATE NOCASE) > 1
       );
     `);
   }
