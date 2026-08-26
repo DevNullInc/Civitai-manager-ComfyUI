@@ -233,7 +233,7 @@ function Show-Status {
 
 # -- Banner ----------------------------------------------------------------
 
-function Package-App {
+function Invoke-AppPackage {
   Write-Status '>>' 'Building production assets...' 'Cyan'
   
   Write-Status '>>' 'Building renderer process with Vite...' 'Cyan'
@@ -294,9 +294,12 @@ switch ($Action) {
     Show-Status
   }
   'package' {
-    Package-App
+    Invoke-AppPackage
+  }
+  'publish' {
+    Invoke-AppPackage
   }
   'dist' {
-    Package-App
+    Invoke-AppPackage
   }
 }
