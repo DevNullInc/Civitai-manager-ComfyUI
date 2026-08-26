@@ -28,11 +28,6 @@ export function FloatingScannerWidget() {
   const isDragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
-  // If not scanning and no progress to show, hide widget
-  if (!isScanning && (!scanProgress || scanProgress.status === 'idle')) {
-    return null;
-  }
-
   const handleMouseDown = (e: React.MouseEvent) => {
     isDragging.current = true;
     const currentX = position?.x ?? (window.innerWidth - 380);
@@ -62,6 +57,11 @@ export function FloatingScannerWidget() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
+
+  // If not scanning and no progress to show, hide widget
+  if (!isScanning && (!scanProgress || scanProgress.status === 'idle')) {
+    return null;
+  }
 
   const total = scanProgress?.totalFiles || 0;
   const scanned = scanProgress?.scannedFiles || 0;
