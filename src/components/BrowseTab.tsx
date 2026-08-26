@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { civitaiClient } from '../services/civitaiClient';
 import {
   Search,
   Filter,
@@ -57,7 +58,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
     'Detection',
   ];
 
-  const baseModels: string[] = [
+  const [baseModels, setBaseModels] = useState<string[]>([
     'All',
     'SD 1.5',
     'SDXL 1.0',
@@ -66,7 +67,40 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
     'Pony',
     'Qwen',
     'Wan Video',
-  ];
+  ]);
+  const [enumsLoaded, setEnumsLoaded] = useState(false);
+
+  // Fetch base models from API on mount
+  useEffect(() => {
+    const loadEnums = async () => {
+      // Check cache first (24 hour TTL)
+      const cached = localStorage.getItem('civitai_enums');
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+          setBaseModels(['All', ...data.baseModels]);
+          setEnumsLoaded(true);
+          return;
+        }
+      }
+
+      // Fetch fresh from API
+      try {
+        const data = await civitaiClient.fetchEnums();
+        localStorage.setItem('civitai_enums', JSON.stringify({
+          data,
+          timestamp: Date.now()
+        }));
+        setBaseModels(['All', ...data.baseModels]);
+        setEnumsLoaded(true);
+      } catch (err) {
+        console.error('Failed to load base models:', err);
+        setEnumsLoaded(true); // Keep defaults on error
+      }
+    };
+
+    loadEnums();
+  }, []);
 
   const fetchModels = async () => {
     setLoading(true);
@@ -171,6 +205,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
             <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Type:</span>
             <select
               value={selectedType}
+              disabled={!enumsLoaded}
               onChange={(e) => setSelectedType(e.target.value)}
               className="bg-transparent text-slate-100 text-xs font-semibold focus:outline-none cursor-pointer"
             >
@@ -272,9 +307,8 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
                     <img
                       src={coverImage}
                       alt={model.name}
-                      className={`w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 ${
-                        isNsfw && nsfwBlur ? 'blur-lg scale-110' : ''
-                      }`}
+                      className={`w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 ${isNsfw && nsfwBlur ? 'blur-lg scale-110' : ''
+                        }`}
                     />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-700 font-mono text-xs gap-1 bg-slate-900/50">

@@ -92,20 +92,112 @@ function Start-App {
   }
 
   # 1) Build
-  Write-Status '>>' 'Building project (tsc + vite)...' 'Cyan'
+  Write-Status '>>' 'Building project...' 'Cyan'
   Push-Location $ProjectRoot
+
   try {
-    $buildOutput = & npm run build 2>&1
-    if ($LASTEXITCODE -ne 0) {
-      Write-Status '!!' 'Build failed! Check for TypeScript / Vite errors.' 'Red'
-      Write-Host ($buildOutput | Out-String) -ForegroundColor DarkGray
+    # Build main process (Electron entry point)
+    Write-Status '>>' 'Building Electron main process...' 'DarkGray'
+    
+    # Capture full output for debugging
+    $mainBuildOutput = npx tsc --project tsconfig.main.json --listEmittedFiles 2>&1
+    $mainBuildExitCode = $LASTEXITCODE
+    
+    if ($mainBuildExitCode -ne 0) {
+      Write-Status '!!' 'Main process TypeScript compilation FAILED!' 'Red'
+      Write-Host ''
+      Write-Host '  TypeScript errors:' -ForegroundColor Yellow
+      Write-Host '  ' -NoNewline
+      Write-Host ($mainBuildOutput -join "`n  ") -ForegroundColor Red
+      Write-Host ''
+      Write-Host '  Troubleshooting:' -ForegroundColor Yellow
+      Write-Host '    1. Check tsconfig.main.json exists and is valid JSON' -ForegroundColor DarkGray
+      Write-Host '    2. Verify "outDir" and "rootDir" settings' -ForegroundColor DarkGray
+      Write-Host '    3. Run: npx tsc -p tsconfig.main.json --showConfig' -ForegroundColor DarkGray
       Pop-Location
       return
     }
-    Write-Status 'ok' 'Build succeeded.' 'Green'
+    
+    Write-Status 'ok' 'TypeScript compilation succeeded.' 'Green'
+    
+    # Show what files were emitted
+    $emittedFiles = $mainBuildOutput | Select-String "TSFILE:"
+    if ($emittedFiles) {
+      Write-Status '>>' 'Emitted files:' 'DarkGray'
+      $emittedFiles | ForEach-Object { 
+        $file = $_ -replace 'TSFILE: ', ''
+        Write-Host "      $file" -ForegroundColor DarkGray
+      }
+    }
+    
+    # Verify main process entry point exists
+    $expectedMainFile = "dist/main/index.js"
+    if (-not (Test-Path $expectedMainFile)) {
+      Write-Status '!!' "Main entry point NOT FOUND: $expectedMainFile" 'Red'
+      Write-Host ''
+      Write-Host '  Expected file structure:' -ForegroundColor Yellow
+      Write-Host "    $expectedMainFile (missing)" -ForegroundColor Red
+      
+      # Show what actually exists in dist/
+      if (Test-Path "dist") {
+        Write-Host ''
+        Write-Host '  Actual dist/ structure:' -ForegroundColor Yellow
+        Get-ChildItem -Recurse dist\ | ForEach-Object {
+          $indent = "    " + ("  " * ($_.FullName.Split('\').Count - $ProjectRoot.Split('\').Count - 1))
+          if ($_.PSIsContainer) {
+            Write-Host "$indent$($_.Name)/" -ForegroundColor DarkGray
+          }
+          else {
+            Write-Host "$indent$($_.Name)" -ForegroundColor DarkGray
+          }
+        }
+      }
+      else {
+        Write-Host '  dist/ directory does not exist!' -ForegroundColor Red
+      }
+      
+      Write-Host ''
+      Write-Host '  Common causes:' -ForegroundColor Yellow
+      Write-Host '    - outDir in tsconfig.main.json is incorrect' -ForegroundColor DarkGray
+      Write-Host '    - rootDir + include pattern creates nested folders' -ForegroundColor DarkGray
+      Write-Host '    - Files emitted to wrong location (e.g., dist/main/main/)' -ForegroundColor DarkGray
+      Write-Host ''
+      Write-Host '  Fix: Edit tsconfig.main.json and set:' -ForegroundColor Yellow
+      Write-Host '    "outDir": "dist"' -ForegroundColor Cyan
+      Write-Host '    "rootDir": "src"' -ForegroundColor Cyan
+      Pop-Location
+      return
+    }
+    
+    Write-Status 'ok' "Main process entry point found: $expectedMainFile" 'Green'
+
+    # Build renderer with Vite
+    Write-Status '>>' 'Building renderer process...' 'DarkGray'
+    $rendererBuild = npx vite build 2>&1
+    $rendererExitCode = $LASTEXITCODE
+    
+    if ($rendererExitCode -ne 0) {
+      Write-Status '!!' 'Renderer build failed!' 'Red'
+      Write-Host ''
+      Write-Host '  Vite output:' -ForegroundColor Yellow
+      Write-Host '  ' -NoNewline
+      Write-Host ($rendererBuild -join "`n  ") -ForegroundColor Red
+      Write-Host ''
+      Write-Host '  Troubleshooting:' -ForegroundColor Yellow
+      Write-Host '    1. Check for .js files in src/ (delete them if found)' -ForegroundColor DarkGray
+      Write-Host '    2. Verify tsconfig.json has "noEmit": true' -ForegroundColor DarkGray
+      Write-Host '    3. Ensure JSX files have .tsx extension' -ForegroundColor DarkGray
+      Pop-Location
+      return
+    }
+    
+    Write-Status 'ok' 'Renderer built.' 'Green'
   }
   catch {
-    Write-Status '!!' "Build error: $_" 'Red'
+    Write-Status '!!' "Unexpected build error: $_" 'Red'
+    Write-Host ''
+    Write-Host '  Stack trace:' -ForegroundColor DarkGray
+    Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
     Pop-Location
     return
   }

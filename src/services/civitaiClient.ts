@@ -127,7 +127,7 @@ export class CivitAIClient {
 
   async bulkLookupByHashes(hashes: string[]): Promise<CivitAIModelVersion[]> {
     if (hashes.length === 0) return [];
-    
+
     // CivitAI limits bulk lookup to max 100 hashes per request
     const BATCH_SIZE = 100;
     const results: CivitAIModelVersion[] = [];
@@ -188,13 +188,18 @@ export class CivitAIClient {
             'Other',
           ],
           baseModels: [
-            'SD 1.5',
-            'SDXL 1.0',
-            'Illustrious',
+            'Anima',
+            'AuraFlow',
+            'Chroma',
+            'CogVideoX',
+            'Ernie',
+            'Flux.1 S',
             'Flux.1 D',
-            'Pony',
-            'Qwen',
-            'Wan Video',
+            'Flux.1 Krea',
+            'Flux.1 Kontext',
+            'Flux.2 D',
+            'SD3',
+            'SD3 Medium'
           ],
         };
       }
