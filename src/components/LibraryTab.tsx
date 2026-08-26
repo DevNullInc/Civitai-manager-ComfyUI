@@ -15,6 +15,7 @@ import {
   ChevronUp,
   ChevronDown,
 } from 'lucide-react';
+import { FallbackImage } from './FallbackImage';
 import { LocalModel, ScanProgress, ModelType } from '../types/app';
 
 interface LibraryTabProps {
@@ -26,10 +27,35 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
-  const [filter, setFilter] = useState<'all' | 'matched' | 'updates' | 'unidentified' | 'duplicates'>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | ModelType>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortAsc, setSortAsc] = useState(true);
+  // Filters with LocalStorage Persistence
+  const [filter, setFilter] = useState<'all' | 'matched' | 'updates' | 'unidentified' | 'duplicates'>(
+    () => (localStorage.getItem('civitai_lib_filter') as any) || 'all'
+  );
+  const [typeFilter, setTypeFilter] = useState<'all' | ModelType>(
+    () => (localStorage.getItem('civitai_lib_type_filter') as any) || 'all'
+  );
+  const [searchQuery, setSearchQuery] = useState<string>(
+    () => localStorage.getItem('civitai_lib_search') || ''
+  );
+  const [sortAsc, setSortAsc] = useState<boolean>(
+    () => localStorage.getItem('civitai_lib_sort_asc') !== 'false'
+  );
+
+  useEffect(() => {
+    localStorage.setItem('civitai_lib_filter', filter);
+  }, [filter]);
+
+  useEffect(() => {
+    localStorage.setItem('civitai_lib_type_filter', typeFilter);
+  }, [typeFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('civitai_lib_search', searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    localStorage.setItem('civitai_lib_sort_asc', String(sortAsc));
+  }, [sortAsc]);
 
   const loadLocalModels = async () => {
     setLoading(true);
@@ -287,7 +313,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
               <div className="flex items-center gap-4 flex-1 min-w-0">
                   {/* Preview thumbnail if available */}
                   {model.previewUrl ? (
-                    <img src={model.previewUrl} alt="preview" className="w-12 h-12 rounded-lg object-cover" />
+                    <FallbackImage
+                      src={model.previewUrl}
+                      alt={model.fileName}
+                      className="w-12 h-12 rounded-lg object-cover bg-slate-950 flex-shrink-0 border border-slate-800"
+                      fallbackIcon={<HardDrive size={18} className="text-purple-400" />}
+                      fallbackText=""
+                    />
                   ) : (
                     <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-purple-400 flex-shrink-0 shadow-inner">
                       <HardDrive size={22} />

@@ -1,0 +1,75 @@
+import React, { useState, useEffect } from 'react';
+import { Layers } from 'lucide-react';
+
+export interface FallbackImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
+  candidateUrls?: (string | null | undefined)[];
+  fallbackIcon?: React.ReactNode;
+  fallbackText?: string;
+  isBlurred?: boolean;
+}
+
+export const FallbackImage: React.FC<FallbackImageProps> = ({
+  candidateUrls = [],
+  src,
+  alt,
+  className = '',
+  fallbackIcon,
+  fallbackText = 'NO PREVIEW',
+  isBlurred = false,
+  ...props
+}) => {
+  // Build a distinct list of valid candidate URLs
+  const urls: string[] = React.useMemo(() => {
+    const list: string[] = [];
+    if (src && typeof src === 'string' && src.trim()) {
+      list.push(src.trim());
+    }
+    candidateUrls.forEach((item) => {
+      if (item && typeof item === 'string') {
+        const trimmed = item.trim();
+        if (trimmed && !list.includes(trimmed)) {
+          list.push(trimmed);
+        }
+      }
+    });
+    return list;
+  }, [src, candidateUrls]);
+
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [hasFailedAll, setHasFailedAll] = useState<boolean>(urls.length === 0);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+    setHasFailedAll(urls.length === 0);
+  }, [urls.join('|')]);
+
+  const handleError = () => {
+    if (currentIndex + 1 < urls.length) {
+      setCurrentIndex((prev) => prev + 1);
+    } else {
+      setHasFailedAll(true);
+    }
+  };
+
+  if (hasFailedAll || urls.length === 0) {
+    return (
+      <div className={`w-full h-full flex flex-col items-center justify-center text-slate-700 font-mono text-[11px] gap-1 bg-slate-900/50 select-none ${className}`}>
+        {fallbackIcon || <Layers size={22} className="text-slate-700 stroke-[1.5]" />}
+        <span>{fallbackText}</span>
+      </div>
+    );
+  }
+
+  const currentUrl = urls[currentIndex];
+
+  return (
+    <img
+      key={currentUrl}
+      src={currentUrl}
+      alt={alt || 'Model preview'}
+      onError={handleError}
+      className={`${className} ${isBlurred ? 'blur-lg scale-110' : ''}`}
+      {...props}
+    />
+  );
+};

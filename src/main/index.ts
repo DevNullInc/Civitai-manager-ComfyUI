@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import http from 'http';
@@ -27,6 +27,8 @@ let currentConfig: AppConfig = {
 };
 
 async function createWindow() {
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 850,
@@ -34,6 +36,7 @@ async function createWindow() {
     minHeight: 700,
     title: 'CivitAI Model Manager - ComfyUI Edition',
     backgroundColor: '#0f172a',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -41,30 +44,28 @@ async function createWindow() {
     },
   });
 
+  mainWindow.removeMenu();
+  mainWindow.setMenuBarVisibility(false);
+
   const indexPath = path.join(__dirname, '../index.html');
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL || (process.env.PORT ? `http://localhost:${process.env.PORT}` : null);
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL || (process.env.PORT ? `http://localhost:${process.env.PORT}` : 'http://localhost:5173');
   const fs = require('fs');
 
   let loaded = false;
-  // If explicitly in development mode with a dev server URL, try loading the URL first
-  if (process.env.NODE_ENV === 'development' && devServerUrl) {
-    try {
-      await mainWindow.loadURL(devServerUrl);
-      loaded = true;
-      mainWindow.webContents.openDevTools();
-    } catch (e) {
-      logger.warn(`Could not connect to Vite dev server at ${devServerUrl}, falling back to built files:`, e);
-    }
+  // Try loading from Vite server if running
+  try {
+    await mainWindow.loadURL(devServerUrl);
+    loaded = true;
+  } catch (e) {
+    logger.info(`Vite server not responding at ${devServerUrl}, falling back to static files.`);
   }
 
   // Load the compiled static app
   if (!loaded) {
     if (fs.existsSync(indexPath)) {
       await mainWindow.loadFile(indexPath);
-    } else if (devServerUrl) {
-      await mainWindow.loadURL(devServerUrl);
     } else {
-      await mainWindow.loadURL('http://localhost:5173');
+      await mainWindow.loadURL(devServerUrl);
     }
   }
 }
@@ -223,6 +224,48 @@ function startHttpBridgeServer() {
         const enums = await civitaiClient.fetchEnums();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(enums));
+      } else if (url === '/api/add-download' && req.method === 'POST') {
+        const body = await getBody();
+        let downloadUrl = body.downloadUrl;
+        if (body.modelVersionId) {
+          downloadUrl = civitaiClient.getDownloadUrl(body.modelVersionId);
+        } else if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
+          const sep = downloadUrl.includes('?') ? '&' : '?';
+          downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
+        }
+        const computed = folderRouter.computePath({
+          fileName: body.fileName,
+          modelType: body.modelType,
+          baseModel: body.baseModel,
+          creator: body.creator,
+        });
+        const task = downloadManager.addTask({
+          ...body,
+          downloadUrl,
+          targetFolder: computed.folderName,
+          computedPath: computed.fullPath,
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(task));
+      } else if (url === '/api/downloads' && req.method === 'GET') {
+        const tasks = downloadManager.getTasks();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(tasks));
+      } else if (url === '/api/pause-download' && req.method === 'POST') {
+        const body = await getBody();
+        downloadManager.pauseTask(body.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/resume-download' && req.method === 'POST') {
+        const body = await getBody();
+        downloadManager.resumeTask(body.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/cancel-download' && req.method === 'POST') {
+        const body = await getBody();
+        downloadManager.cancelTask(body.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -363,6 +406,14 @@ function registerIpcHandlers() {
 
   // Download Handlers
   ipcMain.handle('add-download', async (_event: unknown, taskParams: any) => {
+    let downloadUrl = taskParams.downloadUrl;
+    if (taskParams.modelVersionId) {
+      downloadUrl = civitaiClient.getDownloadUrl(taskParams.modelVersionId);
+    } else if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
+      const sep = downloadUrl.includes('?') ? '&' : '?';
+      downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
+    }
+
     const computed = folderRouter.computePath({
       fileName: taskParams.fileName,
       modelType: taskParams.modelType,
@@ -372,6 +423,7 @@ function registerIpcHandlers() {
 
     const task = downloadManager.addTask({
       ...taskParams,
+      downloadUrl,
       targetFolder: computed.folderName,
       computedPath: computed.fullPath,
     });
@@ -450,7 +502,13 @@ app.whenReady().then(async () => {
   await loadConfigFromDb();
   registerIpcHandlers();
   startHttpBridgeServer();
-  await createWindow();
+
+  const isHeadless = process.env.HEADLESS === 'true' || app.commandLine.hasSwitch('headless');
+  if (!isHeadless) {
+    await createWindow();
+  } else {
+    logger.info('Running in headless background mode (no Electron desktop window created).');
+  }
 
   if (app.isPackaged) {
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
