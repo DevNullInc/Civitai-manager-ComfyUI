@@ -32,7 +32,7 @@
     "lora",
     "checkpoint"
   ],
-  "author": "DevNullInc",
+  "author": "TheStygianRenegade / /dev/null Inc",
   "license": "GPL-3.0",
   "dependencies": {
     "axios": "^1.7.9",
@@ -63,7 +63,7 @@
   "build": {
     "appId": "com.devnullinc.civitai-manager-comfyui",
     "productName": "CivitAI Model Manager",
-    "copyright": "Copyright © 2025",
+    "copyright": "Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc",
     "directories": {
       "output": "release",
       "buildResources": "build"

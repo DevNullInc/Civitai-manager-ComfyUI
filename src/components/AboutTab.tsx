@@ -183,7 +183,7 @@ export function AboutTab() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400">Permissions:</span>
-                <span className="text-slate-300">Commercial, Modify, Distribute</span>
+                <span className="text-slate-300">Commercial, Modify, Distribute, Attribute</span>
               </div>
             </div>
           </div>
@@ -256,32 +256,29 @@ export function AboutTab() {
             <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
               <button
                 onClick={() => setFilterLevel('all')}
-                className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
-                  filterLevel === 'all'
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer ${filterLevel === 'all'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 All ({logs.length})
               </button>
               <button
                 onClick={() => setFilterLevel('error')}
-                className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
-                  filterLevel === 'error'
-                    ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
-                    : 'text-slate-400 hover:text-rose-300'
-                }`}
+                className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${filterLevel === 'error'
+                  ? 'bg-rose-950/80 text-rose-300 border border-rose-800/60'
+                  : 'text-slate-400 hover:text-rose-300'
+                  }`}
               >
                 <AlertCircle size={13} className="text-rose-400" />
                 <span>Errors ({errorCount})</span>
               </button>
               <button
                 onClick={() => setFilterLevel('warn')}
-                className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
-                  filterLevel === 'warn'
-                    ? 'bg-amber-950/80 text-amber-300 border border-amber-800/60'
-                    : 'text-slate-400 hover:text-amber-300'
-                }`}
+                className={`px-3 py-1 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${filterLevel === 'warn'
+                  ? 'bg-amber-950/80 text-amber-300 border border-amber-800/60'
+                  : 'text-slate-400 hover:text-amber-300'
+                  }`}
               >
                 <AlertTriangle size={13} className="text-amber-400" />
                 <span>Warnings ({warnCount})</span>
@@ -291,11 +288,10 @@ export function AboutTab() {
             {/* Copy Report Button */}
             <button
               onClick={handleCopyReport}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg ${
-                copied
-                  ? 'bg-emerald-600 text-white shadow-emerald-600/30 glow-emerald'
-                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-600/30 glow-purple'
-              }`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg ${copied
+                ? 'bg-emerald-600 text-white shadow-emerald-600/30 glow-emerald'
+                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-600/30 glow-purple'
+                }`}
             >
               {copied ? (
                 <>
@@ -338,26 +334,24 @@ export function AboutTab() {
               filteredLogs.map((entry) => (
                 <div
                   key={entry.id}
-                  className={`p-2 rounded-lg border text-left transition-colors flex flex-col gap-1 ${
-                    entry.level === 'error'
-                      ? 'bg-rose-950/25 border-rose-900/40 text-rose-300'
-                      : entry.level === 'warn'
+                  className={`p-2 rounded-lg border text-left transition-colors flex flex-col gap-1 ${entry.level === 'error'
+                    ? 'bg-rose-950/25 border-rose-900/40 text-rose-300'
+                    : entry.level === 'warn'
                       ? 'bg-amber-950/25 border-amber-900/40 text-amber-300'
                       : 'bg-slate-900/40 border-slate-800/50 text-slate-300'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start gap-2.5">
                     <span className="text-[10px] text-slate-500 shrink-0 select-none">
                       {entry.time}
                     </span>
                     <span
-                      className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded shrink-0 select-none ${
-                        entry.level === 'error'
-                          ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                          : entry.level === 'warn'
+                      className={`text-[9px] font-bold uppercase px-1.5 py-0.2 rounded shrink-0 select-none ${entry.level === 'error'
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        : entry.level === 'warn'
                           ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                           : 'bg-slate-800 text-slate-400'
-                      }`}
+                        }`}
                     >
                       {entry.level}
                     </span>

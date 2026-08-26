@@ -1,3 +1,12 @@
+/**
+ * CivitAI Model Manager - ComfyUI Edition
+ * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
@@ -31,10 +40,10 @@ async function createWindow() {
   Menu.setApplicationMenu(null);
 
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 850,
-    minWidth: 1024,
-    minHeight: 700,
+    width: 1380,
+    height: 880,
+    minWidth: 1124,
+    minHeight: 720,
     title: 'CivitAI Model Manager - ComfyUI Edition',
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,

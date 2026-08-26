@@ -1,4 +1,9 @@
 <#
+  CivitAI Model Manager - ComfyUI Edition
+  Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
+  Licensed under GNU General Public License v3.0 (GPL-3.0)
+#>
+<#
 .SYNOPSIS
   CivitAI Model Manager - launcher script.
 
