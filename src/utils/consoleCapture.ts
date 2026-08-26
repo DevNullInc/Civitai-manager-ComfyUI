@@ -112,6 +112,14 @@ export function initConsoleCapture() {
     ]);
   });
 
+  if (window.civitaiAPI && typeof window.civitaiAPI.onAppLog === 'function') {
+    try {
+      window.civitaiAPI.onAppLog((entry) => {
+        pushLog((entry.level as any) || 'info', [`[Backend] ${entry.message}`]);
+      });
+    } catch (e) {}
+  }
+
   pushLog('info', ['[System] Console capture initialized successfully. Ready for diagnostics.']);
 }
 

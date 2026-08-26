@@ -45,6 +45,8 @@ export const SettingsTab: React.FC = () => {
     conflict_strategy: 'rename',
     nsfw_max_visible_level: 5,
     nsfw_blur_enabled: true,
+    strict_hash_verification: true,
+    max_concurrent_downloads: 2,
   });
 
   const [saving, setSaving] = useState(false);
@@ -79,14 +81,30 @@ export const SettingsTab: React.FC = () => {
           const folders = rawFolders.map(normalizeFolderPath).filter(Boolean);
 
           setConfig({
-            ...loaded,
             comfyui_root: normalizeFolderPath(loaded.comfyui_root || folders[0] || ''),
             comfyui_folders: folders,
+            civitai_api_key: loaded.civitai_api_key || '',
+            mirror_url: loaded.mirror_url || '',
             folder_mappings: { ...DEFAULT_FOLDER_MAP, ...(loaded.folder_mappings || {}) },
             advanced_mappings: {
               filename_patterns:
                 loaded.advanced_mappings?.filename_patterns || [...DEFAULT_FILENAME_PATTERNS],
             },
+            organize_by: {
+              base_model: !!loaded.organize_by?.base_model,
+              creator: !!loaded.organize_by?.creator,
+            },
+            conflict_strategy: loaded.conflict_strategy || 'rename',
+            nsfw_max_visible_level:
+              typeof loaded.nsfw_max_visible_level === 'number'
+                ? loaded.nsfw_max_visible_level
+                : 5,
+            nsfw_blur_enabled: loaded.nsfw_blur_enabled !== false,
+            strict_hash_verification: loaded.strict_hash_verification !== false,
+            max_concurrent_downloads:
+              typeof loaded.max_concurrent_downloads === 'number'
+                ? loaded.max_concurrent_downloads
+                : 2,
           });
         }
       }
@@ -519,7 +537,7 @@ export const SettingsTab: React.FC = () => {
             <input
               type="password"
               placeholder="Enter your CivitAI API Key..."
-              value={config.civitai_api_key}
+              value={config.civitai_api_key || ''}
               onChange={(e) => setConfig({ ...config, civitai_api_key: e.target.value })}
               className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
             />
@@ -535,7 +553,7 @@ export const SettingsTab: React.FC = () => {
             <input
               type="text"
               placeholder="https://civitai.com/api/v1"
-              value={config.mirror_url}
+              value={config.mirror_url || ''}
               onChange={(e) => setConfig({ ...config, mirror_url: e.target.value })}
               className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
             />
@@ -579,6 +597,40 @@ export const SettingsTab: React.FC = () => {
             />
             <span>Enable NSFW Blur on model preview cards</span>
           </label>
+
+          <label className="flex items-center gap-2.5 cursor-pointer text-xs text-slate-300">
+            <input
+              type="checkbox"
+              checked={config.strict_hash_verification !== false}
+              onChange={(e) => setConfig({ ...config, strict_hash_verification: e.target.checked })}
+              className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500 w-4 h-4"
+            />
+            <span>Strict SHA256 Hash Verification (If unchecked, warns but saves files with invalid CivitAI hashes)</span>
+          </label>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-semibold text-slate-300">
+                Max Concurrent Downloads (Queue Amount)
+              </label>
+              <span className="text-xs font-bold text-indigo-400 font-mono">
+                {config.max_concurrent_downloads ?? 2} simultaneous { (config.max_concurrent_downloads ?? 2) === 1 ? 'download' : 'downloads' }
+              </span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={config.max_concurrent_downloads ?? 2}
+              onChange={(e) =>
+                setConfig({ ...config, max_concurrent_downloads: parseInt(e.target.value, 10) })
+              }
+              className="w-full accent-indigo-500 cursor-pointer"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Set how many models can download simultaneously (1 to 10). Lower values prevent bandwidth saturation on slower internet connections.
+            </p>
+          </div>
         </div>
       </div>
 

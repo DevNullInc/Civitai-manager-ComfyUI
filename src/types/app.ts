@@ -83,6 +83,8 @@ export interface AppConfig {
   conflict_strategy: ConflictStrategy;
   nsfw_max_visible_level: number;
   nsfw_blur_enabled: boolean;
+  strict_hash_verification?: boolean;
+  max_concurrent_downloads?: number;
 }
 
 export interface DownloadTask {
@@ -106,6 +108,7 @@ export interface DownloadTask {
   error?: string;
   computedPath: string;
   requiresAuth?: boolean;
+  isHashMismatch?: boolean;
 }
 
 export interface LocalModel {
@@ -127,6 +130,7 @@ export interface LocalModel {
   hasUpdate?: boolean;
   updateVersionId?: number;
   updateVersionName?: string;
+  updateDownloadUrl?: string;
   isDuplicate?: boolean;
 }
 

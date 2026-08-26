@@ -205,6 +205,21 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      forceCompleteDownload: async (id: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/force-complete-download`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          });
+          const data = await res.json();
+          return data.success;
+        } catch (e) {
+          console.error('forceCompleteDownload failed:', e);
+          return false;
+        }
+      },
+
       getDownloads: async () => {
         const res = await fetch(`${API_BASE}/downloads`);
         return await res.json();
@@ -222,6 +237,21 @@ export function setupWebBridgeIfNeeded() {
         });
         return await res.json();
       },
+
+      checkAllUpdates: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/check-all-updates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          return await res.json();
+        } catch (e) {
+          console.error('checkAllUpdates failed:', e);
+          return { totalChecked: 0, updatesFound: 0, modelsWithUpdates: [] };
+        }
+      },
+
+      onUpdateCheckProgress: (_callback: (progress: any) => void) => {},
 
       exportBackup: async (filePath: string) => {
         const res = await fetch(`${API_BASE}/export-backup`, {
@@ -271,6 +301,8 @@ export function setupWebBridgeIfNeeded() {
           userAgent: navigator.userAgent,
         };
       },
+
+      onAppLog: (_callback: (log: { level: string; message: string }) => void) => () => {},
 
       restartApp: async () => {
         try {

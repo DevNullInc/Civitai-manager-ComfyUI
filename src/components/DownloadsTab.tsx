@@ -50,8 +50,16 @@ export const DownloadsTab: React.FC = () => {
     if (window.civitaiAPI) await window.civitaiAPI.resumeDownload(id);
   };
 
-  const handleCancel = async (id: string) => {
-    if (window.civitaiAPI) await window.civitaiAPI.cancelDownload(id);
+  const handleCancel = (id: string) => {
+    if (window.civitaiAPI) {
+      window.civitaiAPI.cancelDownload(id);
+    }
+  };
+
+  const handleForceComplete = async (id: string) => {
+    if (window.civitaiAPI && typeof window.civitaiAPI.forceCompleteDownload === 'function') {
+      await window.civitaiAPI.forceCompleteDownload(id);
+    }
   };
 
   const formatSpeed = (bytesPerSec: number): string => {
@@ -201,6 +209,21 @@ export const DownloadsTab: React.FC = () => {
                   </span>
                   {task.error && <span className="text-red-400 font-sans font-medium">{task.error}</span>}
                 </div>
+
+                {task.status === 'failed' && (task.isHashMismatch || task.error?.toLowerCase().includes('sha256') || task.error?.toLowerCase().includes('hash')) && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-fadeIn glow-amber">
+                    <div className="flex items-center gap-2 text-amber-300">
+                      <AlertTriangle size={16} className="shrink-0 text-amber-400" />
+                      <span>The download finished, but CivitAI's reported SHA256 checksum did not match. You can finalize and keep this file anyway.</span>
+                    </div>
+                    <button
+                      onClick={() => handleForceComplete(task.id)}
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer shrink-0"
+                    >
+                      Keep & Finish File
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

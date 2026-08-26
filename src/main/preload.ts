@@ -36,6 +36,7 @@ const api = {
   pauseDownload: (id: string) => ipcRenderer.invoke('pause-download', id),
   resumeDownload: (id: string) => ipcRenderer.invoke('resume-download', id),
   cancelDownload: (id: string) => ipcRenderer.invoke('cancel-download', id),
+  forceCompleteDownload: (id: string) => ipcRenderer.invoke('force-complete-download', id),
   getDownloads: () => ipcRenderer.invoke('get-downloads'),
   onDownloadProgress: (callback: (tasks: any[]) => void) => {
     ipcRenderer.on('download-progress', (_event: unknown, tasks: any) => callback(tasks));
@@ -43,6 +44,10 @@ const api = {
 
   // Versioning & Backup
   checkUpdate: (localModel: any) => ipcRenderer.invoke('check-update', localModel),
+  checkAllUpdates: () => ipcRenderer.invoke('check-all-updates'),
+  onUpdateCheckProgress: (callback: (progress: any) => void) => {
+    ipcRenderer.on('update-check-progress', (_event: unknown, progress: any) => callback(progress));
+  },
   exportBackup: (filePath: string) => ipcRenderer.invoke('export-backup', filePath),
   importBackup: (filePath: string) => ipcRenderer.invoke('import-backup', filePath),
   // Delete local model
@@ -51,6 +56,9 @@ const api = {
   // External Link & System Info
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+  onAppLog: (callback: (log: { level: string; message: string }) => void) => {
+    ipcRenderer.on('app-log', (_event: unknown, log: any) => callback(log));
+  },
   // App control
   restartApp: () => ipcRenderer.invoke('restart-app'),
   shutdownApp: () => ipcRenderer.invoke('shutdown-app'),
