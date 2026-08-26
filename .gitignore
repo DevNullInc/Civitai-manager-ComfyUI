@@ -10,3 +10,4 @@ scratch/
 tests/folderRouter.test.js
 tests/rateLimiter.test.js
 civitai_manager.sqlite-wal
+release/
