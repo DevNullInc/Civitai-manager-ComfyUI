@@ -3,7 +3,7 @@
 **The missing model manager for ComfyUI.** A unified desktop application for discovering, downloading, organizing, and version-managing generative AI models across multiple CivitAI sources with intelligent auto-sorting into ComfyUI's folder structure.
 
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)
 
 ---
 
@@ -14,8 +14,8 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **Auto-organizes** downloads into the correct ComfyUI folders (checkpoints → `checkpoints/`, LoRAs → `loras/`, etc.)
 - **Tracks versions** - know when updates are available and downgrade if needed
 - **Dual-source support** - search both civitai.com and civitai.red
-- **Duplicate detection** - never download the same model twice
-- **Hash verification** - ensure downloaded files are intact and authentic
+- **Duplicate detection** - find identical models by hash across different folders and resolve with one-click cleanup
+- **Hardware-accelerated hash verification** - 64MB streaming buffer utilizing CPU SHA-NI / AVX-512
 
 ---
 
@@ -37,7 +37,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 
 ### 📁 Library Management
 - **Multi-folder support**: Scan and manage models across multiple drives/paths
-- **Duplicate detection**: Find identical models by hash across different folders
+- **Duplicate detection & resolution**: Interactive keeper picker with full folder path comparison
 - **Version tracking**: See installed versions vs. latest available
 - **Update notifications**: One-click updates when new versions release
 - **Side-by-side versions**: Keep multiple versions of the same model
@@ -61,15 +61,6 @@ CivitAI-Model-Manager-Standalone-<version>.exe
 
 # Or install via winget (when available)
 winget install CivitAI.ModelManager
-```
-
-### macOS
-```bash
-# Download .dmg
-CivitAI-Model-Manager-<version>.dmg
-
-# Or via Homebrew (when available)
-brew install --cask civitai-model-manager
 ```
 
 ### Linux
@@ -128,7 +119,7 @@ You can compile standalone binaries using `cmm.ps1` or npm scripts:
 npm run dist:portable    # Single standalone .exe (runs directly without installation)
 npm run dist:installer   # Standard Windows Setup installer (.exe)
 npm run dist:dir         # Unpacked application folder
-npm run dist:all         # Multi-platform builds (Windows, Mac, Linux)
+npm run dist:all         # Cross-platform builds (Windows & Linux)
 ```
 
 Outputs will be saved in the `release/` directory:

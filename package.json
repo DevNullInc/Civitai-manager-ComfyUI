@@ -15,7 +15,7 @@
     "dist:portable": "npm run build && electron-builder --win portable",
     "dist:installer": "npm run build && electron-builder --win nsis",
     "dist:dir": "npm run build && electron-builder --dir",
-    "dist:all": "npm run build && electron-builder -mwl",
+    "dist:all": "npm run build && electron-builder -wl",
     "cmm:start": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 start",
     "cmm:stop": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 stop",
     "cmm:restart": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 restart",
@@ -97,10 +97,6 @@
     },
     "portable": {
       "artifactName": "${productName}-Standalone-v${version}.exe"
-    },
-    "mac": {
-      "category": "public.app-category.graphics-design",
-      "target": ["dmg", "zip"]
     },
     "linux": {
       "target": ["AppImage", "deb"],

@@ -163,8 +163,8 @@ function Start-App {
   Write-Status '>>' "Starting Vite server on port $Port..." 'Cyan'
   $env:PORT = "$Port"
   $env:VITE_DEV_SERVER_URL = "http://localhost:$Port"
-  $viteProc = Start-Process -FilePath 'cmd.exe' `
-    -ArgumentList "/c npx vite --port $Port" `
+  $viteProc = Start-Process -FilePath 'npx.cmd' `
+    -ArgumentList "vite --port $Port --host 127.0.0.1" `
     -WorkingDirectory $ProjectRoot `
     -PassThru -WindowStyle Hidden
 
@@ -174,15 +174,15 @@ function Start-App {
   if ($Headless -or $NoWindow) {
     Write-Status '>>' 'Starting Electron in headless background mode...' 'Magenta'
     $env:HEADLESS = "true"
-    $electronProc = Start-Process -FilePath 'cmd.exe' `
-      -ArgumentList '/c npx electron . --headless' `
+    $electronProc = Start-Process -FilePath 'npx.cmd' `
+      -ArgumentList 'electron . --headless' `
       -WorkingDirectory $ProjectRoot `
       -PassThru -WindowStyle Hidden
   } else {
     Write-Status '>>' 'Launching Electron app window...' 'Magenta'
     $env:HEADLESS = "false"
-    $electronProc = Start-Process -FilePath 'cmd.exe' `
-      -ArgumentList '/c npx electron .' `
+    $electronProc = Start-Process -FilePath 'npx.cmd' `
+      -ArgumentList 'electron .' `
       -WorkingDirectory $ProjectRoot `
       -PassThru -WindowStyle Hidden
   }

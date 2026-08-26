@@ -11,3 +11,7 @@ tests/folderRouter.test.js
 tests/rateLimiter.test.js
 civitai_manager.sqlite-wal
 release/
+civitai_manager.sqlite-shm
+build-release.*
+build-local.*
+build-all.*
