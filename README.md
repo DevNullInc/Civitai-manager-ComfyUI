@@ -79,20 +79,49 @@ chmod +x CivitAI-Model-Manager-1.0.0.AppImage
 # Or build from source (see Contributing)
 ```
 
-### Build from Source
+### Build & Run from Source
+
 ```bash
 git clone https://github.com/yourusername/civitai-model-manager.git
 cd civitai-model-manager
 
 # Install dependencies
-npm install  # or pnpm install / yarn install
-
-# Run in development mode
-npm run dev
-
-# Build for production
-npm run build
+npm install
 ```
+
+#### 🚀 Recommended: Launch with `cmm.ps1` (PowerShell)
+
+The included `cmm.ps1` script is the primary launcher and controller for starting, stopping, restarting, and managing background processes.
+
+```powershell
+# 1. Start Electron desktop application + Web UI (port 5173)
+.\cmm.ps1 start
+
+# 2. Start on a custom port
+.\cmm.ps1 start -Port 8080
+
+# 3. Start in Headless / Web-only mode (No Electron desktop window)
+.\cmm.ps1 start -Headless
+# (or use -NoWindow)
+
+# 4. Check application running status and active process IDs
+.\cmm.ps1 status
+
+# 5. Rebuild and restart application
+.\cmm.ps1 restart
+
+# 6. Stop all running application instances cleanly
+.\cmm.ps1 stop
+```
+
+#### Script Parameters & Flags Reference
+
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `Action` | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, or `status`. |
+| `-Port <int>` | `int` | `5173` | Port for the Vite web server & HTTP bridge. |
+| `-Headless` | `switch` | `false` | Runs background server and web UI without launching the Electron desktop window. Ideal for remote servers, Docker, WSL, or browser-only workflows. |
+| `-NoWindow` | `switch` | `false` | Alias for `-Headless`. |
 
 ---
 
@@ -100,24 +129,25 @@ npm run build
 
 ### 1. First Launch Setup
 On first run, CMM will ask for:
-- **ComfyUI Root Path**: The folder containing your `models/` directory
+- **ComfyUI Root Path**: The folder containing your `models/` directory (e.g., `D:\ComfyUI\models`)
 - **CivitAI API Key** (optional but recommended): Get yours at [CivitAI Settings](https://civitai.com/user/account)
 
-### 2. Scan Existing Library
+### 2. Scan Existing Library & Resolve Duplicates
 ```
-Library → Scan Folders → Start Scan
+Library → Scan ComfyUI Folders → Start Scan
 ```
 CMM will:
-- Walk all model folders
-- Compute SHA256 hashes
-- Match against CivitAI database
-- Build your local library index
+- Walk all configured model directories
+- Stream 64MB buffer chunks with CPU SHA-NI / AVX-512 hardware acceleration
+- Match models in bulk against the CivitAI database
+- Automatically flag duplicate files sharing the same SHA256 checksum
+- **Inline Duplicate Resolution**: Click the **`Duplicate`** badge on any item to view all copies, compare folder paths, open files in Explorer, and choose which file to keep with one-click cleanup!
 
 ### 3. Search and Download
 ```
 Browse → Search "realistic vision" → Select model → Download
 ```
-The model automatically goes to the correct folder (e.g., `checkpoints/`).
+The model automatically routes to the correct folder (e.g., `checkpoints/`, `loras/`, `upscale_models/`). Auto-cascades preview images across all version assets if an image URL returns 404 or 401.
 
 ---
 
@@ -233,9 +263,17 @@ CMM recognizes and manages models in these ComfyUI folders:
 
 ### Managing Your Library
 - **Library** tab shows all local models
-- Green check = Up to date
-- Yellow dot = Update available
-- Gray question = Unidentified (not on CivitAI)
+- Green check = Matched with CivitAI
+- Amber badge = Duplicate detected on disk
+- Gray question = Unidentified (not found on CivitAI)
+
+### Resolving Duplicate Models
+1. In the **Library** tab, filter by "Duplicates" or click the amber **Duplicate (X)** badge on any model.
+2. The row expands inline to show all duplicate copies sharing the same SHA256 checksum.
+3. Inspect each copy's full folder location (`D:\ComfyUI\models\...`), file size, and last modified date.
+4. Click **Show in Folder** to open the containing folder and highlight the file in Windows Explorer.
+5. Select the **radio button** next to the copy you want to designate as the **Keeper**.
+6. Click **Keep Selected & Delete Other Copy(ies)** to safely delete non-keeper duplicates from disk and update the library.
 
 ### Updating Models
 1. Go to **Library** tab
