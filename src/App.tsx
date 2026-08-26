@@ -1,3 +1,12 @@
+/**
+ * CivitAI Model Manager - ComfyUI Edition
+ * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Compass,
@@ -9,6 +18,9 @@ import {
   ChevronUp,
   Activity,
   Info as InfoIcon,
+  Github,
+  ExternalLink,
+  Heart,
 } from 'lucide-react';
 import { BrowseTab } from './components/BrowseTab';
 import { LibraryTab } from './components/LibraryTab';
@@ -110,12 +122,21 @@ export default function App() {
     setActiveTab('browse');
   };
 
+  const openRepo = () => {
+    const url = 'https://github.com/DevNullInc/Civitai-manager-ComfyUI';
+    if (window.civitaiAPI && typeof window.civitaiAPI.openExternal === 'function') {
+      window.civitaiAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#07090e] text-slate-100 overflow-hidden select-none">
-      {/* Sticky 3-Column Top Navigation Bar */}
-      <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 backdrop-blur-xl px-8 py-3.5 shadow-2xl grid grid-cols-3 items-center w-full flex-shrink-0">
+      {/* Sticky Top Navigation Bar */}
+      <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 backdrop-blur-xl px-6 py-3 shadow-2xl flex items-center justify-between gap-6 w-full flex-shrink-0">
         {/* Left: Brand Logo & Title */}
-        <div className="flex items-center gap-3 justify-self-start">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 flex items-center justify-center">
             <Layers size={22} />
           </div>
@@ -129,11 +150,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* Center: Perfectly Centered Fixed-Width Menu Buttons */}
-        <nav className="flex items-center justify-center gap-2.5 justify-self-center flex-wrap">
+        {/* Center: Flexible Responsive Menu Buttons */}
+        <nav className="flex items-center justify-center gap-3 flex-1 max-w-3xl">
           <button
             onClick={() => setActiveTab('browse')}
-            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+            className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'browse'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -145,7 +166,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('library')}
-            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+            className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'library'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -157,7 +178,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('downloads')}
-            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative ${
+            className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative whitespace-nowrap ${
               activeTab === 'downloads'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -175,7 +196,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('settings')}
-            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+            className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'settings'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -187,7 +208,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('about')}
-            className={`w-36 py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+            className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'about'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -199,7 +220,7 @@ export default function App() {
         </nav>
 
         {/* Right: Engine Status Badge */}
-        <div className="flex items-center gap-2 justify-self-end bg-slate-900/80 border border-slate-800 px-3.5 py-1.5 rounded-xl text-[11px] font-medium text-slate-400">
+        <div className="flex items-center gap-2 shrink-0 bg-slate-900/80 border border-slate-800 px-3.5 py-1.5 rounded-xl text-[11px] font-medium text-slate-400">
           <Activity size={14} className="text-emerald-400" />
           <span>Auto-Sorter Ready</span>
         </div>
@@ -215,7 +236,7 @@ export default function App() {
         <div className="absolute top-10 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-10 left-1/3 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 min-h-full">
+        <div className="relative z-10 min-h-full pb-8">
           <ErrorBoundary>
             {activeTab === 'browse' && <BrowseTab onQueueDownload={handleQueueDownload} />}
             {activeTab === 'library' && <LibraryTab onCheckUpdate={handleCheckUpdate} />}
@@ -230,12 +251,42 @@ export default function App() {
           <button
             onClick={scrollToTop}
             title="Return to Top"
-            className="fixed bottom-8 right-8 z-[100] p-4 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-2xl shadow-purple-600/50 hover:scale-110 active:scale-95 transition-all duration-200 border border-purple-400/40 glow-purple flex items-center justify-center cursor-pointer"
+            className="fixed bottom-14 right-8 z-[100] p-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-2xl shadow-purple-600/50 hover:scale-110 active:scale-95 transition-all duration-200 border border-purple-400/40 glow-purple flex items-center justify-center cursor-pointer"
           >
-            <ChevronUp size={24} className="stroke-[3]" />
+            <ChevronUp size={20} className="stroke-[3]" />
           </button>
         )}
       </main>
+
+      {/* Persistent Footer */}
+      <footer className="sticky bottom-0 z-40 glass-panel border-t border-slate-800/80 backdrop-blur-xl px-6 py-2 shadow-2xl flex items-center justify-between text-xs text-slate-400 w-full flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-300">CivitAI Model Manager</span>
+          <span className="text-slate-600">•</span>
+          <span className="text-purple-400 font-medium">ComfyUI Edition</span>
+          <span className="text-slate-600">•</span>
+          <span className="px-1.5 py-0.2 rounded bg-slate-800/80 text-[10px] text-slate-400 border border-slate-700/50 font-mono">GPL-3.0</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-slate-400 text-[11px] hidden sm:flex">
+          <span>Crafted with</span>
+          <Heart size={12} className="text-rose-500 fill-rose-500 inline" />
+          <span>by</span>
+          <span className="font-bold text-purple-300">TheStygianRenegade</span>
+          <span className="text-slate-500">/</span>
+          <span className="font-semibold text-slate-300">/dev/null Inc</span>
+        </div>
+
+        <button
+          onClick={openRepo}
+          title="Open GitHub Repository (DevNullInc/Civitai-manager-ComfyUI)"
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-purple-300 border border-slate-800 hover:border-purple-500/40 transition-all cursor-pointer font-medium text-xs group shadow-sm"
+        >
+          <Github size={13} className="text-purple-400 group-hover:scale-110 transition-transform" />
+          <span>GitHub</span>
+          <ExternalLink size={10} className="text-slate-500 group-hover:text-purple-400" />
+        </button>
+      </footer>
     </div>
   );
 }
