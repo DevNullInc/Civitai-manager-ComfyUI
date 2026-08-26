@@ -35,9 +35,10 @@ const api = {
   importBackup: (filePath: string) => ipcRenderer.invoke('import-backup', filePath),
   // Delete local model
   deleteLocalModel: (id: string) => ipcRenderer.invoke('delete-local-model', id),
-   // App control
-   restartApp: () => ipcRenderer.invoke('restart-app'),
-   shutdownApp: () => ipcRenderer.invoke('shutdown-app'),
+  openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
+  // App control
+  restartApp: () => ipcRenderer.invoke('restart-app'),
+  shutdownApp: () => ipcRenderer.invoke('shutdown-app'),
 };
 
 contextBridge.exposeInMainWorld('civitaiAPI', api);

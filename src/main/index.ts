@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
+import fs from 'fs';
 import http from 'http';
 import { dbManager } from '../db/db';
 import { civitaiClient } from '../services/civitaiClient';
@@ -266,6 +267,36 @@ function startHttpBridgeServer() {
         downloadManager.cancelTask(body.id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/delete-local-model' && req.method === 'POST') {
+        const body = await getBody();
+        const model = await dbManager.get('SELECT * FROM local_models WHERE id = ?', [body.id]);
+        if (!model) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Model not found' }));
+        } else {
+          try {
+            if (fs.existsSync(model.file_path)) {
+              fs.unlinkSync(model.file_path);
+            }
+            await dbManager.run('DELETE FROM local_models WHERE id = ?', [body.id]);
+            await libraryScanner.flagDuplicates();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+          } catch (delErr: any) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: delErr.message }));
+          }
+        }
+      } else if (url === '/api/open-folder' && req.method === 'POST') {
+        const body = await getBody();
+        if (body.filePath) {
+          try {
+            const { exec } = require('child_process');
+            exec(`explorer.exe /select,"${body.filePath}"`);
+          } catch (e) {}
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -290,17 +321,28 @@ function registerIpcHandlers() {
     const model = await dbManager.get('SELECT * FROM local_models WHERE id = ?', [modelId]);
     if (!model) return { success: false, error: 'Model not found' };
     try {
-      // Remove file from disk if it exists
-      const fs = require('fs');
       if (fs.existsSync(model.file_path)) {
         fs.unlinkSync(model.file_path);
       }
-      // Delete from DB
       await dbManager.run('DELETE FROM local_models WHERE id = ?', [modelId]);
+      await libraryScanner.flagDuplicates();
       return { success: true };
     } catch (e: any) {
       logger.error('Failed to delete model', e);
       return { success: false, error: e?.message || 'Unknown error' };
+    }
+  });
+
+  // Open folder / reveal file in explorer
+  ipcMain.handle('open-folder', (_event: unknown, filePath: string) => {
+    try {
+      if (filePath) {
+        shell.showItemInFolder(filePath);
+        return { success: true };
+      }
+      return { success: false, error: 'No path provided' };
+    } catch (e: any) {
+      return { success: false, error: e?.message };
     }
   });
 
