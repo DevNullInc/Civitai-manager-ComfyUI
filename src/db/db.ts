@@ -33,6 +33,7 @@ export class DatabaseManager {
           await this.exec('PRAGMA journal_mode = WAL;');
           await this.exec('PRAGMA foreign_keys = ON;');
           await this.runMigrations();
+          await this.cleanupPhantomDuplicates();
           logger.info(`SQLite database initialized at: ${this.dbPath}`);
           resolve();
         } catch (migrationErr) {
@@ -107,6 +108,67 @@ export class DatabaseManager {
         else resolve((rows || []) as T[]);
       });
     });
+  }
+
+  async cleanupPhantomDuplicates(): Promise<void> {
+    try {
+      const rows = await this.all('SELECT id, file_path FROM local_models');
+      const seenRealPaths = new Map<string, string>();
+      const toDelete: string[] = [];
+
+      for (const r of rows) {
+        try {
+          if (!r.file_path || !fs.existsSync(r.file_path)) {
+            toDelete.push(r.id);
+            continue;
+          }
+          let real: string;
+          try {
+            real = fs.realpathSync.native(r.file_path);
+          } catch (e) {
+            real = path.resolve(r.file_path);
+          }
+
+          const realKey = real.toLowerCase();
+          if (seenRealPaths.has(realKey)) {
+            toDelete.push(r.id);
+          } else {
+            seenRealPaths.set(realKey, r.id);
+            if (real !== r.file_path) {
+              await this.run(
+                'UPDATE local_models SET file_path = ?, file_name = ? WHERE id = ?',
+                [real, path.basename(real), r.id]
+              );
+            }
+          }
+        } catch (e) {
+          toDelete.push(r.id);
+        }
+      }
+
+      for (const id of toDelete) {
+        await this.run('DELETE FROM local_models WHERE id = ?', [id]);
+      }
+
+      await this.run('UPDATE local_models SET is_duplicate = 0;');
+      await this.run(`
+        UPDATE local_models 
+        SET is_duplicate = 1 
+        WHERE sha256 IN (
+          SELECT sha256 
+          FROM local_models 
+          WHERE sha256 IS NOT NULL AND TRIM(sha256) != ''
+          GROUP BY sha256 
+          HAVING COUNT(DISTINCT file_path COLLATE NOCASE) > 1
+        );
+      `);
+
+      if (toDelete.length > 0) {
+        logger.info(`Cleaned up ${toDelete.length} phantom / missing duplicate records from database.`);
+      }
+    } catch (err) {
+      logger.warn('Failed during startup duplicate database cleanup:', err);
+    }
   }
 
   close(): Promise<void> {
