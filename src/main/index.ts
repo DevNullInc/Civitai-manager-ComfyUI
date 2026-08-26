@@ -473,12 +473,17 @@ function registerIpcHandlers() {
   });
 
   // Scanner Handlers
-  ipcMain.handle('scan-library', async (_event: unknown, rootPath: string) => {
-    return await libraryScanner.scanDirectory(rootPath, (progress: any) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('scan-progress', progress);
-      }
-    });
+  ipcMain.handle('scan-library', async (_event: unknown, rootPath: string | string[]) => {
+    libraryScanner
+      .scanDirectory(rootPath, (progress: any) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('scan-progress', progress);
+        }
+      })
+      .catch((err) => {
+        logger.error('Background folder scan error:', err);
+      });
+    return { success: true, status: 'scanning' };
   });
 
   ipcMain.handle('cancel-scan', () => {

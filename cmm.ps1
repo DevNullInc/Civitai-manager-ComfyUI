@@ -256,10 +256,12 @@ function Start-App {
   } else {
     Write-Status '>>' 'Launching Electron app window...' 'Magenta'
     $env:HEADLESS = "false"
-    $electronProc = Start-Process -FilePath $electronExe `
-      -ArgumentList $electronArgs `
-      -WorkingDirectory $ProjectRoot `
-      -PassThru
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $electronExe
+    $startInfo.Arguments = $electronArgs
+    $startInfo.WorkingDirectory = $ProjectRoot
+    $startInfo.UseShellExecute = $true
+    $electronProc = [System.Diagnostics.Process]::Start($startInfo)
   }
 
   # Save PIDs
