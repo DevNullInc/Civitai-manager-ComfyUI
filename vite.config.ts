@@ -5,6 +5,7 @@ import path from 'path';
 import { dbManager } from './src/db/db';
 import { civitaiClient } from './src/services/civitaiClient';
 import { folderRouter } from './src/services/folderRouter';
+import { downloadManager } from './src/services/downloadManager';
 import { libraryScanner } from './src/services/libraryScanner';
 import { encryptKey, decryptKey } from './src/utils/secureStorage';
 
@@ -124,6 +125,43 @@ function apiServerPlugin(): Plugin {
           } else if (req.url === '/api/enums' && req.method === 'GET') {
             const enums = await civitaiClient.fetchEnums();
             res.end(JSON.stringify(enums));
+          } else if (req.url === '/api/add-download' && req.method === 'POST') {
+            const body = await getBody();
+            let downloadUrl = body.downloadUrl;
+            if (body.modelVersionId) {
+              downloadUrl = civitaiClient.getDownloadUrl(body.modelVersionId);
+            } else if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
+              const sep = downloadUrl.includes('?') ? '&' : '?';
+              downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
+            }
+            const computed = folderRouter.computePath({
+              fileName: body.fileName,
+              modelType: body.modelType,
+              baseModel: body.baseModel,
+              creator: body.creator,
+            });
+            const task = downloadManager.addTask({
+              ...body,
+              downloadUrl,
+              targetFolder: computed.folderName,
+              computedPath: computed.fullPath,
+            });
+            res.end(JSON.stringify(task));
+          } else if (req.url === '/api/downloads' && req.method === 'GET') {
+            const tasks = downloadManager.getTasks();
+            res.end(JSON.stringify(tasks));
+          } else if (req.url === '/api/pause-download' && req.method === 'POST') {
+            const body = await getBody();
+            downloadManager.pauseTask(body.id);
+            res.end(JSON.stringify({ success: true }));
+          } else if (req.url === '/api/resume-download' && req.method === 'POST') {
+            const body = await getBody();
+            downloadManager.resumeTask(body.id);
+            res.end(JSON.stringify({ success: true }));
+          } else if (req.url === '/api/cancel-download' && req.method === 'POST') {
+            const body = await getBody();
+            downloadManager.cancelTask(body.id);
+            res.end(JSON.stringify({ success: true }));
           } else {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: 'Endpoint not found' }));
@@ -138,6 +176,7 @@ function apiServerPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react(), tailwindcss(), apiServerPlugin()],
   resolve: {
     alias: {

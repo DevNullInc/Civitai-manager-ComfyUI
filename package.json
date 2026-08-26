@@ -5,7 +5,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && tsc -p tsconfig.main.json",
+    "build": "tsc && vite build --base ./ && tsc -p tsconfig.main.json",
     "preview": "vite preview",
     "test": "vitest run",
     "electron:dev": "npm run build && electron .",
