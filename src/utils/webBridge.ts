@@ -158,6 +158,15 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      openFolder: async (filePath: string) => {
+        const res = await fetch(`${API_BASE}/open-folder`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath }),
+        });
+        return await res.json();
+      },
+
       restartApp: async () => {
         try {
           await fetch(`${API_BASE}/restart-app`, { method: 'POST' });

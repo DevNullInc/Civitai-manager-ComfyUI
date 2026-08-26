@@ -14,6 +14,11 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
+  Folder,
+  FolderOpen,
+  Check,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { FallbackImage } from './FallbackImage';
 import { LocalModel, ScanProgress, ModelType } from '../types/app';
@@ -27,6 +32,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+
+  // Duplicate Resolution State
+  const [expandedDuplicateHash, setExpandedDuplicateHash] = useState<string | null>(null);
+  const [selectedKeepers, setSelectedKeepers] = useState<{ [hash: string]: string }>({});
+  const [resolvingHash, setResolvingHash] = useState<string | null>(null);
+  const [resolutionFeedback, setResolutionFeedback] = useState<string | null>(null);
+
   // Filters with LocalStorage Persistence
   const [filter, setFilter] = useState<'all' | 'matched' | 'updates' | 'unidentified' | 'duplicates'>(
     () => (localStorage.getItem('civitai_lib_filter') as any) || 'all'
@@ -87,6 +99,51 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
       });
     }
   }, []);
+
+  const handleOpenFolder = async (filePath: string) => {
+    try {
+      if (window.civitaiAPI && window.civitaiAPI.openFolder) {
+        await window.civitaiAPI.openFolder(filePath);
+      }
+    } catch (e) {
+      console.warn('Could not open folder:', e);
+    }
+  };
+
+  const getFolderPath = (filePath: string): string => {
+    const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+    if (lastSlash === -1) return filePath;
+    return filePath.substring(0, lastSlash);
+  };
+
+  const handleResolveDuplicates = async (hash: string, keeperId: string, duplicateCopies: LocalModel[]) => {
+    const copiesToDelete = duplicateCopies.filter((c) => c.id !== keeperId);
+    if (copiesToDelete.length === 0) return;
+
+    if (!window.confirm(`Are you sure you want to delete ${copiesToDelete.length} duplicate file(s) from your disk? This cannot be undone.`)) {
+      return;
+    }
+
+    setResolvingHash(hash);
+    let deletedCount = 0;
+    for (const copy of copiesToDelete) {
+      try {
+        if (window.civitaiAPI) {
+          const res = await window.civitaiAPI.deleteLocalModel(copy.id);
+          if (res?.success) deletedCount++;
+        }
+      } catch (err) {
+        console.error('Error deleting duplicate copy:', copy.filePath, err);
+      }
+    }
+
+    const keeper = duplicateCopies.find((c) => c.id === keeperId);
+    setResolutionFeedback(`Successfully removed ${deletedCount} duplicate file(s). Kept: ${keeper?.fileName}`);
+    setTimeout(() => setResolutionFeedback(null), 5000);
+    setResolvingHash(null);
+    setExpandedDuplicateHash(null);
+    await loadLocalModels();
+  };
 
   const triggerScan = async () => {
     if (isScanning) return;
@@ -288,6 +345,14 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         </div>
       </div>
 
+      {/* Resolution Success Banner */}
+      {resolutionFeedback && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2.5 glow-emerald animate-fadeIn">
+          <CheckCircle2 size={18} className="text-emerald-400" />
+          <span>{resolutionFeedback}</span>
+        </div>
+      )}
+
       {/* Model List */}
       {loading ? (
         <div className="flex items-center justify-center py-24">
@@ -305,88 +370,250 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         </div>
       ) : (
         <div className="space-y-3.5">
-          {filteredModels.map((model) => (
-            <div
-              key={model.id}
-              className="glass-card p-4.5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-slate-800/80 hover:border-purple-500/30 shadow-md"
-            >
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                  {/* Preview thumbnail if available */}
-                  {model.previewUrl ? (
-                    <FallbackImage
-                      src={model.previewUrl}
-                      alt={model.fileName}
-                      className="w-12 h-12 rounded-lg object-cover bg-slate-950 flex-shrink-0 border border-slate-800"
-                      fallbackIcon={<HardDrive size={18} className="text-purple-400" />}
-                      fallbackText=""
-                    />
-                  ) : (
-                    <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-purple-400 flex-shrink-0 shadow-inner">
-                      <HardDrive size={22} />
+          {filteredModels.map((model) => {
+            const duplicateCopies = model.sha256
+              ? localModels.filter((m) => m.sha256 === model.sha256)
+              : [model];
+            const isExpanded = !!model.sha256 && expandedDuplicateHash === model.sha256;
+            const currentKeeperId = (model.sha256 && selectedKeepers[model.sha256]) || model.id;
+
+            return (
+              <div
+                key={model.id}
+                className={`glass-card p-4.5 rounded-2xl flex flex-col justify-between gap-4 border transition-all shadow-md ${
+                  isExpanded
+                    ? 'border-amber-500/50 bg-slate-900/90 shadow-xl shadow-amber-950/20'
+                    : 'border-slate-800/80 hover:border-purple-500/30'
+                }`}
+              >
+                {/* Main Card Row */}
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 w-full">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    {/* Preview thumbnail if available */}
+                    {model.previewUrl ? (
+                      <FallbackImage
+                        src={model.previewUrl}
+                        alt={model.fileName}
+                        className="w-12 h-12 rounded-lg object-cover bg-slate-950 flex-shrink-0 border border-slate-800"
+                        fallbackIcon={<HardDrive size={18} className="text-purple-400" />}
+                        fallbackText=""
+                      />
+                    ) : (
+                      <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-purple-400 flex-shrink-0 shadow-inner">
+                        <HardDrive size={22} />
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-slate-100 text-sm truncate">{model.fileName}</h3>
+                        {model.civitaiType && (
+                          <span className="text-[10px] font-bold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-md">
+                            {model.civitaiType}
+                          </span>
+                        )}
+                        {model.isDuplicate && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedDuplicateHash(
+                                expandedDuplicateHash === model.sha256 ? null : (model.sha256 || null)
+                              );
+                            }}
+                            className={`flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border transition-all cursor-pointer ${
+                              isExpanded
+                                ? 'text-amber-200 bg-amber-500/30 border-amber-400 glow-amber'
+                                : 'text-amber-400 bg-amber-500/15 border-amber-500/40 hover:bg-amber-500/25 glow-amber'
+                            }`}
+                            title="Click to expand duplicate copies and select keeper"
+                          >
+                            <Copy size={11} />
+                            <span>Duplicate ({duplicateCopies.length})</span>
+                            <ChevronDown
+                              size={11}
+                              className={`transition-transform duration-200 ${isExpanded ? 'rotate-180 text-amber-300' : ''}`}
+                            />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono truncate mt-1 flex items-center gap-1.5">
+                        <Folder size={12} className="text-slate-500 flex-shrink-0" />
+                        <span className="truncate">{model.filePath}</span>
+                      </p>
                     </div>
-                  )}
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-100 text-sm truncate">{model.fileName}</h3>
-                    {model.civitaiType && (
-                      <span className="text-[10px] font-bold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-md">
-                        {model.civitaiType}
-                      </span>
-                    )}
-                    {model.isDuplicate && (
-                      <span className="flex items-center gap-1 text-[10px] font-extrabold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-md glow-amber">
-                        <Copy size={10} /> Duplicate
-                      </span>
-                    )}
                   </div>
-                  <p className="text-xs text-slate-400 font-mono truncate mt-1">{model.filePath}</p>
+
+                  {/* Status Badges & Info */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-800/80">
+                    <span className="text-slate-300 font-mono font-semibold bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+                      {(model.fileSize / 1024 / 1024).toFixed(1)} MB
+                    </span>
+
+                    {model.isMatched ? (
+                      <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl font-semibold">
+                        <CheckCircle size={14} /> Matched
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-xl font-semibold">
+                        <HelpCircle size={14} /> Unidentified
+                      </span>
+                    )}
+
+                    {model.hasUpdate && (
+                      <button
+                        onClick={() => onCheckUpdate(model)}
+                        className="flex items-center gap-1.5 text-amber-300 bg-amber-500/20 border border-amber-500/40 px-3.5 py-1.5 rounded-xl hover:bg-amber-500/30 transition-all font-bold glow-amber cursor-pointer"
+                      >
+                        <ArrowUpCircle size={14} /> Update Available
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => handleOpenFolder(model.filePath)}
+                      className="text-slate-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                      title="Show in File Explorer"
+                    >
+                      <FolderOpen size={16} />
+                    </button>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(`Delete ${model.fileName} from disk?`)) return;
+                        const res = await window.civitaiAPI.deleteLocalModel(model.id);
+                        if (res?.success) {
+                          loadLocalModels();
+                        } else {
+                          alert(res?.error || 'Failed to delete model');
+                        }
+                      }}
+                      className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                      title="Delete model"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Status Badges & Info */}
-              <div className="flex flex-wrap items-center gap-3 text-xs w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-800/80">
-                <span className="text-slate-300 font-mono font-semibold bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
-                  {(model.fileSize / 1024 / 1024).toFixed(1)} MB
-                </span>
+                {/* Inline Expanded Duplicate Resolution Panel */}
+                {isExpanded && (
+                  <div className="w-full pt-3.5 border-t border-amber-500/20 bg-slate-950/60 p-4 rounded-xl space-y-3.5 shadow-inner animate-fadeIn">
+                    {/* Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+                      <div className="flex items-center gap-2">
+                        <Copy size={15} className="text-amber-400" />
+                        <span className="text-xs font-bold text-slate-100">
+                          Duplicate Copies on Disk ({duplicateCopies.length} found)
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">
+                          SHA256: {model.sha256?.substring(0, 12)}...
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-amber-300/80 font-medium">
+                        Select which copy to keep. Other copies will be deleted from disk.
+                      </span>
+                    </div>
 
-                {model.isMatched ? (
-                  <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl font-semibold">
-                    <CheckCircle size={14} /> Matched
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-xl font-semibold">
-                    <HelpCircle size={14} /> Unidentified
-                  </span>
+                    {/* Copy List */}
+                    <div className="space-y-2.5">
+                      {duplicateCopies.map((copy) => {
+                        const isKeeper = currentKeeperId === copy.id;
+                        const folderDir = getFolderPath(copy.filePath);
+
+                        return (
+                          <div
+                            key={copy.id}
+                            onClick={() => model.sha256 && setSelectedKeepers((prev) => ({ ...prev, [model.sha256!]: copy.id }))}
+                            className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer ${
+                              isKeeper
+                                ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md shadow-emerald-950/20'
+                                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              <input
+                                type="radio"
+                                name={`keeper_${model.sha256}`}
+                                checked={isKeeper}
+                                onChange={() => model.sha256 && setSelectedKeepers((prev) => ({ ...prev, [model.sha256!]: copy.id }))}
+                                className="mt-1 w-4 h-4 text-emerald-500 bg-slate-950 border-slate-700 focus:ring-emerald-500 cursor-pointer"
+                              />
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold text-slate-100 truncate">
+                                    {copy.fileName}
+                                  </span>
+                                  {isKeeper ? (
+                                    <span className="flex items-center gap-1 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
+                                      <Check size={10} /> Keeper (Retain this file)
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-red-500/15 border border-red-500/30 text-red-300">
+                                      <Trash2 size={10} /> Duplicate (To Be Deleted)
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Folder Location */}
+                                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-slate-300 font-mono bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800/80 break-all">
+                                  <Folder size={12} className="text-amber-400 flex-shrink-0" />
+                                  <span className="font-semibold text-slate-200">{folderDir}</span>
+                                </div>
+
+                                <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400">
+                                  <span>Size: <strong className="text-slate-200">{(copy.fileSize / 1024 / 1024).toFixed(1)} MB</strong></span>
+                                  <span>•</span>
+                                  <span>Modified: <strong className="text-slate-300">{new Date(copy.modifiedAt).toLocaleString()}</strong></span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenFolder(copy.filePath);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 text-[11px] font-medium transition-colors self-end sm:self-center"
+                              title="Show in File Explorer"
+                            >
+                              <FolderOpen size={13} className="text-amber-400" />
+                              <span>Show in Folder</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-800/80">
+                      <span className="text-[11px] text-slate-400">
+                        {duplicateCopies.length > 1
+                          ? `Will permanently delete ${duplicateCopies.length - 1} copy(ies) from disk.`
+                          : 'No other copies found on disk.'}
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={resolvingHash === model.sha256 || duplicateCopies.length <= 1}
+                        onClick={() => model.sha256 && handleResolveDuplicates(model.sha256, currentKeeperId, duplicateCopies)}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-red-950/30 cursor-pointer disabled:opacity-50"
+                      >
+                        <Trash2 size={14} />
+                        <span>
+                          {resolvingHash === model.sha256
+                            ? 'Deleting copies...'
+                            : `Keep Selected & Delete Other ${duplicateCopies.length - 1} Copy(ies)`}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
                 )}
-
-                {model.hasUpdate && (
-                  <button
-                    onClick={() => onCheckUpdate(model)}
-                    className="flex items-center gap-1.5 text-amber-300 bg-amber-500/20 border border-amber-500/40 px-3.5 py-1.5 rounded-xl hover:bg-amber-500/30 transition-all font-bold glow-amber cursor-pointer"
-                  >
-                    <ArrowUpCircle size={14} /> Update Available
-                  </button>
-                )}
-                {/* Delete button */}
-                <button
-                  onClick={async () => {
-                    const res = await window.civitaiAPI.deleteLocalModel(model.id);
-                    if (res?.success) {
-                      // Refresh list after deletion
-                      loadLocalModels();
-                    } else {
-                      alert(res?.error || 'Failed to delete model');
-                    }
-                  }}
-                  className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
-                  title="Delete model"
-                >
-                  <Trash2 size={16} />
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

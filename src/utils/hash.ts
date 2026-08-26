@@ -16,7 +16,9 @@ export async function computeFileSHA256(
       let bytesProcessed = 0;
 
       const hash = crypto.createHash('sha256');
-      const stream = fs.createReadStream(filePath, { highWaterMark: 4 * 1024 * 1024 }); // 4MB chunks
+      // Use 64MB high-performance streaming buffer to saturate NVMe / SSD disk I/O
+      // and utilize hardware SHA-NI / AVX-512 CPU crypto instructions with minimal syscall overhead
+      const stream = fs.createReadStream(filePath, { highWaterMark: 64 * 1024 * 1024 });
 
       stream.on('data', (chunk: Buffer | string) => {
         hash.update(chunk);

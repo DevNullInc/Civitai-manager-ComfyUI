@@ -249,7 +249,7 @@ export class LibraryScanner {
     return results;
   }
 
-  private async flagDuplicates() {
+  async flagDuplicates() {
     await dbManager.run('UPDATE local_models SET is_duplicate = 0;');
     await dbManager.run(`
       UPDATE local_models 
