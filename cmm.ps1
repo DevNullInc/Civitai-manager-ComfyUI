@@ -64,7 +64,7 @@ function Write-Status {
   Write-Host $Msg
 }
 
-function Focus-ProcessWindow {
+function Set-ProcessWindowFocus {
   param([System.Diagnostics.Process]$Proc)
   if ($Proc -and $Proc.MainWindowHandle -and $Proc.MainWindowHandle -ne [IntPtr]::Zero) {
     try {
@@ -156,10 +156,8 @@ function Start-App {
   $existing = Get-RunningProcs
   if ($existing.Count -gt 0) {
     # Check if any running process has a visible GUI window to bring to the front
-    $foundWindow = $false
     foreach ($p in $existing) {
-      if (Focus-ProcessWindow $p) {
-        $foundWindow = $true
+      if (Set-ProcessWindowFocus $p) {
         Write-Status 'ok' "CivitAI Model Manager is already running (PID $($p.Id)). Active window brought to front." 'Green'
         return
       }

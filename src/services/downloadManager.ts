@@ -17,16 +17,27 @@ import { logger } from '../utils/logger';
 
 export class DownloadManager {
   private tasks: Map<string, DownloadTask> = new Map();
-  private activeDownloads: Map<string, { cancel: () => void }> = new Map();
+  private activeDownloads: Map<string, { cancel: () => void; cleanup: () => void }> = new Map();
   private maxConcurrent: number = 2;
   private defaultConflictStrategy: ConflictStrategy = 'rename';
+  private strictHashVerification: boolean = true;
 
   constructor(maxConcurrent = 2) {
     this.maxConcurrent = maxConcurrent;
   }
 
+  setMaxConcurrent(max: number) {
+    this.maxConcurrent = Math.max(1, Math.min(10, Math.round(max || 2)));
+    logger.info(`Download queue concurrency set to ${this.maxConcurrent}`);
+    this.processQueue();
+  }
+
   setConflictStrategy(strategy: ConflictStrategy) {
     this.defaultConflictStrategy = strategy;
+  }
+
+  setStrictHashVerification(strict: boolean) {
+    this.strictHashVerification = strict;
   }
 
   getTasks(): DownloadTask[] {
@@ -81,17 +92,23 @@ export class DownloadManager {
     const active = this.activeDownloads.get(id);
     if (active) {
       active.cancel();
+      active.cleanup();
       this.activeDownloads.delete(id);
     }
     const task = this.tasks.get(id);
     if (task) {
-      // Clean up temp part file if exists
+      // Automatically clean up and delete temporary partial file from disk
       const partFile = `${task.computedPath}.part`;
-      if (fs.existsSync(partFile)) {
-        try { fs.unlinkSync(partFile); } catch (e) {}
+      try {
+        if (fs.existsSync(partFile)) {
+          fs.unlinkSync(partFile);
+          logger.info(`Deleted partial download file: ${partFile}`);
+        }
+      } catch (e) {
+        logger.warn(`Could not immediately delete partial file ${partFile}:`, e);
       }
       this.tasks.delete(id);
-      logger.info(`Cancelled download task: ${task.fileName}`);
+      logger.info(`Cancelled download task and deleted partial data: ${task.fileName}`);
     }
     this.processQueue();
   }
@@ -171,25 +188,74 @@ export class DownloadManager {
     }
 
     const cancelTokenSource = axios.CancelToken.source();
-    this.activeDownloads.set(id, { cancel: () => cancelTokenSource.cancel('Download cancelled by user') });
+    let writeStream: fs.WriteStream | null = null;
+    this.activeDownloads.set(id, {
+      cancel: () => cancelTokenSource.cancel('Download cancelled by user'),
+      cleanup: () => {
+        try {
+          if (writeStream && !writeStream.destroyed) {
+            writeStream.destroy();
+          }
+        } catch (e) {}
+      },
+    });
 
     let lastTime = Date.now();
     let lastBytes = existingBytes;
 
     try {
-      const headers: Record<string, string> = {
-        'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.0',
+      const makeRequest = async (useRange: boolean): Promise<AxiosResponse> => {
+        const headers: Record<string, string> = {
+          'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.1',
+        };
+        if (useRange && existingBytes > 0) {
+          headers['Range'] = `bytes=${existingBytes}-`;
+        }
+        return await axios.get(task.downloadUrl, {
+          responseType: 'stream',
+          headers,
+          cancelToken: cancelTokenSource.token,
+          maxRedirects: 5,
+        });
       };
-      if (existingBytes > 0) {
-        headers['Range'] = `bytes=${existingBytes}-`;
+
+      let response: AxiosResponse;
+      try {
+        response = await makeRequest(true);
+      } catch (reqErr: any) {
+        // If HTTP 416 Range Not Satisfiable (e.g. stale/corrupted .part file or CDN offset mismatch), retry clean from byte 0
+        if (
+          reqErr.response?.status === 416 ||
+          reqErr.message?.includes('416') ||
+          (reqErr.response && reqErr.response.status >= 400 && reqErr.response.status < 500 && existingBytes > 0)
+        ) {
+          logger.warn(
+            `Download range request returned error (${reqErr.message}) for ${task.fileName}. Cleaning partial file and restarting from beginning.`
+          );
+          try {
+            if (fs.existsSync(partFile)) {
+              fs.unlinkSync(partFile);
+            }
+          } catch (e) {}
+          existingBytes = 0;
+          task.downloadedBytes = 0;
+          lastBytes = 0;
+          response = await makeRequest(false);
+        } else {
+          throw reqErr;
+        }
       }
 
-      const response: AxiosResponse = await axios.get(task.downloadUrl, {
-        responseType: 'stream',
-        headers,
-        cancelToken: cancelTokenSource.token,
-        maxRedirects: 5,
-      });
+      // Check if server returned 206 Partial Content or full 200 OK
+      const isPartial = response.status === 206;
+      if (!isPartial) {
+        existingBytes = 0;
+        task.downloadedBytes = 0;
+        lastBytes = 0;
+      } else {
+        task.downloadedBytes = existingBytes;
+        lastBytes = existingBytes;
+      }
 
       const contentLengthRaw = response.headers['content-length'];
       const totalLength = parseInt(
@@ -202,8 +268,8 @@ export class DownloadManager {
         task.totalBytes = existingBytes + totalLength;
       }
 
-      const writeStream = fs.createWriteStream(partFile, {
-        flags: existingBytes > 0 ? 'a' : 'w',
+      writeStream = fs.createWriteStream(partFile, {
+        flags: isPartial && existingBytes > 0 ? 'a' : 'w',
       });
 
       response.data.on('data', (chunk: Buffer) => {
@@ -226,6 +292,7 @@ export class DownloadManager {
       });
 
       await new Promise<void>((resolve, reject) => {
+        if (!writeStream) return resolve();
         writeStream.on('finish', () => resolve());
         writeStream.on('error', reject);
         response.data.on('error', reject);
@@ -240,11 +307,18 @@ export class DownloadManager {
         logger.info(`Verifying SHA256 hash for task: ${task.fileName}`);
         const computedHash = await computeFileSHA256(partFile);
         if (computedHash.toUpperCase() !== task.sha256.toUpperCase()) {
-          task.status = 'failed';
-          task.error = `SHA256 hash mismatch! Expected ${task.sha256}, got ${computedHash}`;
-          logger.error(task.error);
-          this.processQueue();
-          return;
+          if (!this.strictHashVerification) {
+            logger.warn(
+              `SHA256 hash mismatch ignored (strict mode off): Expected ${task.sha256}, got ${computedHash}. Finalizing download.`
+            );
+          } else {
+            task.status = 'failed';
+            task.isHashMismatch = true;
+            task.error = `SHA256 hash mismatch! Expected ${task.sha256}, got ${computedHash}`;
+            logger.error(task.error);
+            this.processQueue();
+            return;
+          }
         }
       }
 
@@ -257,6 +331,7 @@ export class DownloadManager {
       task.status = 'completed';
       task.progress = 100;
       task.speedBps = 0;
+      task.isHashMismatch = false;
       logger.info(`Successfully completed download: ${task.fileName} -> ${resolvedPath}`);
     } catch (err: any) {
       this.activeDownloads.delete(id);
@@ -270,6 +345,36 @@ export class DownloadManager {
     }
 
     this.processQueue();
+  }
+
+  async forceCompleteTask(id: string): Promise<boolean> {
+    const task = this.tasks.get(id);
+    if (!task) return false;
+
+    const partFile = `${task.computedPath}.part`;
+    try {
+      if (fs.existsSync(partFile)) {
+        if (fs.existsSync(task.computedPath)) {
+          fs.unlinkSync(task.computedPath);
+        }
+        fs.renameSync(partFile, task.computedPath);
+      } else if (!fs.existsSync(task.computedPath)) {
+        logger.error(`Cannot force-finish task ${task.fileName}: neither .part nor final file exists.`);
+        return false;
+      }
+
+      task.status = 'completed';
+      task.progress = 100;
+      task.speedBps = 0;
+      task.error = undefined;
+      task.isHashMismatch = false;
+      logger.info(`Manually forced download completion for: ${task.fileName} -> ${task.computedPath}`);
+      return true;
+    } catch (err: any) {
+      logger.error(`Failed to force complete download task ${task.fileName}:`, err);
+      task.error = `Force completion failed: ${err?.message || err}`;
+      return false;
+    }
   }
 }
 

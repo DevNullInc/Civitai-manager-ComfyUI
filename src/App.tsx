@@ -28,7 +28,6 @@ import { DownloadsTab } from './components/DownloadsTab';
 import { SettingsTab } from './components/SettingsTab';
 import { AboutTab } from './components/AboutTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { FloatingScannerWidget } from './components/FloatingScannerWidget';
 import { ScanStatusBar } from './components/ScanStatusBar';
 import { ScanProvider } from './context/ScanContext';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
@@ -268,9 +267,6 @@ function AppContent() {
           </button>
         )}
       </main>
-
-      {/* Persistent Floating Scanner HUD */}
-      <FloatingScannerWidget />
 
       {/* Persistent Bottom Scan Status Bar */}
       <ScanStatusBar onNavigateToLibrary={() => setActiveTab('library')} activeTab={activeTab} />

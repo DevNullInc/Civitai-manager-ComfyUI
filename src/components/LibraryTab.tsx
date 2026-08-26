@@ -181,6 +181,31 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     }
   };
 
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateSummary, setUpdateSummary] = useState<string | null>(null);
+
+  const handleCheckAllUpdates = async () => {
+    if (!window.civitaiAPI || typeof window.civitaiAPI.checkAllUpdates !== 'function') return;
+    setCheckingUpdates(true);
+    setUpdateSummary(null);
+    try {
+      const result = await window.civitaiAPI.checkAllUpdates();
+      await loadLocalModels();
+      if (result?.updatesFound > 0) {
+        setUpdateSummary(`Found ${result.updatesFound} update(s) out of ${result.totalChecked} checked models!`);
+        setFilter('updates');
+      } else {
+        setUpdateSummary(`All ${result?.totalChecked || 0} matched models are up to date!`);
+      }
+      setTimeout(() => setUpdateSummary(null), 8000);
+    } catch (e: any) {
+      console.error('Failed to check for updates:', e);
+      alert(`Update check failed: ${e?.message || e}`);
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
   const filteredModels = localModels
     .filter((model) => {
       const matchesSearch =
@@ -250,6 +275,17 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             </button>
           )}
 
+          {/* Check for Updates Button */}
+          <button
+            onClick={handleCheckAllUpdates}
+            disabled={isScanning || checkingUpdates || localModels.length === 0}
+            title="Query CivitAI to detect newer releases of matched local models"
+            className="flex items-center gap-2 px-5 py-3 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-purple-500/50 text-slate-200 hover:text-purple-300 font-bold rounded-2xl text-sm transition-all shadow-md cursor-pointer disabled:opacity-50 active:scale-95"
+          >
+            <Sparkles size={18} className={checkingUpdates ? 'text-amber-400 animate-spin' : 'text-amber-400'} />
+            <span>{checkingUpdates ? 'Checking Updates...' : 'Check for Updates'}</span>
+          </button>
+
           {/* Clear Library Button */}
           <button
             onClick={handleClearLibrary}
@@ -262,6 +298,22 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
           </button>
         </div>
       </div>
+
+      {/* Update Summary Banner */}
+      {updateSummary && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center justify-between gap-3 text-sm font-semibold glow-amber animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <Sparkles size={20} className="text-amber-400" />
+            <span>{updateSummary}</span>
+          </div>
+          <button
+            onClick={() => setUpdateSummary(null)}
+            className="text-amber-400/60 hover:text-amber-300 text-xs cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Hero Scan Progress Bar Banner */}
       {scanProgress && scanProgress.status !== 'idle' && (
@@ -519,8 +571,10 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                       <button
                         onClick={() => onCheckUpdate(model)}
                         className="flex items-center gap-1.5 text-amber-300 bg-amber-500/20 border border-amber-500/40 px-3.5 py-1.5 rounded-xl hover:bg-amber-500/30 transition-all font-bold glow-amber cursor-pointer"
+                        title="Newer release available on CivitAI! Click to view update details."
                       >
-                        <ArrowUpCircle size={14} /> Update Available
+                        <ArrowUpCircle size={14} />
+                        <span>Update: {model.updateVersionName || 'Available'}</span>
                       </button>
                     )}
 

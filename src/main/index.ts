@@ -111,6 +111,14 @@ async function loadConfigFromDb() {
       currentConfig.conflict_strategy = cfgObj.conflict_strategy;
       downloadManager.setConflictStrategy(cfgObj.conflict_strategy);
     }
+    if (cfgObj.strict_hash_verification !== undefined) {
+      currentConfig.strict_hash_verification = cfgObj.strict_hash_verification;
+      downloadManager.setStrictHashVerification(cfgObj.strict_hash_verification);
+    }
+    if (cfgObj.max_concurrent_downloads !== undefined) {
+      currentConfig.max_concurrent_downloads = cfgObj.max_concurrent_downloads;
+      downloadManager.setMaxConcurrent(cfgObj.max_concurrent_downloads);
+    }
 
     folderRouter.updateConfig({
       rootPath: currentConfig.comfyui_root || currentConfig.comfyui_folders[0] || '',
@@ -193,6 +201,22 @@ function startHttpBridgeServer() {
           );
         }
 
+        if (body.strict_hash_verification !== undefined) {
+          downloadManager.setStrictHashVerification(body.strict_hash_verification);
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['strict_hash_verification', JSON.stringify(body.strict_hash_verification)]
+          );
+        }
+
+        if (body.max_concurrent_downloads !== undefined) {
+          downloadManager.setMaxConcurrent(body.max_concurrent_downloads);
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['max_concurrent_downloads', JSON.stringify(body.max_concurrent_downloads)]
+          );
+        }
+
         folderRouter.updateConfig({
           rootPath: currentConfig.comfyui_root,
           folderPaths: currentConfig.comfyui_folders,
@@ -214,11 +238,20 @@ function startHttpBridgeServer() {
             }
           })
           .catch((err) => {
-            logger.error('Background folder scan failed:', err);
+            logger.error('Background folder scan error:', err);
           });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, status: 'scanning' }));
+      } else if (url === '/api/check-all-updates' && req.method === 'POST') {
+        const result = await versionManager.batchCheckAllUpdates();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if (url === '/api/force-complete-download' && req.method === 'POST') {
+        const body = await getBody();
+        const success = await downloadManager.forceCompleteTask(body.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success }));
       } else if (url === '/api/local-models' && req.method === 'GET') {
         const rows = await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
         const models = rows.map((r: any) => ({
@@ -443,6 +476,22 @@ function registerIpcHandlers() {
       downloadManager.setConflictStrategy(newConfig.conflict_strategy);
     }
 
+    if (newConfig.strict_hash_verification !== undefined) {
+      downloadManager.setStrictHashVerification(newConfig.strict_hash_verification);
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['strict_hash_verification', JSON.stringify(newConfig.strict_hash_verification)]
+      );
+    }
+
+    if (newConfig.max_concurrent_downloads !== undefined) {
+      downloadManager.setMaxConcurrent(newConfig.max_concurrent_downloads);
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['max_concurrent_downloads', JSON.stringify(newConfig.max_concurrent_downloads)]
+      );
+    }
+
     folderRouter.updateConfig({
       rootPath: currentConfig.comfyui_root,
       folderPaths: currentConfig.comfyui_folders,
@@ -509,6 +558,10 @@ function registerIpcHandlers() {
       previewUrl: r.preview_url,
       modelType: r.model_type,
       isMatched: !!r.civitai_version_id,
+      hasUpdate: !!r.has_update,
+      updateVersionId: r.update_version_id,
+      updateVersionName: r.update_version_name,
+      updateDownloadUrl: r.update_download_url,
       isDuplicate: !!r.is_duplicate,
     }));
   });
@@ -555,6 +608,10 @@ function registerIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle('force-complete-download', async (_event: unknown, id: string) => {
+    return await downloadManager.forceCompleteTask(id);
+  });
+
   ipcMain.handle('get-downloads', () => {
     return downloadManager.getTasks();
   });
@@ -573,6 +630,14 @@ function registerIpcHandlers() {
   // Versioning & Backup
   ipcMain.handle('check-update', async (_event: unknown, localModel: any) => {
     return await versionManager.checkForUpdates(localModel);
+  });
+
+  ipcMain.handle('check-all-updates', async () => {
+    return await versionManager.batchCheckAllUpdates((prog) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-check-progress', prog);
+      }
+    });
   });
 
   ipcMain.handle('export-backup', async (_event: unknown, filePath: string) => {
@@ -625,6 +690,13 @@ setInterval(() => {
     }
   }
 }, 500);
+
+// Forward backend main-process logs to renderer Diagnostic Console
+logger.onLog((logPayload) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app-log', logPayload);
+  }
+});
 
 // Single Instance Lock: Ensure only one instance of the app runs at a time in production.
 const gotTheLock = app.isPackaged ? app.requestSingleInstanceLock() : true;
