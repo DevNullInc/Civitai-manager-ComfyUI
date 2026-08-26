@@ -314,6 +314,10 @@ function startHttpBridgeServer() {
         const status = libraryScanner.getScanStatus();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(status));
+      } else if (url === '/api/clear-library' && req.method === 'POST') {
+        await dbManager.run('DELETE FROM local_models;');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -331,6 +335,18 @@ function startHttpBridgeServer() {
 
 function registerIpcHandlers() {
   ipcMain.handle('get-config', () => currentConfig);
+
+  // Clear library cache from SQLite
+  ipcMain.handle('clear-library', async () => {
+    try {
+      await dbManager.run('DELETE FROM local_models;');
+      logger.info('Library cache cleared from database.');
+      return { success: true };
+    } catch (e: any) {
+      logger.error('Failed to clear library database:', e);
+      return { success: false, error: e?.message || 'Unknown error' };
+    }
+  });
 
   // Delete a local model from the database and filesystem
   ipcMain.handle('delete-local-model', async (_event: unknown, modelId: string) => {

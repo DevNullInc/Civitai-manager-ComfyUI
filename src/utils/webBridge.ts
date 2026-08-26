@@ -95,6 +95,14 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      clearLibrary: async () => {
+        const res = await fetch(`${API_BASE}/clear-library`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        return await res.json();
+      },
+
       onScanProgress: (callback: (progress: any) => void) => {
         scanProgressListeners.push(callback);
       },
