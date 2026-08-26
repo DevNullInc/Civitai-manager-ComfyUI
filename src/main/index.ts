@@ -23,6 +23,8 @@ import { encryptKey, decryptKey } from '../utils/secureStorage';
 import { logger } from '../utils/logger';
 import { AppConfig } from '../types/app';
 
+app.setName('civitai-model-manager');
+
 let mainWindow: BrowserWindow | null = null;
 let currentConfig: AppConfig = {
   comfyui_root: '',
@@ -204,9 +206,19 @@ function startHttpBridgeServer() {
         res.end(JSON.stringify(currentConfig));
       } else if (url === '/api/scan-library' && req.method === 'POST') {
         const body = await getBody();
-        const models = await libraryScanner.scanDirectory(body.rootPath);
+        // Fire-and-forget background scan to prevent HTTP socket headers timeout on large model directories
+        libraryScanner
+          .scanDirectory(body.rootPath, (progress) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('scan-progress', progress);
+            }
+          })
+          .catch((err) => {
+            logger.error('Background folder scan failed:', err);
+          });
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(models));
+        res.end(JSON.stringify({ success: true, status: 'scanning' }));
       } else if (url === '/api/local-models' && req.method === 'GET') {
         const rows = await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
         const models = rows.map((r: any) => ({
@@ -325,6 +337,14 @@ function startHttpBridgeServer() {
     } catch (err: any) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
+    }
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.warn('Port 5174 is already in use by an active instance. Reusing existing bridge connection.');
+    } else {
+      logger.error('HTTP Server bridge error:', err);
     }
   });
 
@@ -601,24 +621,25 @@ setInterval(() => {
   }
 }, 500);
 
-// Single Instance Lock: Ensure only one instance of the app runs at a time.
-// If a second instance is launched, focus and bring the existing window to the front.
-const gotTheLock = app.requestSingleInstanceLock();
+// Single Instance Lock: Ensure only one instance of the app runs at a time in production.
+const gotTheLock = app.isPackaged ? app.requestSingleInstanceLock() : true;
 
 if (!gotTheLock) {
   logger.info('Another instance of CivitAI Model Manager is already running. Focusing existing window and exiting.');
   app.quit();
 } else {
-  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
-    logger.info('Second instance detected. Restoring and focusing existing window.');
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
+  if (app.isPackaged) {
+    app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+      logger.info('Second instance detected. Restoring and focusing existing window.');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore();
+        }
+        mainWindow.show();
+        mainWindow.focus();
       }
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+    });
+  }
 
   app.whenReady().then(async () => {
     await dbManager.init();

@@ -39,7 +39,24 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = $PSScriptRoot
 $PidFile = Join-Path $ProjectRoot '.cmm.pid'
 
-# -- Helpers ---------------------------------------------------------------
+# -- Window Helper for Bringing Existing Window to Foreground -------------
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class WindowHelper {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsIconic(IntPtr hWnd);
+}
+"@ -ErrorAction SilentlyContinue
 
 function Write-Status {
   param([string]$Icon, [string]$Msg, [string]$Color = 'Cyan')
@@ -47,66 +64,111 @@ function Write-Status {
   Write-Host $Msg
 }
 
+function Focus-ProcessWindow {
+  param([System.Diagnostics.Process]$Proc)
+  if ($Proc -and $Proc.MainWindowHandle -and $Proc.MainWindowHandle -ne [IntPtr]::Zero) {
+    try {
+      # SW_RESTORE = 9, SW_SHOW = 5
+      if ([WindowHelper]::IsIconic($Proc.MainWindowHandle)) {
+        [WindowHelper]::ShowWindowAsync($Proc.MainWindowHandle, 9) | Out-Null
+      } else {
+        [WindowHelper]::ShowWindowAsync($Proc.MainWindowHandle, 5) | Out-Null
+      }
+      [WindowHelper]::SetForegroundWindow($Proc.MainWindowHandle) | Out-Null
+      return $true
+    } catch { }
+  }
+  return $false
+}
+
 function Get-RunningProcs {
+  $running = @()
+  $seenPids = [System.Collections.Generic.HashSet[int]]::new()
+
+  # 1. Check stored PID file
   if (Test-Path $PidFile) {
-    $storedPids = Get-Content $PidFile | ForEach-Object { [int]$_ }
-    $running = @()
+    $storedPids = Get-Content $PidFile -ErrorAction SilentlyContinue | ForEach-Object { [int]$_ }
     foreach ($procId in $storedPids) {
-      try {
+      if ($procId -gt 0 -and $seenPids.Add($procId)) {
         $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($proc -and -not $proc.HasExited) {
           $running += $proc
         }
       }
-      catch { }
     }
-    return $running
   }
-  return @()
+
+  # 2. Check network ports 5173 ($Port) and 5174
+  $portHolders = Get-NetTCPConnection -LocalPort $Port, 5174 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+  if ($portHolders) {
+    foreach ($ph in $portHolders) {
+      if ($ph -gt 0 -and $seenPids.Add($ph)) {
+        $proc = Get-Process -Id $ph -ErrorAction SilentlyContinue
+        if ($proc -and -not $proc.HasExited) {
+          $running += $proc
+        }
+      }
+    }
+  }
+
+  # 3. Check any Electron processes associated with this workspace
+  $electronProcs = Get-Process -Name 'electron' -ErrorAction SilentlyContinue
+  foreach ($ep in $electronProcs) {
+    try {
+      if ($ep.Path -like "*$ProjectRoot*" -or $ep.Path -like "*node_modules\electron*") {
+        if ($seenPids.Add($ep.Id)) {
+          $running += $ep
+        }
+      }
+    } catch { }
+  }
+
+  return $running
 }
 
 function Stop-App {
   $procs = Get-RunningProcs
-  $portHolders = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
-
-  $allPids = @()
-  foreach ($p in $procs) { $allPids += $p.Id }
-  if ($portHolders) {
-    foreach ($ph in $portHolders) {
-      if ($ph -notin $allPids -and $ph -gt 0) { $allPids += $ph }
-    }
-  }
-
-  if ($allPids.Count -eq 0) {
+  if ($procs.Count -eq 0) {
     Write-Status '!' 'No running CivitAI Model Manager processes found.' 'Yellow'
     return $false
   }
 
-  Write-Status 'x' "Stopping $($allPids.Count) process(es)..." 'Red'
-  foreach ($pidToKill in $allPids) {
+  Write-Status 'x' "Stopping $($procs.Count) process(es)..." 'Red'
+  foreach ($p in $procs) {
     try {
-      Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
-      Write-Status 'ok' "Killed PID $pidToKill" 'DarkGray'
+      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+      Write-Status 'ok' "Killed PID $($p.Id) ($($p.ProcessName))" 'DarkGray'
     }
     catch {
-      Write-Status '!!' "Failed to kill PID $($pidToKill): $_" 'Red'
+      Write-Status '!!' "Failed to kill PID $($p.Id): $_" 'Red'
     }
   }
 
   if (Test-Path $PidFile) {
-    Remove-Item $PidFile -Force
+    Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
   }
   Write-Status 'ok' 'Application stopped.' 'Green'
   return $true
 }
 
 function Start-App {
-  # Check if already running
+  # Check if already running or if ports 5173/5174 are in use
   $existing = Get-RunningProcs
   if ($existing.Count -gt 0) {
-    $pids = ($existing | ForEach-Object { $_.Id }) -join ', '
-    Write-Status '!' "App already running (PIDs: $pids). Use 'restart' to bounce it." 'Yellow'
-    return
+    # Check if any running process has a visible GUI window to bring to the front
+    $foundWindow = $false
+    foreach ($p in $existing) {
+      if (Focus-ProcessWindow $p) {
+        $foundWindow = $true
+        Write-Status 'ok' "CivitAI Model Manager is already running (PID $($p.Id)). Active window brought to front." 'Green'
+        return
+      }
+    }
+
+    # If port is occupied but no visible window exists (orphaned ghost process), stop and auto-restart cleanly
+    Write-Status '!' "Port $Port/5174 is in use by an orphaned process without an active window. Auto-cleaning orphaned process and starting fresh..." 'Yellow'
+    Stop-App | Out-Null
+    Start-Sleep -Seconds 1
   }
 
   # 1) Build
@@ -176,20 +238,28 @@ function Start-App {
   Start-Sleep -Seconds 2
 
   # 3) Start Electron App (or run headless)
+  $localElectron = Join-Path $ProjectRoot "node_modules\electron\dist\electron.exe"
+  $electronExe = if (Test-Path $localElectron) { $localElectron } else { 'npx.cmd' }
+  $electronArgs = if (Test-Path $localElectron) {
+    if ($Headless -or $NoWindow) { ". --headless" } else { "." }
+  } else {
+    if ($Headless -or $NoWindow) { "electron . --headless" } else { "electron ." }
+  }
+
   if ($Headless -or $NoWindow) {
     Write-Status '>>' 'Starting Electron in headless background mode...' 'Magenta'
     $env:HEADLESS = "true"
-    $electronProc = Start-Process -FilePath 'npx.cmd' `
-      -ArgumentList 'electron . --headless' `
+    $electronProc = Start-Process -FilePath $electronExe `
+      -ArgumentList $electronArgs `
       -WorkingDirectory $ProjectRoot `
       -PassThru -WindowStyle Hidden
   } else {
     Write-Status '>>' 'Launching Electron app window...' 'Magenta'
     $env:HEADLESS = "false"
-    $electronProc = Start-Process -FilePath 'npx.cmd' `
-      -ArgumentList 'electron .' `
+    $electronProc = Start-Process -FilePath $electronExe `
+      -ArgumentList $electronArgs `
       -WorkingDirectory $ProjectRoot `
-      -PassThru -WindowStyle Hidden
+      -PassThru
   }
 
   # Save PIDs

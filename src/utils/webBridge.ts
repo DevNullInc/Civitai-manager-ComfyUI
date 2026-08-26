@@ -12,6 +12,35 @@ const API_BASE = '/api';
 const scanProgressListeners: Array<(progress: any) => void> = [];
 const downloadProgressListeners: Array<(tasks: any[]) => void> = [];
 
+// Real-time scan and download status polling in web browser mode
+if (typeof window !== 'undefined') {
+  setInterval(async () => {
+    if (scanProgressListeners.length > 0) {
+      try {
+        const res = await fetch(`${API_BASE}/get-scan-status`);
+        if (res.ok) {
+          const progress = await res.json();
+          if (progress) {
+            scanProgressListeners.forEach((cb) => cb(progress));
+          }
+        }
+      } catch (e) {}
+    }
+  }, 400);
+
+  setInterval(async () => {
+    if (downloadProgressListeners.length > 0) {
+      try {
+        const res = await fetch(`${API_BASE}/downloads`);
+        if (res.ok) {
+          const tasks = await res.json();
+          downloadProgressListeners.forEach((cb) => cb(tasks));
+        }
+      } catch (e) {}
+    }
+  }, 750);
+}
+
 export function setupWebBridgeIfNeeded() {
   if (typeof window !== 'undefined' && !window.civitaiAPI) {
     console.info('[CivitAI Manager] Electron IPC not found. Initializing HTTP Native Server Bridge on port 5174.');
@@ -69,38 +98,71 @@ export function setupWebBridgeIfNeeded() {
       },
 
       scanLibrary: async (rootPath: string | string[]) => {
-        const res = await fetch(`${API_BASE}/scan-library`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rootPath }),
-        });
-        return await res.json();
+        try {
+          const res = await fetch(`${API_BASE}/scan-library`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rootPath }),
+          });
+          if (!res.ok) {
+            const errTxt = await res.text();
+            throw new Error(errTxt || `Server error: ${res.status}`);
+          }
+          return await res.json();
+        } catch (e: any) {
+          console.error('scanLibrary failed:', e);
+          throw e;
+        }
       },
 
       cancelScan: async () => {
-        const res = await fetch(`${API_BASE}/cancel-scan`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        return await res.json();
+        try {
+          const res = await fetch(`${API_BASE}/cancel-scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          return await res.json();
+        } catch (e) {
+          return { success: false };
+        }
       },
 
       getScanStatus: async () => {
-        const res = await fetch(`${API_BASE}/get-scan-status`);
-        return await res.json();
+        try {
+          const res = await fetch(`${API_BASE}/get-scan-status`);
+          if (!res.ok) return null;
+          return await res.json();
+        } catch (e) {
+          return null;
+        }
       },
 
       getLocalModels: async () => {
-        const res = await fetch(`${API_BASE}/local-models`);
-        return await res.json();
+        try {
+          const res = await fetch(`${API_BASE}/local-models`);
+          if (!res.ok) return [];
+          return await res.json();
+        } catch (e) {
+          console.error('getLocalModels failed:', e);
+          return [];
+        }
       },
 
       clearLibrary: async () => {
-        const res = await fetch(`${API_BASE}/clear-library`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        return await res.json();
+        try {
+          const res = await fetch(`${API_BASE}/clear-library`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (!res.ok) {
+            const errTxt = await res.text();
+            throw new Error(errTxt || `Server error: ${res.status}`);
+          }
+          return await res.json();
+        } catch (e: any) {
+          console.error('clearLibrary failed:', e);
+          throw e;
+        }
       },
 
       onScanProgress: (callback: (progress: any) => void) => {
