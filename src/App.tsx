@@ -19,10 +19,20 @@ import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
 type Tab = 'browse' | 'library' | 'downloads' | 'settings';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('browse');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const saved = localStorage.getItem('civitai_active_tab');
+    if (saved === 'browse' || saved === 'library' || saved === 'downloads' || saved === 'settings') {
+      return saved;
+    }
+    return 'browse';
+  });
   const [activeDownloadsCount, setActiveDownloadsCount] = useState<number>(0);
   const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
   const mainRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem('civitai_active_tab', activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     if (window.civitaiAPI) {

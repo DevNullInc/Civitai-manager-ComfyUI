@@ -22,6 +22,9 @@ export class CivitAIClient {
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
       timeout: 15000,
+      paramsSerializer: {
+        indexes: null,
+      },
     });
   }
 
@@ -64,23 +67,37 @@ export class CivitAIClient {
 
   async fetchModels(params: SearchParams = {}): Promise<ModelListResponse> {
     return this.rateLimiter.executeWithRetry(async () => {
-      const queryParams: Record<string, any> = { ...params };
-      if (params.types && params.types.length > 0) {
-        queryParams.types = params.types.join(',');
-      }
-      if (params.baseModels && params.baseModels.length > 0) {
-        queryParams.baseModels = params.baseModels.join(',');
-      }
+      const queryParams: Record<string, any> = {};
+      if (params.query) queryParams.query = params.query;
+      if (params.types && params.types.length > 0) queryParams.types = params.types;
+      if (params.baseModels && params.baseModels.length > 0) queryParams.baseModels = params.baseModels;
+      if (params.sort) queryParams.sort = params.sort;
+      if (params.period) queryParams.period = params.period;
+      if (params.nsfw !== undefined) queryParams.nsfw = params.nsfw;
+      if (params.limit) queryParams.limit = params.limit;
+      if (params.page) queryParams.page = params.page;
+      if (params.cursor) queryParams.cursor = params.cursor;
+      if (params.tag) queryParams.tag = params.tag;
+      if (params.username) queryParams.username = params.username;
 
-      const res = await this.axiosInstance.get('/models', {
-        params: queryParams,
-        headers: this.getHeaders(),
-      });
+      logger.info(`[CivitAI API] GET /models`, queryParams);
 
-      return {
-        items: res.data.items || res.data || [],
-        metadata: res.data.metadata || {},
-      };
+      try {
+        const res = await this.axiosInstance.get('/models', {
+          params: queryParams,
+          headers: this.getHeaders(),
+        });
+
+        return {
+          items: res.data.items || res.data || [],
+          metadata: res.data.metadata || {},
+        };
+      } catch (err: any) {
+        const status = err.response?.status;
+        const errDetails = err.response?.data?.message || err.response?.data?.error || err.message;
+        logger.error(`[CivitAI API] GET /models failed (status ${status}):`, errDetails);
+        throw new Error(typeof errDetails === 'string' ? errDetails : JSON.stringify(errDetails));
+      }
     });
   }
 
@@ -162,44 +179,42 @@ export class CivitAIClient {
         const res = await this.axiosInstance.get('/enums', {
           headers: this.getHeaders(),
         });
+        const modelTypes = res.data.modelType || res.data.modelTypes || res.data.ModelType || [];
+        const baseModels = res.data.baseModel || res.data.baseModels || res.data.BaseModel || [];
         return {
-          modelTypes: res.data.modelType || res.data.ModelType || [],
-          baseModels: res.data.baseModel || res.data.BaseModel || [],
+          modelTypes: modelTypes.length > 0 ? modelTypes : [
+            'Checkpoint', 'LORA', 'LoCon', 'DoRA', 'TextualInversion', 'Hypernetwork',
+            'VAE', 'Controlnet', 'Upscaler', 'MotionModule', 'AestheticGradient',
+            'Poses', 'Wildcards', 'Workflows', 'Detection', 'Other'
+          ],
+          baseModels: baseModels.length > 0 ? baseModels : [
+            'SD 1.4', 'SD 1.5', 'SD 1.5 LCM', 'SD 1.5 Hyper',
+            'SD 2.0', 'SD 2.1', 'SD 2.1 768', 'SD 2.1 Unclip',
+            'SDXL 0.9', 'SDXL 1.0', 'SDXL 1.0 LCM', 'SDXL Turbo', 'SDXL Lightning', 'SDXL Hyper',
+            'SD 3', 'SD 3.5', 'SD 3.5 Medium', 'SD 3.5 Large', 'SD 3.5 Large Turbo',
+            'Pony', 'Illustrious', 'NoobAI',
+            'Flux.1 D', 'Flux.1 S', 'Flux.1 Krea', 'Flux.1 Kontext', 'Flux.2 D',
+            'Wan Video', 'CogVideoX', 'Hunyuan 1', 'Hunyuan Video', 'Mochi', 'LTXV',
+            'AuraFlow', 'Kolors', 'PixArt a', 'PixArt E', 'Lumina', 'Anima', 'Chroma', 'Ernie', 'Qwen', 'Other'
+          ],
         };
       } catch (err) {
         logger.warn('Failed to fetch enums from CivitAI API, returning defaults');
         return {
           modelTypes: [
-            'Checkpoint',
-            'LORA',
-            'LoCon',
-            'DoRA',
-            'TextualInversion',
-            'Hypernetwork',
-            'VAE',
-            'Controlnet',
-            'Upscaler',
-            'MotionModule',
-            'AestheticGradient',
-            'Poses',
-            'Wildcards',
-            'Workflows',
-            'Detection',
-            'Other',
+            'Checkpoint', 'LORA', 'LoCon', 'DoRA', 'TextualInversion', 'Hypernetwork',
+            'VAE', 'Controlnet', 'Upscaler', 'MotionModule', 'AestheticGradient',
+            'Poses', 'Wildcards', 'Workflows', 'Detection', 'Other'
           ],
           baseModels: [
-            'Anima',
-            'AuraFlow',
-            'Chroma',
-            'CogVideoX',
-            'Ernie',
-            'Flux.1 S',
-            'Flux.1 D',
-            'Flux.1 Krea',
-            'Flux.1 Kontext',
-            'Flux.2 D',
-            'SD3',
-            'SD3 Medium'
+            'SD 1.4', 'SD 1.5', 'SD 1.5 LCM', 'SD 1.5 Hyper',
+            'SD 2.0', 'SD 2.1', 'SD 2.1 768', 'SD 2.1 Unclip',
+            'SDXL 0.9', 'SDXL 1.0', 'SDXL 1.0 LCM', 'SDXL Turbo', 'SDXL Lightning', 'SDXL Hyper',
+            'SD 3', 'SD 3.5', 'SD 3.5 Medium', 'SD 3.5 Large', 'SD 3.5 Large Turbo',
+            'Pony', 'Illustrious', 'NoobAI',
+            'Flux.1 D', 'Flux.1 S', 'Flux.1 Krea', 'Flux.1 Kontext', 'Flux.2 D',
+            'Wan Video', 'CogVideoX', 'Hunyuan 1', 'Hunyuan Video', 'Mochi', 'LTXV',
+            'AuraFlow', 'Kolors', 'PixArt a', 'PixArt E', 'Lumina', 'Anima', 'Chroma', 'Ernie', 'Qwen', 'Other'
           ],
         };
       }

@@ -52,6 +52,7 @@ export interface CivitAIFile {
 export interface CivitAIImage {
   id?: number;
   url: string;
+  nsfw?: boolean | string;
   nsfwLevel?: number; // 1-31 scale
   width?: number;
   height?: number;
@@ -120,5 +121,7 @@ export interface ModelListResponse {
     pageSize?: number;
     totalPages?: number;
     nextPage?: string;
+    prevPage?: string;
+    nextCursor?: string;
   };
 }
