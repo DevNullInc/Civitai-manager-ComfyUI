@@ -59,19 +59,29 @@ function Get-RunningProcs {
 
 function Stop-App {
   $procs = Get-RunningProcs
-  if ($procs.Count -eq 0) {
+  $portHolders = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+
+  $allPids = @()
+  foreach ($p in $procs) { $allPids += $p.Id }
+  if ($portHolders) {
+    foreach ($ph in $portHolders) {
+      if ($ph -notin $allPids -and $ph -gt 0) { $allPids += $ph }
+    }
+  }
+
+  if ($allPids.Count -eq 0) {
     Write-Status '!' 'No running CivitAI Model Manager processes found.' 'Yellow'
     return $false
   }
 
-  Write-Status 'x' "Stopping $($procs.Count) process(es)..." 'Red'
-  foreach ($p in $procs) {
+  Write-Status 'x' "Stopping $($allPids.Count) process(es)..." 'Red'
+  foreach ($pidToKill in $allPids) {
     try {
-      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-      Write-Status 'ok' "Killed PID $($p.Id)" 'DarkGray'
+      Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
+      Write-Status 'ok' "Killed PID $pidToKill" 'DarkGray'
     }
     catch {
-      Write-Status '!!' "Failed to kill PID $($p.Id): $_" 'Red'
+      Write-Status '!!' "Failed to kill PID $pidToKill: $_" 'Red'
     }
   }
 
@@ -202,32 +212,38 @@ function Start-App {
     return
   }
 
-  # 2) Start Vite dev server
-  Write-Status '>>' "Starting Vite dev server on port $Port..." 'Cyan'
+  # 2) Start Vite dev server (for browser access)
+  Write-Status '>>' "Starting Vite server on port $Port..." 'Cyan'
+  $env:PORT = "$Port"
+  $env:VITE_DEV_SERVER_URL = "http://localhost:$Port"
   $viteProc = Start-Process -FilePath 'cmd.exe' `
     -ArgumentList "/c npx vite --port $Port" `
     -WorkingDirectory $ProjectRoot `
     -PassThru -WindowStyle Hidden
 
-  # Give Vite a moment to spin up
-  Start-Sleep -Seconds 3
+  Start-Sleep -Seconds 2
 
-  # 3) Start Electron
-  Write-Status '>>' 'Launching Electron app...' 'Magenta'
+  # 3) Start Electron App
+  Write-Status '>>' 'Launching Electron app window...' 'Magenta'
   $electronProc = Start-Process -FilePath 'cmd.exe' `
     -ArgumentList '/c npx electron .' `
     -WorkingDirectory $ProjectRoot `
-    -PassThru -WindowStyle Hidden
+    -PassThru
 
   # Save PIDs
-  @($viteProc.Id, $electronProc.Id) | Set-Content $PidFile
+  $pidsToSave = @()
+  if ($viteProc -and -not $viteProc.HasExited) { $pidsToSave += $viteProc.Id }
+  if ($electronProc -and -not $electronProc.HasExited) { $pidsToSave += $electronProc.Id }
+  if ($pidsToSave.Count -gt 0) {
+    $pidsToSave | Set-Content $PidFile
+  }
 
   Write-Host ''
   Write-Status 'ok' 'CivitAI Model Manager is running!' 'Green'
   Write-Host ''
-  Write-Host "    Vite     : http://localhost:$Port  (PID $($viteProc.Id))" -ForegroundColor DarkGray
-  Write-Host "    Electron : PID $($electronProc.Id)" -ForegroundColor DarkGray
-  Write-Host "    PID file : $PidFile" -ForegroundColor DarkGray
+  Write-Host "    Web / Browser UI : http://localhost:$Port" -ForegroundColor DarkGray
+  Write-Host "    Electron App     : PID $($electronProc.Id)" -ForegroundColor DarkGray
+  Write-Host "    PID file         : $PidFile" -ForegroundColor DarkGray
   Write-Host ''
   Write-Host '    Use  .\cmm.ps1 stop     to shut down' -ForegroundColor DarkGray
   Write-Host '    Use  .\cmm.ps1 restart  to restart' -ForegroundColor DarkGray

@@ -41,11 +41,31 @@ async function createWindow() {
     },
   });
 
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    await mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
-  } else {
-    await mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  const indexPath = path.join(__dirname, '../index.html');
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL || (process.env.PORT ? `http://localhost:${process.env.PORT}` : null);
+  const fs = require('fs');
+
+  let loaded = false;
+  // If explicitly in development mode with a dev server URL, try loading the URL first
+  if (process.env.NODE_ENV === 'development' && devServerUrl) {
+    try {
+      await mainWindow.loadURL(devServerUrl);
+      loaded = true;
+      mainWindow.webContents.openDevTools();
+    } catch (e) {
+      logger.warn(`Could not connect to Vite dev server at ${devServerUrl}, falling back to built files:`, e);
+    }
+  }
+
+  // Load the compiled static app
+  if (!loaded) {
+    if (fs.existsSync(indexPath)) {
+      await mainWindow.loadFile(indexPath);
+    } else if (devServerUrl) {
+      await mainWindow.loadURL(devServerUrl);
+    } else {
+      await mainWindow.loadURL('http://localhost:5173');
+    }
   }
 }
 
