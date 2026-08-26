@@ -409,7 +409,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
       )}
 
       {/* Model List */}
-      {loading ? (
+      {loading && localModels.length === 0 ? (
         <div className="flex items-center justify-center py-24">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 glow-purple"></div>
         </div>
