@@ -149,7 +149,7 @@ export async function generateDiagnosticReport(extraContext?: Record<string, any
   let report = `### CivitAI Model Manager - Diagnostic Report\n`;
   report += `**Generated:** ${timestamp}\n\n`;
   report += `#### 🖥️ Environment\n`;
-  report += `- **App Version:** ${sysInfo.version || '1.0.0'}\n`;
+  report += `- **App Version:** ${sysInfo.version || '1.1.0'}\n`;
   report += `- **Electron:** ${sysInfo.electronVersion || 'N/A'}\n`;
   report += `- **Node:** ${sysInfo.nodeVersion || 'N/A'}\n`;
   report += `- **Chrome:** ${sysInfo.chromeVersion || 'N/A'}\n`;

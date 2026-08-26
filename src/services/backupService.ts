@@ -27,7 +27,7 @@ export class BackupService {
       const downloads = await dbManager.all('SELECT * FROM downloads;');
 
       const backup: BackupData = {
-        version: '1.0.0',
+        version: '1.1.0',
         timestamp: new Date().toISOString(),
         config,
         localModels,

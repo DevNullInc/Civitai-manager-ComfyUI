@@ -28,19 +28,21 @@ import {
   Check,
   CheckCircle2,
   AlertTriangle,
+  Square,
+  ArrowUpDown,
 } from 'lucide-react';
 import { FallbackImage } from './FallbackImage';
-import { LocalModel, ScanProgress, ModelType } from '../types/app';
+import { useScan } from '../context/ScanContext';
+import { LocalModel, ModelType } from '../types/app';
 
 interface LibraryTabProps {
   onCheckUpdate: (model: LocalModel) => void;
 }
 
 export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
+  const { isScanning, scanProgress, lastCompletedAt, startScan, cancelScan } = useScan();
   const [localModels, setLocalModels] = useState<LocalModel[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
 
   // Duplicate Resolution State
   const [expandedDuplicateHash, setExpandedDuplicateHash] = useState<string | null>(null);
@@ -58,6 +60,9 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   const [searchQuery, setSearchQuery] = useState<string>(
     () => localStorage.getItem('civitai_lib_search') || ''
   );
+  const [sortBy, setSortBy] = useState<'name' | 'type' | 'size' | 'date'>(
+    () => (localStorage.getItem('civitai_lib_sort_by') as any) || 'name'
+  );
   const [sortAsc, setSortAsc] = useState<boolean>(
     () => localStorage.getItem('civitai_lib_sort_asc') !== 'false'
   );
@@ -73,6 +78,10 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   useEffect(() => {
     localStorage.setItem('civitai_lib_search', searchQuery);
   }, [searchQuery]);
+
+  useEffect(() => {
+    localStorage.setItem('civitai_lib_sort_by', sortBy);
+  }, [sortBy]);
 
   useEffect(() => {
     localStorage.setItem('civitai_lib_sort_asc', String(sortAsc));
@@ -94,20 +103,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
 
   useEffect(() => {
     loadLocalModels();
-
-    if (window.civitaiAPI) {
-      window.civitaiAPI.onScanProgress((prog) => {
-        setScanProgress(prog);
-        if (prog.status === 'completed') {
-          setIsScanning(false);
-          loadLocalModels();
-          setTimeout(() => {
-            setScanProgress((current) => (current?.status === 'completed' ? null : current));
-          }, 3000);
-        }
-      });
-    }
-  }, []);
+  }, [lastCompletedAt]);
 
   const handleOpenFolder = async (filePath: string) => {
     try {
@@ -154,41 +150,6 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     await loadLocalModels();
   };
 
-  const triggerScan = async () => {
-    if (isScanning) return;
-    setIsScanning(true);
-    setScanProgress({
-      scannedFiles: 0,
-      totalFiles: 0,
-      status: 'scanning',
-      currentFile: 'Initializing folder scanner...',
-    });
-
-    try {
-      if (window.civitaiAPI) {
-        const config = await window.civitaiAPI.getConfig();
-        const folders = config?.comfyui_folders && config.comfyui_folders.length > 0
-          ? config.comfyui_folders
-          : (config?.comfyui_root ? [config.comfyui_root] : []);
-
-        if (!folders || folders.length === 0 || !folders[0]) {
-          alert('No model folders configured! Please add your ComfyUI model folder path in Settings.');
-          setIsScanning(false);
-          setScanProgress(null);
-          return;
-        }
-
-        await window.civitaiAPI.scanLibrary(folders as any);
-        await loadLocalModels();
-      }
-    } catch (err: any) {
-      alert(`Scan failed: ${err.message}`);
-      setScanProgress(null);
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
   const filteredModels = localModels
     .filter((model) => {
       const matchesSearch =
@@ -208,11 +169,22 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
       return true;
     })
     .sort((a, b) => {
-      const nameA = a.fileName.toLowerCase();
-      const nameB = b.fileName.toLowerCase();
-      if (nameA < nameB) return sortAsc ? -1 : 1;
-      if (nameA > nameB) return sortAsc ? 1 : -1;
-      return 0;
+      let comparison = 0;
+      if (sortBy === 'name') {
+        comparison = (a.fileName || '').localeCompare(b.fileName || '');
+      } else if (sortBy === 'type') {
+        const typeA = (a.modelType || 'Other').toLowerCase();
+        const typeB = (b.modelType || 'Other').toLowerCase();
+        comparison = typeA.localeCompare(typeB);
+        if (comparison === 0) {
+          comparison = (a.fileName || '').localeCompare(b.fileName || '');
+        }
+      } else if (sortBy === 'size') {
+        comparison = (a.fileSize || 0) - (b.fileSize || 0);
+      } else if (sortBy === 'date') {
+        comparison = (a.modifiedAt || 0) - (b.modifiedAt || 0);
+      }
+      return sortAsc ? comparison : -comparison;
     });
 
   return (
@@ -226,23 +198,25 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
           </p>
         </div>
 
-        <button
-          onClick={triggerScan}
-          disabled={isScanning}
-          className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-60 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer"
-        >
-          {isScanning ? (
-            <>
-              <RefreshCw size={20} className="animate-spin" />
-              <span>Scanning Folders...</span>
-            </>
-          ) : (
-            <>
-              <FolderSearch size={20} />
-              <span>Scan ComfyUI Folders</span>
-            </>
-          )}
-        </button>
+        {isScanning ? (
+          <button
+            onClick={cancelScan}
+            title="Stop Scanning ComfyUI Folders"
+            className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-rose-600/40 glow-rose cursor-pointer active:scale-95 animate-pulse"
+          >
+            <Square size={16} className="fill-white" />
+            <span>Stop Scanning</span>
+          </button>
+        ) : (
+          <button
+            onClick={startScan}
+            title="Scan ComfyUI Folders"
+            className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95"
+          >
+            <FolderSearch size={20} />
+            <span>Scan ComfyUI Folders</span>
+          </button>
+        )}
       </div>
 
       {/* Hero Scan Progress Bar Banner */}
@@ -251,7 +225,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-2xl bg-purple-500/20 text-purple-300">
-                <RefreshCw className="animate-spin" size={22} />
+                <RefreshCw className={isScanning ? 'animate-spin' : ''} size={22} />
               </div>
               <div>
                 <h3 className="font-extrabold text-slate-100 text-sm capitalize">
@@ -259,6 +233,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                   {scanProgress.status === 'hashing' && '2. Computing SHA256 Model Hashes'}
                   {scanProgress.status === 'lookup' && '3. CivitAI Database Matching'}
                   {scanProgress.status === 'completed' && 'Scan Complete!'}
+                  {scanProgress.status === 'failed' && 'Scan Failed'}
                 </h3>
                 <p className="text-xs text-slate-400 font-mono line-clamp-1 mt-0.5">
                   {scanProgress.currentFile || 'Processing files...'}
@@ -266,15 +241,26 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
               </div>
             </div>
 
-            <div className="text-right">
-              <span className="text-base font-extrabold text-purple-300 font-mono">
-                {scanProgress.totalFiles > 0
-                  ? `${Math.round((scanProgress.scannedFiles / scanProgress.totalFiles) * 100)}%`
-                  : '0%'}
-              </span>
-              <span className="text-xs text-slate-400 block font-mono">
-                {scanProgress.scannedFiles} / {scanProgress.totalFiles} files
-              </span>
+            <div className="text-right flex items-center gap-4">
+              <div>
+                <span className="text-base font-extrabold text-purple-300 font-mono">
+                  {scanProgress.totalFiles > 0
+                    ? `${Math.round((scanProgress.scannedFiles / scanProgress.totalFiles) * 100)}%`
+                    : '0%'}
+                </span>
+                <span className="text-xs text-slate-400 block font-mono">
+                  {scanProgress.scannedFiles} / {scanProgress.totalFiles} files
+                </span>
+              </div>
+              {isScanning && (
+                <button
+                  onClick={cancelScan}
+                  className="px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600/60 border border-rose-500/40 text-rose-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Square size={12} className="fill-rose-300" />
+                  <span>Stop</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -321,25 +307,41 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
           })}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Model Type Filter */}
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as any)}
-            className="bg-slate-900 border border-slate-700 rounded-xl p-2 text-sm text-slate-100"
+            className="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-purple-500 cursor-pointer"
           >
             <option value="all">All Types</option>
             {['Checkpoint','LORA','LoCon','DoRA','TextualInversion','Hypernetwork','VAE','Controlnet','Upscaler','MotionModule','AestheticGradient','Poses','Wildcards','Workflows','Detection','Other'].map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
-          {/* Sort Toggle */}
-          <button
-            onClick={() => setSortAsc(!sortAsc)}
-            className="flex items-center gap-1 px-3 py-1 bg-slate-800 rounded-xl text-slate-100"
-          >
-            Sort {sortAsc ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
+
+          {/* Sort By Options (Name, Type, Size, Date) */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded-xl p-1">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-transparent text-xs font-semibold text-slate-200 px-2 py-1 focus:outline-none cursor-pointer"
+            >
+              <option value="name">Sort: Name (A-Z)</option>
+              <option value="type">Sort: Type</option>
+              <option value="size">Sort: File Size</option>
+              <option value="date">Sort: Date Modified</option>
+            </select>
+
+            {/* Sort Asc/Desc Direction Toggle */}
+            <button
+              onClick={() => setSortAsc(!sortAsc)}
+              title={sortAsc ? 'Ascending Order (Click for Descending)' : 'Descending Order (Click for Ascending)'}
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              {sortAsc ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
         </div>
 
         <div className="relative w-full sm:w-72">

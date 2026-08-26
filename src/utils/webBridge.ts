@@ -77,6 +77,19 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      cancelScan: async () => {
+        const res = await fetch(`${API_BASE}/cancel-scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        return await res.json();
+      },
+
+      getScanStatus: async () => {
+        const res = await fetch(`${API_BASE}/get-scan-status`);
+        return await res.json();
+      },
+
       getLocalModels: async () => {
         const res = await fetch(`${API_BASE}/local-models`);
         return await res.json();

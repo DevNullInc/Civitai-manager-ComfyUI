@@ -32,13 +32,35 @@ const MODEL_EXTENSIONS = new Set([
 export class LibraryScanner {
   private watcher: FSWatcher | null = null;
   private isScanning = false;
+  private cancelRequested = false;
+  private currentProgress: ScanProgress = {
+    scannedFiles: 0,
+    totalFiles: 0,
+    status: 'idle',
+  };
+
+  cancelScan() {
+    if (this.isScanning) {
+      logger.info('Scan cancellation requested by user.');
+      this.cancelRequested = true;
+    }
+  }
+
+  isCurrentlyScanning(): boolean {
+    return this.isScanning;
+  }
+
+  getScanStatus(): ScanProgress {
+    return { ...this.currentProgress };
+  }
 
   async scanDirectory(
     rootPath: string | string[],
     onProgress?: (progress: ScanProgress) => void
   ): Promise<LocalModel[]> {
     if (this.isScanning) {
-      throw new Error('A scan is already in progress');
+      logger.warn('Scan already running. Returning current status.');
+      return [];
     }
     const rootPaths = Array.isArray(rootPath) ? rootPath.filter(Boolean) : [rootPath].filter(Boolean);
     if (rootPaths.length === 0) {
@@ -59,39 +81,69 @@ export class LibraryScanner {
     }
 
     this.isScanning = true;
+    this.cancelRequested = false;
     logger.info(`Starting folder scan on directories: ${existingPaths.join(', ')}`);
 
-    const progress: ScanProgress = {
+    const emitProgress = (p: ScanProgress) => {
+      this.currentProgress = { ...p };
+      if (onProgress) {
+        onProgress(this.currentProgress);
+      }
+    };
+
+    emitProgress({
       scannedFiles: 0,
       totalFiles: 0,
       status: 'scanning',
-    };
-
-    if (onProgress) onProgress({ ...progress });
+      currentFile: 'Discovering model files...',
+    });
 
     try {
       // 1. Collect all model files recursively across all existing root paths
       const allFiles: string[] = [];
       for (const p of existingPaths) {
+        if (this.cancelRequested) break;
         allFiles.push(...this.collectModelFiles(p));
       }
 
-      progress.totalFiles = allFiles.length;
-      if (onProgress) onProgress({ ...progress });
+      if (this.cancelRequested) {
+        emitProgress({ scannedFiles: 0, totalFiles: 0, status: 'idle', currentFile: 'Scan cancelled.' });
+        return [];
+      }
+
+      emitProgress({
+        scannedFiles: 0,
+        totalFiles: allFiles.length,
+        status: 'hashing',
+        currentFile: allFiles.length > 0 ? path.basename(allFiles[0]) : '',
+      });
 
       const scannedModels: LocalModel[] = [];
       const hashesToLookup: { hash: string; localId: string }[] = [];
 
       // 2. Process each file with Fast-Path Cache Check
-      progress.status = 'hashing';
       for (let i = 0; i < allFiles.length; i++) {
+        if (this.cancelRequested) {
+          logger.info('Scan stopped during hashing phase.');
+          emitProgress({
+            scannedFiles: i,
+            totalFiles: allFiles.length,
+            status: 'idle',
+            currentFile: 'Scan cancelled by user.',
+          });
+          return scannedModels;
+        }
+
         const filePath = allFiles[i];
-        progress.scannedFiles = i + 1;
-        progress.currentFile = path.basename(filePath);
-        if (onProgress) onProgress({ ...progress });
+        emitProgress({
+          scannedFiles: i + 1,
+          totalFiles: allFiles.length,
+          status: 'hashing',
+          currentFile: path.basename(filePath),
+        });
 
         // Yield to Node event loop so Electron IPC progress messages stream live to UI
-        await new Promise((r) => setTimeout(r, 2));
+        await new Promise((r) => setTimeout(r, 1));
 
         let stats: fs.Stats;
         try {
@@ -164,12 +216,23 @@ export class LibraryScanner {
       }
 
       // 3. Perform Bulk CivitAI Hash Lookup for unmatched models
-      if (hashesToLookup.length > 0) {
-        progress.status = 'lookup';
-        if (onProgress) onProgress({ ...progress });
+      if (hashesToLookup.length > 0 && !this.cancelRequested) {
+        emitProgress({
+          scannedFiles: allFiles.length,
+          totalFiles: allFiles.length,
+          status: 'lookup',
+          currentFile: `Querying CivitAI for ${hashesToLookup.length} model(s)...`,
+        });
 
         const uniqueHashes = Array.from(new Set(hashesToLookup.map((h) => h.hash)));
-        const civitaiVersions = await civitaiClient.bulkLookupByHashes(uniqueHashes);
+        const civitaiVersions = await civitaiClient.bulkLookupByHashes(uniqueHashes, (done, total) => {
+          emitProgress({
+            scannedFiles: done,
+            totalFiles: total,
+            status: 'lookup',
+            currentFile: `Checked ${done}/${total} hashes against CivitAI...`,
+          });
+        });
 
         const versionMap = new Map<string, any>();
         civitaiVersions.forEach((v) => {
@@ -194,10 +257,8 @@ export class LibraryScanner {
               item.civitaiModelId = matchedVersion.modelId;
               item.civitaiName = matchedVersion.name;
               item.civitaiBaseModel = matchedVersion.baseModel;
-              // Store preview image URL if available
               const preview = matchedVersion.images && matchedVersion.images[0] ? matchedVersion.images[0].url : null;
               item.previewUrl = preview || undefined;
-              // Model type is not directly in version; we could fetch model later. For now set null.
               item.modelType = undefined;
 
               await dbManager.run(
@@ -212,18 +273,26 @@ export class LibraryScanner {
       // 4. Mark duplicates (same hash across different file paths)
       await this.flagDuplicates();
 
-      progress.status = 'completed';
-      if (onProgress) onProgress({ ...progress });
+      emitProgress({
+        scannedFiles: allFiles.length,
+        totalFiles: allFiles.length,
+        status: 'completed',
+        currentFile: 'Scan completed successfully.',
+      });
       logger.info(`Scan complete! Scanned ${scannedModels.length} models.`);
       return scannedModels;
     } catch (err: any) {
-      progress.status = 'failed';
-      progress.error = err.message;
-      if (onProgress) onProgress({ ...progress });
+      emitProgress({
+        scannedFiles: this.currentProgress.scannedFiles,
+        totalFiles: this.currentProgress.totalFiles,
+        status: 'failed',
+        error: err.message,
+      });
       logger.error('Library scan failed:', err);
       throw err;
     } finally {
       this.isScanning = false;
+      this.cancelRequested = false;
     }
   }
 
