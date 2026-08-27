@@ -70,5 +70,5 @@ graph LR
 ## 💬 Community Feedback & Feature Requests
 
 Have a feature request or suggestion for the roadmap?
-- Open an issue or discussion on GitHub: [CivitAI-manager-ComfyUI Issues](https://github.com/TheStygianRenegade/Civitai-manager-ComfyUI/issues)
+- Open an issue or discussion on GitHub: [CivitAI-manager-ComfyUI Issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues)
 - Contributions, pull requests, and feedback are always welcome!

@@ -38,9 +38,17 @@
     "checkpoint"
   ],
   "author": {
-    "name": "TheStygianRenegade / /dev/null Inc",
+    "name": "DevNullInc (/dev/null Inc / TheStygianRenegade)",
     "email": "devnull@devnullinc.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DevNullInc/Civitai-manager-ComfyUI.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues"
+  },
+  "homepage": "https://github.com/DevNullInc/Civitai-manager-ComfyUI#readme",
   "license": "GPL-3.0",
   "dependencies": {
     "adm-zip": "^0.6.0",
