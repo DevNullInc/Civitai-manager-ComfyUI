@@ -457,6 +457,13 @@ function startHttpBridgeServer() {
         const success = await libraryScanner.unignoreDuplicateSet(body.sha256);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success }));
+      } else if (url === '/api/set-model-nsfw' && req.method === 'POST') {
+        const body = await getBody();
+        if (body.modelId) {
+          await dbManager.run('UPDATE local_models SET nsfw = ? WHERE id = ?', [body.nsfw ? 1 : 0, body.modelId]);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
       } else if (url === '/api/get-ignored-duplicates' && req.method === 'GET') {
         const ignored = await libraryScanner.getIgnoredDuplicates();
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -907,6 +914,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-ignored-duplicates', async () => {
     return await libraryScanner.getIgnoredDuplicates();
+  });
+
+  ipcMain.handle('set-model-nsfw', async (_event: unknown, modelId: string, nsfw: boolean) => {
+    if (modelId) {
+      await dbManager.run('UPDATE local_models SET nsfw = ? WHERE id = ?', [nsfw ? 1 : 0, modelId]);
+      return true;
+    }
+    return false;
   });
 
   // External Link & System Info

@@ -375,13 +375,26 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
-      deleteLocalModel: async (id: string, deleteFromDisk: boolean = true) => {
+      deleteLocalModel: async (id: string, deleteFromDisk = false) => {
         const res = await fetch(`${API_BASE}/delete-local-model`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, deleteFromDisk }),
         });
         return await res.json();
+      },
+
+      setModelNsfw: async (modelId: string, nsfw: boolean) => {
+        try {
+          const res = await fetch(`${API_BASE}/set-model-nsfw`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelId, nsfw }),
+          });
+          return await res.json();
+        } catch (e) {
+          return { success: false };
+        }
       },
 
       openFolder: async (filePath: string) => {

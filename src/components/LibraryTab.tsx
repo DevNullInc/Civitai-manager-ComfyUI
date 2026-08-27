@@ -37,6 +37,7 @@ import {
   ArrowUpDown,
   SearchCheck,
   ExternalLink,
+  Flame,
 } from 'lucide-react';
 import { FallbackImage } from './FallbackImage';
 import { useScan } from '../context/ScanContext';
@@ -73,6 +74,12 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   const [typeFilter, setTypeFilter] = useState<'all' | ModelType>(
     () => (localStorage.getItem('civitai_lib_type_filter') as any) || 'all'
   );
+  const [nsfwFilter, setNsfwFilter] = useState<'all' | 'sfw' | 'nsfw'>(
+    () => (localStorage.getItem('civitai_lib_nsfw_filter') as any) || 'all'
+  );
+  const [blurNsfw, setBlurNsfw] = useState<boolean>(
+    () => localStorage.getItem('civitai_lib_blur_nsfw') !== 'false'
+  );
   const [searchQuery, setSearchQuery] = useState<string>(
     () => localStorage.getItem('civitai_lib_search') || ''
   );
@@ -90,6 +97,14 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   useEffect(() => {
     localStorage.setItem('civitai_lib_type_filter', typeFilter);
   }, [typeFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('civitai_lib_nsfw_filter', nsfwFilter);
+  }, [nsfwFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('civitai_lib_blur_nsfw', String(blurNsfw));
+  }, [blurNsfw]);
 
   useEffect(() => {
     localStorage.setItem('civitai_lib_search', searchQuery);
@@ -170,11 +185,30 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   };
 
   const isModelNsfw = (model: LocalModel): boolean => {
-    if (model.nsfw) return true;
+    if (model.nsfw === true || (model.nsfw as any) === 1) return true;
+    if (model.nsfw === false || (model.nsfw as any) === 0) return false;
     const textToTest = `${model.fileName} ${model.filePath} ${model.civitaiName || ''}`;
     return /nsfw|xxx|hentai|porn|erotic|lewd|nude|uncensored|adult|breast|boob|cleavage|pussy|vagina|penis|dick|cock|dildo|sensual|fetish|bdsm|milf|anal|sex|naked|topless|bottomless|ecchi|r18|bikini|lingerie|thong|waifu/i.test(
       textToTest
     );
+  };
+
+  const handleToggleModelNsfw = async (model: LocalModel) => {
+    const currentNsfw = isModelNsfw(model);
+    const nextNsfw = !currentNsfw;
+
+    // Optimistically update local UI state
+    setLocalModels((prev) =>
+      prev.map((m) => (m.id === model.id ? { ...m, nsfw: nextNsfw } : m))
+    );
+
+    try {
+      if (window.civitaiAPI && typeof window.civitaiAPI.setModelNsfw === 'function') {
+        await window.civitaiAPI.setModelNsfw(model.id, nextNsfw);
+      }
+    } catch (err) {
+      console.error('Failed to update model NSFW status:', err);
+    }
   };
 
   const isHuggingFaceModel = (model: LocalModel): boolean => {
@@ -403,6 +437,11 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         // Type filter
         if (typeFilter !== 'all' && model.modelType !== typeFilter) return false;
 
+        // NSFW filter
+        const isNsfw = isModelNsfw(model);
+        if (nsfwFilter === 'sfw' && isNsfw) return false;
+        if (nsfwFilter === 'nsfw' && !isNsfw) return false;
+
         // Top-level filter
         if (filter === 'matched') return model.isMatched;
         if (filter === 'updates') return model.hasUpdate;
@@ -434,7 +473,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         }
         return sortAsc ? comparison : -comparison;
       });
-  }, [localModels, searchQuery, typeFilter, filter, sortBy, sortAsc]);
+  }, [localModels, searchQuery, typeFilter, nsfwFilter, filter, sortBy, sortAsc]);
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 pb-20">
@@ -615,6 +654,58 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* N/SFW Filter Pill Group */}
+          <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-xl p-1 shadow-sm">
+            <button
+              onClick={() => setNsfwFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                nsfwFilter === 'all'
+                  ? 'bg-slate-800 text-slate-100 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              All Content
+            </button>
+            <button
+              onClick={() => setNsfwFilter('sfw')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                nsfwFilter === 'sfw'
+                  ? 'bg-emerald-500/20 text-emerald-300 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Show only SFW models"
+            >
+              <ShieldCheck size={12} className={nsfwFilter === 'sfw' ? 'text-emerald-400' : 'text-slate-400'} />
+              <span>SFW</span>
+            </button>
+            <button
+              onClick={() => setNsfwFilter('nsfw')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                nsfwFilter === 'nsfw'
+                  ? 'bg-rose-500/20 text-rose-300 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Show only NSFW models"
+            >
+              <Flame size={12} className={nsfwFilter === 'nsfw' ? 'text-rose-400' : 'text-slate-400'} />
+              <span>NSFW</span>
+            </button>
+          </div>
+
+          {/* Blur NSFW Toggle Button */}
+          <button
+            onClick={() => setBlurNsfw(!blurNsfw)}
+            title={blurNsfw ? 'NSFW preview thumbnails are blurred. Click to unblur.' : 'NSFW preview thumbnails are visible. Click to blur.'}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer shadow-sm ${
+              blurNsfw
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+                : 'bg-slate-900 border-slate-700/80 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {blurNsfw ? <EyeOff size={13} className="text-amber-400" /> : <Eye size={13} className="text-slate-400" />}
+            <span>{blurNsfw ? 'Blur NSFW' : 'Show NSFW'}</span>
+          </button>
+
           {/* Model Type Filter */}
           <select
             value={typeFilter}
@@ -713,11 +804,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                   <div className="flex items-center gap-4 flex-1 min-w-0">
                     {/* Preview thumbnail if available, otherwise HardDrive icon */}
                     {model.previewUrl ? (
-                      <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border border-purple-500/30 shadow-md bg-slate-950">
+                      <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border border-purple-500/30 shadow-md bg-slate-950 relative group">
                         <FallbackImage
                           src={model.previewUrl}
                           alt={model.civitaiName || model.fileName}
-                          className="w-full h-full object-cover"
+                          className={`w-full h-full object-cover transition-all duration-300 ${
+                            isModelNsfw(model) && blurNsfw ? 'blur-md group-hover:blur-none scale-110' : ''
+                          }`}
                           fallbackIcon={
                             <div className="w-full h-full bg-slate-900 flex items-center justify-center text-purple-400">
                               <HardDrive size={20} />
@@ -725,6 +818,13 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                           }
                           fallbackText=""
                         />
+                        {isModelNsfw(model) && blurNsfw && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:opacity-0 transition-opacity pointer-events-none">
+                            <span className="text-[9px] font-extrabold text-rose-300 font-mono px-1 py-0.5 bg-rose-950/90 rounded border border-rose-500/50 shadow-sm">
+                              18+
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-purple-400 flex-shrink-0 shadow-inner">
@@ -791,6 +891,33 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                     <span className="text-slate-300 font-mono font-semibold bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
                       {(model.fileSize / 1024 / 1024).toFixed(1)} MB
                     </span>
+
+                    {/* Manual NSFW / SFW Toggle Button */}
+                    <button
+                      onClick={() => handleToggleModelNsfw(model)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer text-xs shadow-sm ${
+                        isModelNsfw(model)
+                          ? 'bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 glow-rose'
+                          : 'bg-slate-900/90 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                      title={
+                        isModelNsfw(model)
+                          ? 'Flagged as NSFW. Click to switch to SFW.'
+                          : 'Marked as SFW. Click to flag as NSFW.'
+                      }
+                    >
+                      {isModelNsfw(model) ? (
+                        <>
+                          <Flame size={13} className="text-rose-400" />
+                          <span>NSFW</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck size={13} className="text-slate-400" />
+                          <span>SFW</span>
+                        </>
+                      )}
+                    </button>
 
                     {model.isMatched ? (
                       <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl font-semibold">

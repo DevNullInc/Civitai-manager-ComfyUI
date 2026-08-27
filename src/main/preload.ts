@@ -64,6 +64,8 @@ const api = {
   unignoreDuplicateSet: (sha256: string) =>
     ipcRenderer.invoke('unignore-duplicate-set', sha256),
   getIgnoredDuplicates: () => ipcRenderer.invoke('get-ignored-duplicates'),
+  setModelNsfw: (modelId: string, nsfw: boolean) =>
+    ipcRenderer.invoke('set-model-nsfw', modelId, nsfw),
   openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
   // External Link & System Info
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
