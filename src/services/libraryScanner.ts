@@ -422,11 +422,11 @@ export class LibraryScanner {
       WHERE sha256 IN (
         SELECT lm.sha256 
         FROM local_models lm
-        LEFT JOIN ignored_duplicates id ON UPPER(lm.sha256) = UPPER(id.sha256)
+        LEFT JOIN ignored_duplicates ign ON UPPER(lm.sha256) = UPPER(ign.sha256)
         WHERE lm.sha256 IS NOT NULL AND TRIM(lm.sha256) != ''
         GROUP BY lm.sha256 
         HAVING COUNT(DISTINCT lm.file_path COLLATE NOCASE) > 1
-           AND (id.sha256 IS NULL OR COUNT(DISTINCT lm.file_path COLLATE NOCASE) > id.known_count)
+           AND (ign.sha256 IS NULL OR COUNT(DISTINCT lm.file_path COLLATE NOCASE) > ign.known_count)
       );
     `);
   }
