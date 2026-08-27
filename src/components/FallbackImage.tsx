@@ -15,6 +15,13 @@ export interface FallbackImageProps extends React.ImgHTMLAttributes<HTMLImageEle
   fallbackIcon?: React.ReactNode;
   fallbackText?: string;
   isBlurred?: boolean;
+  cacheType?: 'library' | 'browse' | 'none';
+}
+
+function getCacheProxyUrl(url: string, type: 'library' | 'browse'): string {
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) return url;
+  if (url.includes('/api/cached-image')) return url;
+  return `http://localhost:5174/api/cached-image?url=${encodeURIComponent(url)}&type=${type}`;
 }
 
 export const FallbackImage: React.FC<FallbackImageProps> = ({
@@ -25,24 +32,47 @@ export const FallbackImage: React.FC<FallbackImageProps> = ({
   fallbackIcon,
   fallbackText = 'NO PREVIEW',
   isBlurred = false,
+  cacheType = 'library',
   ...props
 }) => {
-  // Build a distinct list of valid candidate URLs
+  // Build a distinct list of valid candidate URLs with local bridge caching
   const urls: string[] = React.useMemo(() => {
-    const list: string[] = [];
+    const rawList: string[] = [];
     if (src && typeof src === 'string' && src.trim()) {
-      list.push(src.trim());
+      rawList.push(src.trim());
     }
     candidateUrls.forEach((item) => {
       if (item && typeof item === 'string') {
         const trimmed = item.trim();
-        if (trimmed && !list.includes(trimmed)) {
-          list.push(trimmed);
+        if (trimmed && !rawList.includes(trimmed)) {
+          rawList.push(trimmed);
         }
       }
     });
-    return list;
-  }, [src, candidateUrls]);
+
+    if (cacheType === 'none') {
+      return rawList;
+    }
+
+    const finalList: string[] = [];
+    rawList.forEach((raw) => {
+      if (raw.startsWith('http')) {
+        const proxied = getCacheProxyUrl(raw, cacheType);
+        if (!finalList.includes(proxied)) {
+          finalList.push(proxied);
+        }
+        if (!finalList.includes(raw)) {
+          finalList.push(raw);
+        }
+      } else {
+        if (!finalList.includes(raw)) {
+          finalList.push(raw);
+        }
+      }
+    });
+
+    return finalList;
+  }, [src, candidateUrls, cacheType]);
 
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [hasFailedAll, setHasFailedAll] = useState<boolean>(urls.length === 0);

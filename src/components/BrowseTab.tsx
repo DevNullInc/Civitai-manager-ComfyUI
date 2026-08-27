@@ -695,6 +695,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
                     candidateUrls={candidateImages}
                     alt={model.name}
                     isBlurred={isNsfw && nsfwBlur}
+                    cacheType="browse"
                     className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                   />
 
@@ -1024,6 +1025,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
                             src={img.url}
                             candidateUrls={selectedVersion.images ? selectedVersion.images.slice(idx).map((i) => i.url) : []}
                             alt="Preview sample"
+                            cacheType="browse"
                             className="w-32 h-32 object-cover rounded-xl border border-slate-800 bg-slate-950 flex-shrink-0"
                           />
                         ))}

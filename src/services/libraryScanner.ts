@@ -15,6 +15,7 @@ import { civitaiClient } from './civitaiClient';
 import { dbManager } from '../db/db';
 import { computeFileSHA256 } from '../utils/hash';
 import { logger } from '../utils/logger';
+import { imageCacheService } from './imageCacheService';
 
 const MODEL_EXTENSIONS = new Set([
   '.safetensors',
@@ -310,6 +311,9 @@ export class LibraryScanner {
                 'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ?, civitai_name = ?, preview_url = ?, model_type = COALESCE(?, model_type), nsfw = ? WHERE id = ?',
                 [matchedVersion.modelId, matchedVersion.id, item.civitaiName || null, preview, modelType || null, isNsfw ? 1 : 0, item.id]
               );
+              if (preview) {
+                imageCacheService.prefetchToPermanentCache(preview);
+              }
             }
           }
         }
@@ -499,6 +503,9 @@ export class LibraryScanner {
           'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ?, civitai_name = ?, preview_url = ?, model_type = COALESCE(?, model_type), nsfw = ? WHERE id = ?',
           [matchedVersion.modelId, matchedVersion.id, civitaiName, preview, modelType || null, isNsfw ? 1 : 0, r.id]
         );
+        if (preview) {
+          imageCacheService.prefetchToPermanentCache(preview);
+        }
         newlyMatched++;
       }
     }

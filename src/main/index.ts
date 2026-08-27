@@ -20,6 +20,7 @@ import { downloadManager } from '../services/downloadManager';
 import { libraryScanner } from '../services/libraryScanner';
 import { versionManager } from '../services/versionManager';
 import { backupService } from '../services/backupService';
+import { imageCacheService } from '../services/imageCacheService';
 import { encryptKey, decryptKey } from '../utils/secureStorage';
 import { logger } from '../utils/logger';
 import { AppConfig } from '../types/app';
@@ -498,8 +499,33 @@ function startHttpBridgeServer() {
           }
         });
         return;
+      } else if (url.startsWith('/api/cached-image') && req.method === 'GET') {
+        const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost:5174'}`);
+        const targetUrl = parsedUrl.searchParams.get('url');
+        const cacheType = (parsedUrl.searchParams.get('type') || 'library') as 'library' | 'browse';
+
+        if (!targetUrl) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing url parameter' }));
+          return;
+        }
+
+        const image = await imageCacheService.getImage(targetUrl, cacheType);
+        if (image) {
+          res.writeHead(200, {
+            'Content-Type': image.contentType,
+            'Cache-Control': cacheType === 'library' ? 'public, max-age=31536000, immutable' : 'public, max-age=86400',
+            'Content-Length': image.buffer.length,
+          });
+          res.end(image.buffer);
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Image not found or failed to download' }));
+        }
+        return;
       } else if (url === '/api/clear-library' && req.method === 'POST') {
         await dbManager.run('DELETE FROM local_models;');
+        imageCacheService.clearPermanentLibraryCache();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
       } else if (url === '/api/restart-app' && req.method === 'POST') {
@@ -540,6 +566,7 @@ function registerIpcHandlers() {
   ipcMain.handle('clear-library', async () => {
     try {
       await dbManager.run('DELETE FROM local_models;');
+      imageCacheService.clearPermanentLibraryCache();
       logger.info('Library cache cleared from database.');
       return { success: true };
     } catch (e: any) {
