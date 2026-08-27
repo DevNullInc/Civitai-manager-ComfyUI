@@ -493,6 +493,7 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 ## 📧 Support
 
 - **Issues**: [GitHub Issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues)
+- **Vulnerability Reporting**: [GitHub Security](https://github.com/DevNullInc/Civitai-manager-ComfyUI/security)
 - **Discussions**: [GitHub Discussions](https://github.com/DevNullInc/Civitai-manager-ComfyUI/discussions)
 
 ---
