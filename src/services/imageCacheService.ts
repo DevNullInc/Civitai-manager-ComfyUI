@@ -25,6 +25,7 @@ export class ImageCacheService {
   private browseSessionCache: Map<string, CachedImageEntry> = new Map();
   private maxBrowseEntries: number = 500;
   private inflightRequests: Map<string, Promise<{ buffer: Buffer; contentType: string } | null>> = new Map();
+  private readonly allowedImageHosts: string[] = ['civitai.com', 'image.civitai.com'];
 
   constructor() {
     let baseDir = process.cwd();
@@ -70,6 +71,43 @@ export class ImageCacheService {
     return fs.existsSync(dataPath) && fs.existsSync(metaPath);
   }
 
+  private isPrivateOrLocalHost(hostname: string): boolean {
+    const host = hostname.toLowerCase();
+    if (host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0') return true;
+
+    const ipv4Match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const octets = ipv4Match.slice(1).map((n) => Number(n));
+      if (octets.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+      const [a, b] = octets;
+      if (a === 10 || a === 127 || a === 0) return true;
+      if (a === 169 && b === 254) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      if (a === 192 && b === 168) return true;
+      if (a >= 224) return true;
+    }
+
+    return host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd');
+  }
+
+  private isAllowedImageUrl(rawUrl: string): URL | null {
+    try {
+      const parsed = new URL(rawUrl.trim());
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      const hostname = parsed.hostname.toLowerCase();
+      if (this.isPrivateOrLocalHost(hostname)) return null;
+
+      const isAllowedHost = this.allowedImageHosts.some(
+        (allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`)
+      );
+      if (!isAllowedHost) return null;
+
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Fetch image with caching according to target context:
    * - 'library': Permanent disk cache (persists across sessions)
@@ -79,11 +117,17 @@ export class ImageCacheService {
     url: string,
     type: 'library' | 'browse' = 'library'
   ): Promise<{ buffer: Buffer; contentType: string } | null> {
-    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+    if (!url || typeof url !== 'string') {
       return null;
     }
 
-    const cleanUrl = url.trim();
+    const validatedUrl = this.isAllowedImageUrl(url);
+    if (!validatedUrl) {
+      logger.warn('[ImageCache] Blocked image request due to invalid or disallowed URL');
+      return null;
+    }
+
+    const cleanUrl = validatedUrl.toString();
     const cacheKey = `${type}:${cleanUrl}`;
 
     // 1. Check if already cached
