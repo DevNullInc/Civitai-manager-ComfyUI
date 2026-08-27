@@ -153,6 +153,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     try {
       await window.civitaiAPI.ignoreDuplicateSet(sha256, count);
       setResolutionFeedback(`Marked SHA256 as intentionally duplicated (${count} copies). Excluded from duplicate warnings.`);
+      setExpandedDuplicateHash(null);
       setTimeout(() => setResolutionFeedback(null), 5000);
       await loadLocalModels();
       await loadIgnoredDuplicates();
@@ -443,16 +444,22 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         if (nsfwFilter === 'nsfw' && !isNsfw) return false;
 
         // Top-level filter
-        if (filter === 'matched') return model.isMatched;
-        if (filter === 'updates') return model.hasUpdate;
-        if (filter === 'unidentified') return !model.isMatched;
-        if (filter === 'duplicates') {
+        if (filter === 'matched') {
+          if (!model.isMatched) return false;
+        } else if (filter === 'updates') {
+          if (!model.hasUpdate) return false;
+        } else if (filter === 'unidentified') {
+          if (model.isMatched) return false;
+        } else if (filter === 'duplicates') {
           if (!model.isDuplicate || !model.sha256) return false;
-          // In duplicates view, show each duplicate hash group once as a consolidated master card
+        }
+
+        // Deduplicate identical files across library views so multi-copy models appear as one master card
+        if (model.sha256) {
           if (seenDuplicateHashes.has(model.sha256)) return false;
           seenDuplicateHashes.add(model.sha256);
-          return true;
         }
+
         return true;
       })
       .sort((a, b) => {
@@ -858,7 +865,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                             NSFW (Hover to reveal)
                           </span>
                         )}
-                        {model.isDuplicate && (
+                        {duplicateCopies.length > 1 && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -877,14 +884,30 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                               }
                             }}
                             className={`flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border transition-all cursor-pointer ${
-                              isExpanded
-                                ? 'text-amber-200 bg-amber-500/30 border-amber-400 glow-amber'
-                                : 'text-amber-400 bg-amber-500/15 border-amber-500/40 hover:bg-amber-500/25 glow-amber'
+                              model.isDuplicate
+                                ? isExpanded
+                                  ? 'text-amber-200 bg-amber-500/30 border-amber-400 glow-amber'
+                                  : 'text-amber-400 bg-amber-500/15 border-amber-500/40 hover:bg-amber-500/25 glow-amber'
+                                : isExpanded
+                                ? 'text-emerald-200 bg-emerald-500/30 border-emerald-400'
+                                : 'text-slate-300 bg-slate-800/80 border-slate-700/80 hover:border-slate-600'
                             }`}
-                            title="Click to expand duplicate copies and select keeper"
+                            title={
+                              model.isDuplicate
+                                ? 'Duplicate copies warning (Click to expand copies and choose keeper)'
+                                : 'Intentionally duplicated set (Click to expand copies)'
+                            }
                           >
-                            <Copy size={11} />
-                            <span>Duplicate ({duplicateCopies.length})</span>
+                            {model.isDuplicate ? (
+                              <Copy size={11} />
+                            ) : (
+                              <ShieldCheck size={11} className="text-emerald-400" />
+                            )}
+                            <span>
+                              {model.isDuplicate
+                                ? `Duplicate (${duplicateCopies.length})`
+                                : `Multi-Copy (${duplicateCopies.length})`}
+                            </span>
                             <ChevronDown
                               size={11}
                               className={`transition-transform duration-200 ${isExpanded ? 'rotate-180 text-amber-300' : ''}`}
