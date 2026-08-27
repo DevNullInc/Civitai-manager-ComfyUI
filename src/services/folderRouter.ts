@@ -79,8 +79,9 @@ export class FolderRouter {
     baseModel?: string;
     creator?: string;
     fileType?: FileType;
+    targetRoot?: string;
   }): { folderName: string; fullPath: string; relativePath: string } {
-    const { fileName, modelType, baseModel, creator, fileType } = params;
+    const { fileName, modelType, baseModel, creator, fileType, targetRoot } = params;
 
     const baseFolder = this.determineFolder(fileName, modelType, fileType);
     const sanitizedFileName = sanitizeFileName(fileName);
@@ -96,8 +97,9 @@ export class FolderRouter {
     }
 
     const relativePath = path.join(...pathParts, sanitizedFileName);
-    const fullPath = this.config.rootPath
-      ? path.join(this.config.rootPath, relativePath)
+    const effectiveRoot = targetRoot || this.config.rootPath || (this.config.folderPaths && this.config.folderPaths[0]) || '';
+    const fullPath = effectiveRoot
+      ? path.join(effectiveRoot, relativePath)
       : relativePath;
 
     return {

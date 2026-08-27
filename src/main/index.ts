@@ -11,6 +11,7 @@ import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
+import child_process from 'child_process';
 import http from 'http';
 import { dbManager } from '../db/db';
 import { civitaiClient } from '../services/civitaiClient';
@@ -104,12 +105,19 @@ async function loadConfigFromDb() {
       currentConfig.civitai_api_key = decrypted;
       civitaiClient.setApiKey(decrypted);
     }
+    if (cfgObj.mirror_url !== undefined) currentConfig.mirror_url = cfgObj.mirror_url;
     if (cfgObj.folder_mappings) currentConfig.folder_mappings = cfgObj.folder_mappings;
     if (cfgObj.advanced_mappings) currentConfig.advanced_mappings = cfgObj.advanced_mappings;
     if (cfgObj.organize_by) currentConfig.organize_by = cfgObj.organize_by;
     if (cfgObj.conflict_strategy) {
       currentConfig.conflict_strategy = cfgObj.conflict_strategy;
       downloadManager.setConflictStrategy(cfgObj.conflict_strategy);
+    }
+    if (cfgObj.nsfw_max_visible_level !== undefined) {
+      currentConfig.nsfw_max_visible_level = cfgObj.nsfw_max_visible_level;
+    }
+    if (cfgObj.nsfw_blur_enabled !== undefined) {
+      currentConfig.nsfw_blur_enabled = cfgObj.nsfw_blur_enabled;
     }
     if (cfgObj.strict_hash_verification !== undefined) {
       currentConfig.strict_hash_verification = cfgObj.strict_hash_verification;
@@ -118,6 +126,9 @@ async function loadConfigFromDb() {
     if (cfgObj.max_concurrent_downloads !== undefined) {
       currentConfig.max_concurrent_downloads = cfgObj.max_concurrent_downloads;
       downloadManager.setMaxConcurrent(cfgObj.max_concurrent_downloads);
+    }
+    if (cfgObj.default_download_folder !== undefined) {
+      currentConfig.default_download_folder = cfgObj.default_download_folder;
     }
 
     folderRouter.updateConfig({
@@ -188,6 +199,12 @@ function startHttpBridgeServer() {
           );
           civitaiClient.setApiKey(body.civitai_api_key);
         }
+        if (body.mirror_url !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['mirror_url', JSON.stringify(body.mirror_url)]
+          );
+        }
         if (body.folder_mappings) {
           await dbManager.run(
             'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
@@ -198,6 +215,31 @@ function startHttpBridgeServer() {
           await dbManager.run(
             'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
             ['advanced_mappings', JSON.stringify(body.advanced_mappings)]
+          );
+        }
+        if (body.organize_by !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['organize_by', JSON.stringify(body.organize_by)]
+          );
+        }
+        if (body.conflict_strategy !== undefined) {
+          downloadManager.setConflictStrategy(body.conflict_strategy);
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['conflict_strategy', JSON.stringify(body.conflict_strategy)]
+          );
+        }
+        if (body.nsfw_max_visible_level !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['nsfw_max_visible_level', JSON.stringify(body.nsfw_max_visible_level)]
+          );
+        }
+        if (body.nsfw_blur_enabled !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['nsfw_blur_enabled', JSON.stringify(body.nsfw_blur_enabled)]
           );
         }
 
@@ -214,6 +256,13 @@ function startHttpBridgeServer() {
           await dbManager.run(
             'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
             ['max_concurrent_downloads', JSON.stringify(body.max_concurrent_downloads)]
+          );
+        }
+
+        if (body.default_download_folder !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['default_download_folder', JSON.stringify(body.default_download_folder)]
           );
         }
 
@@ -238,11 +287,31 @@ function startHttpBridgeServer() {
             }
           })
           .catch((err) => {
-            logger.error('Background folder scan error:', err);
+            logger.error('Error during HTTP library scan:', err);
           });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, status: 'scanning' }));
+        res.end(JSON.stringify({ success: true, message: 'Scan started in background' }));
+      } else if (url === '/api/cancel-scan' && req.method === 'POST') {
+        libraryScanner.cancelScan();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Scan cancellation requested' }));
+      } else if (url === '/api/models' && req.method === 'GET') {
+        const parsedUrl = new URL(url, `http://${req.headers.host}`);
+        const params = Object.fromEntries(parsedUrl.searchParams.entries());
+        const data = await civitaiClient.fetchModels(params);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.startsWith('/api/model/') && req.method === 'GET') {
+        const id = parseInt(url.split('/')[3], 10);
+        const data = await civitaiClient.fetchModel(id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.startsWith('/api/version/') && req.method === 'GET') {
+        const id = parseInt(url.split('/')[3], 10);
+        const data = await civitaiClient.fetchModelVersion(id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
       } else if (url === '/api/check-all-updates' && req.method === 'POST') {
         const result = await versionManager.batchCheckAllUpdates();
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -288,16 +357,19 @@ function startHttpBridgeServer() {
           const sep = downloadUrl.includes('?') ? '&' : '?';
           downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
         }
+        const effectiveRoot = body.targetRoot || currentConfig.default_download_folder || currentConfig.comfyui_root || (currentConfig.comfyui_folders && currentConfig.comfyui_folders[0]);
         const computed = folderRouter.computePath({
           fileName: body.fileName,
           modelType: body.modelType,
           baseModel: body.baseModel,
           creator: body.creator,
+          targetRoot: effectiveRoot,
         });
         const task = downloadManager.addTask({
           ...body,
           downloadUrl,
           targetFolder: computed.folderName,
+          targetRoot: effectiveRoot,
           computedPath: computed.fullPath,
         });
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -363,6 +435,14 @@ function startHttpBridgeServer() {
         await dbManager.run('DELETE FROM local_models;');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/restart-app' && req.method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+        setTimeout(() => performLiveRestart(), 500);
+      } else if (url === '/api/shutdown-app' && req.method === 'POST') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+        setTimeout(() => performFullShutdown(), 500);
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -458,6 +538,13 @@ function registerIpcHandlers() {
       );
     }
 
+    if (newConfig.mirror_url !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['mirror_url', JSON.stringify(newConfig.mirror_url)]
+      );
+    }
+
     if (newConfig.folder_mappings) {
       await dbManager.run(
         'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
@@ -472,8 +559,33 @@ function registerIpcHandlers() {
       );
     }
 
-    if (newConfig.conflict_strategy) {
+    if (newConfig.organize_by !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['organize_by', JSON.stringify(newConfig.organize_by)]
+      );
+    }
+
+    if (newConfig.conflict_strategy !== undefined) {
       downloadManager.setConflictStrategy(newConfig.conflict_strategy);
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['conflict_strategy', JSON.stringify(newConfig.conflict_strategy)]
+      );
+    }
+
+    if (newConfig.nsfw_max_visible_level !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['nsfw_max_visible_level', JSON.stringify(newConfig.nsfw_max_visible_level)]
+      );
+    }
+
+    if (newConfig.nsfw_blur_enabled !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['nsfw_blur_enabled', JSON.stringify(newConfig.nsfw_blur_enabled)]
+      );
     }
 
     if (newConfig.strict_hash_verification !== undefined) {
@@ -489,6 +601,13 @@ function registerIpcHandlers() {
       await dbManager.run(
         'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
         ['max_concurrent_downloads', JSON.stringify(newConfig.max_concurrent_downloads)]
+      );
+    }
+
+    if (newConfig.default_download_folder !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['default_download_folder', JSON.stringify(newConfig.default_download_folder)]
       );
     }
 
@@ -576,17 +695,20 @@ function registerIpcHandlers() {
       downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
     }
 
+    const effectiveRoot = taskParams.targetRoot || currentConfig.default_download_folder || currentConfig.comfyui_root || (currentConfig.comfyui_folders && currentConfig.comfyui_folders[0]);
     const computed = folderRouter.computePath({
       fileName: taskParams.fileName,
       modelType: taskParams.modelType,
       baseModel: taskParams.baseModel,
       creator: taskParams.creator,
+      targetRoot: effectiveRoot,
     });
 
     const task = downloadManager.addTask({
       ...taskParams,
       downloadUrl,
       targetFolder: computed.folderName,
+      targetRoot: effectiveRoot,
       computedPath: computed.fullPath,
     });
 
@@ -670,15 +792,99 @@ function registerIpcHandlers() {
   });
 
   // App control
-  ipcMain.handle('restart-app', () => {
-    app.relaunch();
-    app.exit(0);
-    return true;
+  ipcMain.handle('restart-app', async () => {
+    return await performLiveRestart();
   });
   ipcMain.handle('shutdown-app', () => {
-    app.quit();
+    performFullShutdown();
     return true;
   });
+}
+
+async function performLiveRestart() {
+  logger.info('Performing live backend restart & frontend refresh...');
+  try {
+    // 1. Re-load and apply all configuration from SQLite
+    await loadConfigFromDb();
+
+    // 2. Re-initialize and sync backend services
+    if (currentConfig.civitai_api_key) {
+      civitaiClient.setApiKey(currentConfig.civitai_api_key);
+    }
+    downloadManager.setConflictStrategy(currentConfig.conflict_strategy);
+    downloadManager.setStrictHashVerification(currentConfig.strict_hash_verification !== false);
+    downloadManager.setMaxConcurrent(currentConfig.max_concurrent_downloads || 2);
+
+    folderRouter.updateConfig({
+      rootPath: currentConfig.comfyui_root || (currentConfig.comfyui_folders && currentConfig.comfyui_folders[0]) || '',
+      folderPaths: currentConfig.comfyui_folders,
+      folderMappings: currentConfig.folder_mappings,
+      separateByBaseModel: currentConfig.organize_by.base_model,
+      separateByCreator: currentConfig.organize_by.creator,
+      advancedMappings: currentConfig.advanced_mappings,
+    });
+
+    // 3. Refresh Electron frontend window live without terminating the OS window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reloadIgnoringCache();
+    }
+    logger.info('Live restart completed successfully.');
+    return true;
+  } catch (err) {
+    logger.error('Error during live restart:', err);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.reloadIgnoringCache();
+    }
+    return false;
+  }
+}
+
+function performFullShutdown() {
+  logger.info('Performing full application shutdown and cleanup...');
+
+  // 1. Read PID file (.cmm.pid) if exists
+  const pidFilePath = path.join(process.cwd(), '.cmm.pid');
+  const pidsToKill = new Set<number>();
+
+  if (fs.existsSync(pidFilePath)) {
+    try {
+      const content = fs.readFileSync(pidFilePath, 'utf8');
+      content.split(/\r?\n/).forEach((line) => {
+        const pid = parseInt(line.trim(), 10);
+        if (!isNaN(pid) && pid > 0 && pid !== process.pid) {
+          pidsToKill.add(pid);
+        }
+      });
+      fs.unlinkSync(pidFilePath);
+    } catch (e) {}
+  }
+
+  // 2. Kill spawned background processes (like Vite dev server)
+  if (process.platform === 'win32') {
+    for (const pid of pidsToKill) {
+      try {
+        child_process.execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+      } catch (e) {}
+    }
+    // Also clean up any lingering process holding port 5173 or 5174
+    try {
+      child_process.execSync(
+        `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5173,5174 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { if ($_ -and $_ -ne ${process.pid}) { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }"`,
+        { stdio: 'ignore' }
+      );
+    } catch (e) {}
+  } else {
+    for (const pid of pidsToKill) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch (e) {}
+    }
+  }
+
+  app.quit();
+  setTimeout(() => {
+    process.exit(0);
+  }, 300);
 }
 
 // Timer to send download progress updates to renderer UI

@@ -85,6 +85,7 @@ export interface AppConfig {
   nsfw_blur_enabled: boolean;
   strict_hash_verification?: boolean;
   max_concurrent_downloads?: number;
+  default_download_folder?: string;
 }
 
 export interface DownloadTask {
@@ -96,6 +97,7 @@ export interface DownloadTask {
   modelType: ModelType;
   baseModel: string;
   targetFolder: string;
+  targetRoot?: string;
   fileName: string;
   downloadUrl: string;
   sizeKB: number;
