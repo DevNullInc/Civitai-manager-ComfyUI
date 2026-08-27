@@ -60,7 +60,7 @@ export class BackupService {
 
       const manifest: BackupManifest = {
         format: 'civitai-model-manager-backup-zip',
-        version: '1.2.0',
+        version: '1.3.0',
         createdAt: new Date().toISOString(),
         stats: {
           modelsCount: modelRows.length,

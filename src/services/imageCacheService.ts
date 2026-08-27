@@ -163,7 +163,7 @@ export class ImageCacheService {
           responseType: 'arraybuffer',
           timeout: 15000,
           headers: {
-            'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.2',
+            'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
             Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
           },
         });

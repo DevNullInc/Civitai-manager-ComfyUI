@@ -20,6 +20,7 @@
     "src/services/**/*",
     "src/utils/**/*",
     "src/types/**/*",
+    "src/cli/**/*",
     "migrations/**/*"
   ],
   "exclude": [

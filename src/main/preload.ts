@@ -67,6 +67,15 @@ const api = {
   setModelNsfw: (modelId: string, nsfw: boolean) =>
     ipcRenderer.invoke('set-model-nsfw', modelId, nsfw),
   openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
+  // Workflows & Webhooks
+  scanWorkflows: (folderPaths?: string | string[]) => ipcRenderer.invoke('scan-workflows', folderPaths),
+  testWebhook: (url: string, event: string) => ipcRenderer.invoke('test-webhook', url, event),
+
+  // Hugging Face
+  hfCheckModel: (repoId: string) => ipcRenderer.invoke('hf-check-model', repoId),
+  hfValidateToken: (token?: string) => ipcRenderer.invoke('hf-validate-token', token),
+  hfWhoami: () => ipcRenderer.invoke('hf-whoami'),
+
   // External Link & System Info
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),

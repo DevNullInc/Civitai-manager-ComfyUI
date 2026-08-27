@@ -50,7 +50,7 @@ export class CivitAIClient {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.0',
+      'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
     };
     if (this.apiKey) {
       headers['Authorization'] = `Bearer ${this.apiKey}`;

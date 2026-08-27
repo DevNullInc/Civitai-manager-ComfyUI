@@ -21,6 +21,9 @@ import { libraryScanner } from '../services/libraryScanner';
 import { versionManager } from '../services/versionManager';
 import { backupService } from '../services/backupService';
 import { imageCacheService } from '../services/imageCacheService';
+import { webhookService } from '../services/webhookService';
+import { huggingfaceClient } from '../services/huggingfaceClient';
+import { workflowScanner } from '../services/workflowScanner';
 import { encryptKey, decryptKey } from '../utils/secureStorage';
 import { logger } from '../utils/logger';
 import { AppConfig } from '../types/app';
@@ -32,6 +35,12 @@ let currentConfig: AppConfig = {
   comfyui_root: '',
   comfyui_folders: [],
   civitai_api_key: '',
+  mirror_url: '',
+  huggingface_token: '',
+  webhooks: {
+    on_download_complete: '',
+    on_update_available: '',
+  },
   folder_mappings: {},
   advanced_mappings: { filename_patterns: [] },
   organize_by: { base_model: false, creator: false },
@@ -106,7 +115,20 @@ async function loadConfigFromDb() {
       currentConfig.civitai_api_key = decrypted;
       civitaiClient.setApiKey(decrypted);
     }
-    if (cfgObj.mirror_url !== undefined) currentConfig.mirror_url = cfgObj.mirror_url;
+    if (cfgObj.mirror_url !== undefined) {
+      currentConfig.mirror_url = cfgObj.mirror_url;
+      const baseApiUrl = (cfgObj.mirror_url && cfgObj.mirror_url.trim()) ? cfgObj.mirror_url.trim() : 'https://civitai.com/api/v1';
+      civitaiClient.setBaseUrl(baseApiUrl);
+    }
+    if (cfgObj.huggingface_token) {
+      const decryptedHf = decryptKey(cfgObj.huggingface_token);
+      currentConfig.huggingface_token = decryptedHf;
+      huggingfaceClient.setToken(decryptedHf);
+    }
+    if (cfgObj.webhooks) {
+      currentConfig.webhooks = cfgObj.webhooks;
+      webhookService.updateConfig(cfgObj.webhooks);
+    }
     if (cfgObj.folder_mappings) currentConfig.folder_mappings = cfgObj.folder_mappings;
     if (cfgObj.advanced_mappings) currentConfig.advanced_mappings = cfgObj.advanced_mappings;
     if (cfgObj.organize_by) currentConfig.organize_by = cfgObj.organize_by;
@@ -201,10 +223,27 @@ function startHttpBridgeServer() {
           civitaiClient.setApiKey(body.civitai_api_key);
         }
         if (body.mirror_url !== undefined) {
+          const baseApiUrl = (body.mirror_url && body.mirror_url.trim()) ? body.mirror_url.trim() : 'https://civitai.com/api/v1';
+          civitaiClient.setBaseUrl(baseApiUrl);
           await dbManager.run(
             'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
             ['mirror_url', JSON.stringify(body.mirror_url)]
           );
+        }
+        if (body.huggingface_token !== undefined) {
+          const encryptedHf = encryptKey(body.huggingface_token);
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['huggingface_token', JSON.stringify(encryptedHf)]
+          );
+          huggingfaceClient.setToken(body.huggingface_token);
+        }
+        if (body.webhooks !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['webhooks', JSON.stringify(body.webhooks)]
+          );
+          webhookService.updateConfig(body.webhooks);
         }
         if (body.folder_mappings) {
           await dbManager.run(
@@ -528,6 +567,31 @@ function startHttpBridgeServer() {
         imageCacheService.clearPermanentLibraryCache();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/workflows' && req.method === 'POST') {
+        const body = await getBody();
+        const folderPaths = body.folderPaths || currentConfig.comfyui_folders || [currentConfig.comfyui_root];
+        const workflows = await workflowScanner.scanWorkflows(folderPaths);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(workflows));
+      } else if (url === '/api/webhooks/test' && req.method === 'POST') {
+        const body = await getBody();
+        const result = await webhookService.testWebhook(body.url, body.event);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if (url === '/api/hf/check' && req.method === 'POST') {
+        const body = await getBody();
+        const result = await huggingfaceClient.checkModelRepo(body.repoId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if (url === '/api/hf/validate-token' && req.method === 'POST') {
+        const body = await getBody();
+        const result = await huggingfaceClient.validateToken(body.token);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if (url === '/api/hf/whoami' && req.method === 'GET') {
+        const result = await huggingfaceClient.getCliWhoami();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
       } else if (url === '/api/restart-app' && req.method === 'POST') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
@@ -602,10 +666,29 @@ function registerIpcHandlers() {
     }
 
     if (newConfig.mirror_url !== undefined) {
+      const baseApiUrl = (newConfig.mirror_url && newConfig.mirror_url.trim()) ? newConfig.mirror_url.trim() : 'https://civitai.com/api/v1';
+      civitaiClient.setBaseUrl(baseApiUrl);
       await dbManager.run(
         'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
         ['mirror_url', JSON.stringify(newConfig.mirror_url)]
       );
+    }
+
+    if (newConfig.huggingface_token !== undefined) {
+      const encryptedHf = encryptKey(newConfig.huggingface_token);
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['huggingface_token', JSON.stringify(encryptedHf)]
+      );
+      huggingfaceClient.setToken(newConfig.huggingface_token);
+    }
+
+    if (newConfig.webhooks !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['webhooks', JSON.stringify(newConfig.webhooks)]
+      );
+      webhookService.updateConfig(newConfig.webhooks);
     }
 
     if (newConfig.folder_mappings) {
@@ -701,6 +784,30 @@ function registerIpcHandlers() {
 
   ipcMain.handle('get-enums', async () => {
     return await civitaiClient.fetchEnums();
+  });
+
+  // Workflow Handlers
+  ipcMain.handle('scan-workflows', async (_event: unknown, folderPaths?: string | string[]) => {
+    const paths = folderPaths || currentConfig.comfyui_folders || [currentConfig.comfyui_root];
+    return await workflowScanner.scanWorkflows(paths);
+  });
+
+  // Webhook Handlers
+  ipcMain.handle('test-webhook', async (_event: unknown, url: string, event: 'on_download_complete' | 'on_update_available') => {
+    return await webhookService.testWebhook(url, event);
+  });
+
+  // Hugging Face Handlers
+  ipcMain.handle('hf-check-model', async (_event: unknown, repoId: string) => {
+    return await huggingfaceClient.checkModelRepo(repoId);
+  });
+
+  ipcMain.handle('hf-validate-token', async (_event: unknown, token?: string) => {
+    return await huggingfaceClient.validateToken(token);
+  });
+
+  ipcMain.handle('hf-whoami', async () => {
+    return await huggingfaceClient.getCliWhoami();
   });
 
   // Scanner Handlers

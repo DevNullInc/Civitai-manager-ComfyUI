@@ -1,13 +1,18 @@
 {
   "name": "civitai-model-manager",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "The missing model manager for ComfyUI with verified CivitAI API integration and intelligent auto-sorting.",
   "main": "dist/main/index.js",
+  "bin": {
+    "cmm": "bin/cmm.js"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build --base ./ && tsc -p tsconfig.main.json",
     "preview": "vite preview",
     "test": "vitest run",
+    "cmm": "node bin/cmm.js",
+    "version:bump": "node scripts/update-version.js",
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder",
     "electron:preview": "npm run build && electron . --preview",

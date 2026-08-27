@@ -18,3 +18,5 @@ build-local.*
 build-all.*
 migrations/
 Civitai-manager-ComfyUI.code-workspace
+update-version.ps1
+scripts/update-version.js

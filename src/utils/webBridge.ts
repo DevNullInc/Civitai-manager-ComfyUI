@@ -406,6 +406,68 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      scanWorkflows: async (folderPaths?: string | string[]) => {
+        try {
+          const res = await fetch(`${API_BASE}/workflows`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folderPaths }),
+          });
+          return await res.json();
+        } catch (e) {
+          console.error('scanWorkflows failed:', e);
+          return [];
+        }
+      },
+
+      testWebhook: async (url: string, event: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/webhooks/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, event }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { success: false, error: e.message };
+        }
+      },
+
+      hfCheckModel: async (repoId: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/hf/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ repoId }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { exists: false, error: e.message };
+        }
+      },
+
+      hfValidateToken: async (token?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/hf/validate-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { valid: false, error: e.message };
+        }
+      },
+
+      hfWhoami: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/hf/whoami`);
+          return await res.json();
+        } catch (e: any) {
+          return { available: false, loggedIn: false, output: e.message };
+        }
+      },
+
       openExternal: async (url: string) => {
         window.open(url, '_blank', 'noopener,noreferrer');
         return true;
@@ -413,7 +475,7 @@ export function setupWebBridgeIfNeeded() {
 
       getSystemInfo: async () => {
         return {
-          version: '1.2.0',
+          version: '1.3.0',
           platform: navigator.platform || 'web',
           userAgent: navigator.userAgent,
         };

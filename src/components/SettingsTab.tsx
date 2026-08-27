@@ -41,6 +41,11 @@ export const SettingsTab: React.FC = () => {
     comfyui_folders: [],
     civitai_api_key: '',
     mirror_url: '',
+    huggingface_token: '',
+    webhooks: {
+      on_download_complete: '',
+      on_update_available: '',
+    },
     folder_mappings: { ...DEFAULT_FOLDER_MAP },
     advanced_mappings: { filename_patterns: [...DEFAULT_FILENAME_PATTERNS] },
     organize_by: { base_model: false, creator: false },
@@ -65,6 +70,10 @@ export const SettingsTab: React.FC = () => {
   const [newFolderInput, setNewFolderInput] = useState('');
   const [newPattern, setNewPattern] = useState('');
   const [newFolder, setNewFolder] = useState('');
+  const [testingHf, setTestingHf] = useState(false);
+  const [hfStatus, setHfStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [testingWebhook, setTestingWebhook] = useState<'dl' | 'up' | null>(null);
+  const [webhookStatus, setWebhookStatus] = useState<{ type: string; success?: boolean; message?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const normalizeFolderPath = (p: string): string => {
@@ -88,6 +97,11 @@ export const SettingsTab: React.FC = () => {
             comfyui_folders: folders,
             civitai_api_key: loaded.civitai_api_key || '',
             mirror_url: loaded.mirror_url || '',
+            huggingface_token: loaded.huggingface_token || '',
+            webhooks: {
+              on_download_complete: loaded.webhooks?.on_download_complete || '',
+              on_update_available: loaded.webhooks?.on_update_available || '',
+            },
             folder_mappings: { ...DEFAULT_FOLDER_MAP, ...(loaded.folder_mappings || {}) },
             advanced_mappings: {
               filename_patterns:
@@ -312,7 +326,7 @@ export const SettingsTab: React.FC = () => {
     try {
       const exportData = {
         _format: 'civitai-model-manager-settings',
-        version: '1.2.0',
+        version: '1.3.0',
         exportedAt: new Date().toISOString(),
         settings: config,
       };
@@ -339,6 +353,11 @@ export const SettingsTab: React.FC = () => {
         : [],
       civitai_api_key: imported.civitai_api_key || '',
       mirror_url: imported.mirror_url || '',
+      huggingface_token: imported.huggingface_token || '',
+      webhooks: {
+        on_download_complete: imported.webhooks?.on_download_complete || '',
+        on_update_available: imported.webhooks?.on_update_available || '',
+      },
       folder_mappings: { ...DEFAULT_FOLDER_MAP, ...(imported.folder_mappings || {}) },
       advanced_mappings: {
         filename_patterns: Array.isArray(imported.advanced_mappings?.filename_patterns)
@@ -628,7 +647,7 @@ export const SettingsTab: React.FC = () => {
       <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
         <div className="flex items-center gap-2 text-slate-100 font-bold text-base">
           <Key className="text-indigo-400" size={20} />
-          <h2>CivitAI API Credentials</h2>
+          <h2>CivitAI API & Dual-Source Mirrors</h2>
         </div>
 
         <div className="space-y-3">
@@ -649,9 +668,35 @@ export const SettingsTab: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Custom API Base URL / Mirror (Optional)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300">
+                API Base URL / Mirror (Dual-Source Support)
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, mirror_url: 'https://civitai.com/api/v1' })}
+                  className={`text-[10px] px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                    !config.mirror_url || config.mirror_url === 'https://civitai.com/api/v1'
+                      ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 font-bold'
+                      : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  CivitAI Official
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, mirror_url: 'https://civitai.red/api/v1' })}
+                  className={`text-[10px] px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                    config.mirror_url === 'https://civitai.red/api/v1'
+                      ? 'bg-rose-600/30 border-rose-500 text-rose-300 font-bold'
+                      : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  CivitAI Red
+                </button>
+              </div>
+            </div>
             <input
               type="text"
               placeholder="https://civitai.com/api/v1"
@@ -659,6 +704,198 @@ export const SettingsTab: React.FC = () => {
               onChange={(e) => setConfig({ ...config, mirror_url: e.target.value })}
               className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
             />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Supports civitai.com, civitai.red, or custom proxy endpoints.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Hugging Face Hub Credentials & CLI */}
+      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-slate-100 font-bold text-base">
+            <span className="text-xl">🤗</span>
+            <h2>Hugging Face Hub Integration</h2>
+          </div>
+          <button
+            type="button"
+            disabled={testingHf}
+            onClick={async () => {
+              setTestingHf(true);
+              setHfStatus(null);
+              try {
+                if (window.civitaiAPI) {
+                  const res = await window.civitaiAPI.hfValidateToken(config.huggingface_token);
+                  if (res.valid) {
+                    setHfStatus({ success: true, message: `Connected as ${res.username || 'user'}!` });
+                  } else {
+                    setHfStatus({ success: false, message: res.error || 'Invalid HF token' });
+                  }
+                }
+              } catch (e: any) {
+                setHfStatus({ success: false, message: e.message });
+              } finally {
+                setTestingHf(false);
+              }
+            }}
+            className="px-3 py-1 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+          >
+            {testingHf ? 'Testing...' : 'Test Connection'}
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Hugging Face User Access Token (Optional — for gated models like FLUX.1, SD3, Llama)
+            </label>
+            <input
+              type="password"
+              placeholder="hf_..."
+              value={config.huggingface_token || ''}
+              onChange={(e) => setConfig({ ...config, huggingface_token: e.target.value })}
+              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-yellow-500 font-mono"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              Get an access token at <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-yellow-400 hover:underline">huggingface.co/settings/tokens</a>. Required for gated models.
+            </p>
+          </div>
+
+          {hfStatus && (
+            <div className={`text-xs px-3 py-2 rounded-xl border ${
+              hfStatus.success
+                ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
+                : 'bg-rose-950/40 border-rose-800/80 text-rose-300'
+            }`}>
+              {hfStatus.message}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Webhook Integration */}
+      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+        <div className="flex items-center gap-2 text-slate-100 font-bold text-base">
+          <DownloadCloud className="text-cyan-400" size={20} />
+          <h2>Webhook Event Integration</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300">
+                On Download Complete Webhook URL
+              </label>
+              <button
+                type="button"
+                disabled={testingWebhook === 'dl'}
+                onClick={async () => {
+                  const url = config.webhooks?.on_download_complete;
+                  if (!url) {
+                    setWebhookStatus({ type: 'dl', success: false, message: 'Please enter a webhook URL first.' });
+                    return;
+                  }
+                  setTestingWebhook('dl');
+                  setWebhookStatus(null);
+                  try {
+                    if (window.civitaiAPI) {
+                      const res = await window.civitaiAPI.testWebhook(url, 'on_download_complete');
+                      setWebhookStatus({
+                        type: 'dl',
+                        success: res.success,
+                        message: res.success ? `Delivered successfully (HTTP ${res.status})!` : `Failed: ${res.error || res.status}`,
+                      });
+                    }
+                  } catch (e: any) {
+                    setWebhookStatus({ type: 'dl', success: false, message: e.message });
+                  } finally {
+                    setTestingWebhook(null);
+                  }
+                }}
+                className="text-[10px] px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg font-semibold cursor-pointer"
+              >
+                {testingWebhook === 'dl' ? 'Testing...' : 'Test Webhook'}
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="http://localhost:8080/cmm/webhook"
+              value={config.webhooks?.on_download_complete || ''}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  webhooks: {
+                    ...(config.webhooks || {}),
+                    on_download_complete: e.target.value,
+                  },
+                })
+              }
+              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+            />
+            {webhookStatus && webhookStatus.type === 'dl' && (
+              <p className={`text-[11px] mt-1 ${webhookStatus.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {webhookStatus.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300">
+                On Update Available Webhook URL
+              </label>
+              <button
+                type="button"
+                disabled={testingWebhook === 'up'}
+                onClick={async () => {
+                  const url = config.webhooks?.on_update_available;
+                  if (!url) {
+                    setWebhookStatus({ type: 'up', success: false, message: 'Please enter a webhook URL first.' });
+                    return;
+                  }
+                  setTestingWebhook('up');
+                  setWebhookStatus(null);
+                  try {
+                    if (window.civitaiAPI) {
+                      const res = await window.civitaiAPI.testWebhook(url, 'on_update_available');
+                      setWebhookStatus({
+                        type: 'up',
+                        success: res.success,
+                        message: res.success ? `Delivered successfully (HTTP ${res.status})!` : `Failed: ${res.error || res.status}`,
+                      });
+                    }
+                  } catch (e: any) {
+                    setWebhookStatus({ type: 'up', success: false, message: e.message });
+                  } finally {
+                    setTestingWebhook(null);
+                  }
+                }}
+                className="text-[10px] px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg font-semibold cursor-pointer"
+              >
+                {testingWebhook === 'up' ? 'Testing...' : 'Test Webhook'}
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="http://localhost:8080/cmm/update"
+              value={config.webhooks?.on_update_available || ''}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  webhooks: {
+                    ...(config.webhooks || {}),
+                    on_update_available: e.target.value,
+                  },
+                })
+              }
+              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+            />
+            {webhookStatus && webhookStatus.type === 'up' && (
+              <p className={`text-[11px] mt-1 ${webhookStatus.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {webhookStatus.message}
+              </p>
+            )}
           </div>
         </div>
       </div>

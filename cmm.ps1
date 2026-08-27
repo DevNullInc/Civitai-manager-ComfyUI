@@ -26,13 +26,16 @@
 
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('start', 'stop', 'restart', 'status', 'package', 'dist')]
+  [ValidateSet('start', 'stop', 'restart', 'status', 'package', 'publish', 'dist', 'scan', 'download', 'check-updates', 'export', 'hf', 'workflows', 'help')]
   [string]$Action = 'start',
 
   [int]$Port = 5173,
 
   [switch]$Headless,
-  [switch]$NoWindow
+  [switch]$NoWindow,
+
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$RemainingArgs
 )
 
 $ErrorActionPreference = 'Stop'
@@ -450,5 +453,11 @@ switch ($Action) {
   }
   'dist' {
     Invoke-AppPackage
+  }
+  default {
+    Ensure-NodeInstalled
+    $cliScript = Join-Path $ProjectRoot 'bin\cmm.js'
+    $allCliArgs = @($Action) + $RemainingArgs
+    & node $cliScript @allCliArgs
   }
 }

@@ -15,6 +15,7 @@ import { computeFileSHA256 } from '../utils/hash';
 import { sanitizeFileName } from '../utils/pathUtils';
 import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
+import { webhookService } from './webhookService';
 
 export class DownloadManager {
   private tasks: Map<string, DownloadTask> = new Map();
@@ -207,7 +208,7 @@ export class DownloadManager {
     try {
       const makeRequest = async (useRange: boolean): Promise<AxiosResponse> => {
         const headers: Record<string, string> = {
-          'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.1',
+          'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
         };
         if (useRange && existingBytes > 0) {
           headers['Range'] = `bytes=${existingBytes}-`;
@@ -353,6 +354,9 @@ export class DownloadManager {
       task.speedBps = 0;
       task.isHashMismatch = false;
       logger.info(`Successfully completed download: ${task.fileName} -> ${resolvedPath}`);
+      webhookService.triggerDownloadComplete(task).catch((err) => {
+        logger.warn('Error triggering download complete webhook:', err);
+      });
     } catch (err: any) {
       this.activeDownloads.delete(id);
       if (axios.isCancel(err)) {

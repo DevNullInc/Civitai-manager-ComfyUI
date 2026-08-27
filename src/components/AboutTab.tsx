@@ -29,7 +29,7 @@ export function AboutTab() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filterLevel, setFilterLevel] = useState<'all' | 'error' | 'warn'>('all');
   const [copied, setCopied] = useState(false);
-  const [sysInfo, setSysInfo] = useState<any>({ version: '1.2.0' });
+  const [sysInfo, setSysInfo] = useState<any>({ version: '1.3.0' });
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export function AboutTab() {
                   CivitAI Model Manager
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  v{sysInfo.version || '1.2.0'}
+                  v{sysInfo.version || '1.3.0'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   ComfyUI Edition

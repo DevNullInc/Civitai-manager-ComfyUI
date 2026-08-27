@@ -12,6 +12,7 @@ import { CivitAIModelVersion } from '../types/civitai';
 import { civitaiClient } from './civitaiClient';
 import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
+import { webhookService } from './webhookService';
 
 export interface UpdateInfo {
   currentVersionId: number;
@@ -169,6 +170,11 @@ export class VersionManager {
     }
 
     logger.info(`Batch update check finished. Checked ${total} models, found ${updatesFound} update(s).`);
+    if (modelsWithUpdates.length > 0) {
+      webhookService.triggerUpdateAvailable(modelsWithUpdates).catch((err) => {
+        logger.warn('Error triggering update available webhook:', err);
+      });
+    }
     return {
       totalChecked: total,
       updatesFound,

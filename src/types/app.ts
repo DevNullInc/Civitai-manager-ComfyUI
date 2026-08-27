@@ -67,11 +67,18 @@ export interface FolderConfig {
   };
 }
 
+export interface WebhookConfig {
+  on_download_complete?: string;
+  on_update_available?: string;
+}
+
 export interface AppConfig {
   comfyui_root: string;
   comfyui_folders: string[]; // Multi-folder list support
   civitai_api_key?: string;
   mirror_url?: string;
+  huggingface_token?: string;
+  webhooks?: WebhookConfig;
   folder_mappings: Record<string, string>;
   advanced_mappings: {
     filename_patterns: FilenamePatternRule[];
@@ -86,6 +93,23 @@ export interface AppConfig {
   strict_hash_verification?: boolean;
   max_concurrent_downloads?: number;
   default_download_folder?: string;
+}
+
+export interface WorkflowModelReference {
+  nodeId: string;
+  nodeType: string;
+  inputName: string;
+  modelName: string;
+  isInstalled: boolean;
+  localPath?: string;
+}
+
+export interface WorkflowInfo {
+  filePath: string;
+  fileName: string;
+  fileType: 'json' | 'png';
+  modelCount: number;
+  models: WorkflowModelReference[];
 }
 
 export interface DownloadTask {
