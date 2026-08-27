@@ -64,7 +64,6 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 
 ### 📁 Library Management & Persistent Scanner
 - **Persistent Background Scanning**: Folder indexing continues seamlessly across tab switches
-- **Draggable Floating HUD**: Real-time progress percentage, active file status, and instant stop controls
 - **Multi-Criteria Sorting**: Sort by Name (A-Z), Model Type, File Size, or Date Modified (Asc / Desc) with saved preferences
 - **Dual Delete Modes**: Separate "Remove from Library Only" and "Delete from Disk & Library" dialog options
 - **LLM & HuggingFace Hub Cache Resolution**: Converts raw `/blobs/<hash>` names into clean, readable model folder titles (e.g. `models--Org--ModelName`) with responsive layout protection
