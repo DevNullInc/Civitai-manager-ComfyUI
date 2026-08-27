@@ -29,6 +29,7 @@ import { SettingsTab } from './components/SettingsTab';
 import { AboutTab } from './components/AboutTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ScanStatusBar } from './components/ScanStatusBar';
+import { DownloadFolderPromptModal } from './components/DownloadFolderPromptModal';
 import { ScanProvider } from './context/ScanContext';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
 
@@ -57,7 +58,14 @@ function AppContent() {
     return 'browse';
   });
   const [activeDownloadsCount, setActiveDownloadsCount] = useState<number>(0);
-  const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [pendingDownloadPrompt, setPendingDownloadPrompt] = useState<{
+    model: CivitAIModel;
+    version: CivitAIModelVersion;
+    taskParams: any;
+    folders: string[];
+  } | null>(null);
+
   const mainRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,28 +83,24 @@ function AppContent() {
       });
     }
 
-    const handleGlobalScroll = () => {
-      const mainTop = mainRef.current ? mainRef.current.scrollTop : 0;
-      const winTop = window.scrollY || document.documentElement.scrollTop || 0;
-      if (mainTop > 150 || winTop > 150) {
-        setShowScrollTop(true);
-      } else {
-        setShowScrollTop(false);
-      }
+    const handleScroll = () => {
+      const scrollPosition = mainRef.current?.scrollTop || window.scrollY;
+      setShowScrollTop(scrollPosition > 400);
     };
 
-    window.addEventListener('scroll', handleGlobalScroll, true);
-    return () => window.removeEventListener('scroll', handleGlobalScroll, true);
-  }, []);
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const scrollTop = e.currentTarget.scrollTop;
-    if (scrollTop > 150) {
-      setShowScrollTop(true);
-    } else {
-      setShowScrollTop(false);
+    const element = mainRef.current;
+    if (element) {
+      element.addEventListener('scroll', handleScroll);
     }
-  };
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      if (element) {
+        element.removeEventListener('scroll', handleScroll);
+      }
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const scrollToTop = () => {
     if (mainRef.current) {
@@ -123,8 +127,57 @@ function AppContent() {
       sha256: primaryFile?.hashes?.SHA256,
     };
 
-    if (window.civitaiAPI) {
+    if (!window.civitaiAPI) return;
+
+    try {
+      const config = await window.civitaiAPI.getConfig();
+      const rawFolders = (config?.comfyui_folders && config.comfyui_folders.length > 0)
+        ? config.comfyui_folders
+        : (config?.comfyui_root ? [config.comfyui_root] : []);
+      const folders = rawFolders.filter(Boolean);
+
+      // If user has multiple folders and hasn't locked a default download destination, prompt them
+      if (folders.length > 1 && !config?.default_download_folder) {
+        setPendingDownloadPrompt({
+          model,
+          version,
+          taskParams,
+          folders,
+        });
+        return;
+      }
+
+      // Single folder or locked default folder
+      const targetRoot = config?.default_download_folder || folders[0] || '';
+      await window.civitaiAPI.addDownload({ ...taskParams, targetRoot });
+    } catch (err) {
+      console.error('Failed to initiate download:', err);
       await window.civitaiAPI.addDownload(taskParams);
+    }
+  };
+
+  const handleConfirmFolderDownload = async (selectedFolder: string, rememberChoice: boolean) => {
+    if (!pendingDownloadPrompt || !window.civitaiAPI) return;
+    const { taskParams } = pendingDownloadPrompt;
+
+    try {
+      if (rememberChoice) {
+        const config = await window.civitaiAPI.getConfig();
+        if (config) {
+          await window.civitaiAPI.saveConfig({
+            ...config,
+            default_download_folder: selectedFolder,
+          });
+        }
+      }
+      await window.civitaiAPI.addDownload({
+        ...taskParams,
+        targetRoot: selectedFolder,
+      });
+    } catch (err) {
+      console.error('Error during confirmed download:', err);
+    } finally {
+      setPendingDownloadPrompt(null);
     }
   };
 
@@ -239,7 +292,6 @@ function AppContent() {
       {/* Scrollable Container */}
       <main
         ref={mainRef}
-        onScroll={handleScroll}
         className="flex-1 overflow-y-auto bg-[#07090e] relative scroll-smooth"
       >
         {/* Background Radial Glow Accents */}
@@ -255,6 +307,17 @@ function AppContent() {
             {activeTab === 'about' && <AboutTab />}
           </ErrorBoundary>
         </div>
+
+        {/* Download Folder Prompt Modal */}
+        {pendingDownloadPrompt && (
+          <DownloadFolderPromptModal
+            modelName={pendingDownloadPrompt.model.name}
+            versionName={pendingDownloadPrompt.version.name}
+            folders={pendingDownloadPrompt.folders}
+            onConfirm={handleConfirmFolderDownload}
+            onCancel={() => setPendingDownloadPrompt(null)}
+          />
+        )}
 
         {/* Floating Return to Top Button */}
         {showScrollTop && (

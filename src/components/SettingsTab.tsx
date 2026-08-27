@@ -30,6 +30,7 @@ import {
   Upload,
   Download,
   Code,
+  HardDrive,
 } from 'lucide-react';
 import { AppConfig, ConflictStrategy, FilenamePatternRule, DEFAULT_FOLDER_MAP, DEFAULT_FILENAME_PATTERNS } from '../types/app';
 
@@ -47,6 +48,7 @@ export const SettingsTab: React.FC = () => {
     nsfw_blur_enabled: true,
     strict_hash_verification: true,
     max_concurrent_downloads: 2,
+    default_download_folder: '',
   });
 
   const [saving, setSaving] = useState(false);
@@ -105,6 +107,7 @@ export const SettingsTab: React.FC = () => {
               typeof loaded.max_concurrent_downloads === 'number'
                 ? loaded.max_concurrent_downloads
                 : 2,
+            default_download_folder: loaded.default_download_folder || '',
           });
         }
       }
@@ -140,10 +143,14 @@ export const SettingsTab: React.FC = () => {
   };
 
   const handleRestart = async () => {
-    if (!confirm('Are you sure you want to restart the application?')) return;
+    if (!confirm('Are you sure you want to restart the application? This will reload backend services and refresh the interface.')) return;
     setAppAction('restarting');
     try {
-      await window.civitaiAPI.restartApp();
+      if (window.civitaiAPI && typeof window.civitaiAPI.restartApp === 'function') {
+        await window.civitaiAPI.restartApp();
+      } else {
+        window.location.reload();
+      }
     } catch (e) {
       setAppAction(null);
       alert('Failed to restart app. You may need to restart manually.');
@@ -394,7 +401,7 @@ export const SettingsTab: React.FC = () => {
           ) : (
             <Power size={20} />
           )}
-          <span>{appAction === 'restarting' ? 'Restarting application... The window will close and reopen momentarily.' : 'Shutting down application...'}</span>
+          <span>{appAction === 'restarting' ? 'Restarting backend services and refreshing interface...' : 'Shutting down application...'}</span>
         </div>
       )}
 
@@ -520,6 +527,44 @@ export const SettingsTab: React.FC = () => {
             ))
           )}
         </div>
+
+        {/* Default Download Destination (if multiple folders) */}
+        {config.comfyui_folders.length > 1 && (
+          <div className="pt-4 border-t border-slate-800/80 space-y-2 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <HardDrive size={14} className="text-purple-400" />
+                <span>Default Download Destination</span>
+              </label>
+              {config.default_download_folder && (
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, default_download_folder: '' })}
+                  className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 hover:underline cursor-pointer"
+                >
+                  Reset (Always Ask)
+                </button>
+              )}
+            </div>
+            <select
+              value={config.default_download_folder || ''}
+              onChange={(e) => setConfig({ ...config, default_download_folder: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono cursor-pointer"
+            >
+              <option value="">Always ask when downloading (Prompt if multiple folders)</option>
+              {config.comfyui_folders.map((folderPath, i) => (
+                <option key={folderPath} value={folderPath}>
+                  Folder #{i + 1} ({i === 0 ? 'Primary' : 'Secondary'}): {folderPath}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500">
+              {config.default_download_folder
+                ? `Downloads will automatically route into this folder without prompting.`
+                : `A prompt will allow you to choose which ComfyUI folder to save models into whenever you start a download.`}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* CivitAI API & Credentials */}
