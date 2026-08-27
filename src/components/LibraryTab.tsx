@@ -177,9 +177,50 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     );
   };
 
-  const handleOpenCivitai = (model: LocalModel) => {
-    const isNsfw = isModelNsfw(model);
-    const domain = isNsfw ? 'https://civitai.red' : 'https://civitai.com';
+  const isHuggingFaceModel = (model: LocalModel): boolean => {
+    const fn = (model.fileName || '').toLowerCase();
+    const fp = (model.filePath || '').toLowerCase();
+    return (
+      fn.endsWith('.gguf') ||
+      fp.endsWith('.gguf') ||
+      fn.startsWith('models--') ||
+      fp.includes('models--') ||
+      fp.includes('/gguf/') ||
+      fp.includes('\\gguf\\') ||
+      model.modelType === ('GGUF' as any)
+    );
+  };
+
+  const getHuggingFaceQuery = (model: LocalModel): string => {
+    // If it's a models--Author--Repo path or filename:
+    const targetStr = model.fileName.startsWith('models--') ? model.fileName : model.filePath;
+    const match = targetStr.match(/models--([^/\\]+)/);
+    if (match && match[1]) {
+      return match[1].replace(/--/g, '/');
+    }
+    if (model.fileName.startsWith('models--')) {
+      return model.fileName.replace(/^models--/, '').replace(/--/g, '/');
+    }
+
+    // For .gguf files, strip extension and clean up
+    return model.fileName.replace(/\.gguf$/i, '').trim();
+  };
+
+  const getModelExternalUrl = (
+    model: LocalModel
+  ): { url: string; label: string; isHf: boolean; isNsfw: boolean } => {
+    if (isHuggingFaceModel(model)) {
+      const q = getHuggingFaceQuery(model);
+      return {
+        url: `https://huggingface.co/search/full-text?q=${encodeURIComponent(q)}`,
+        label: `Search on Hugging Face (${q})`,
+        isHf: true,
+        isNsfw: false,
+      };
+    }
+
+    const nsfw = isModelNsfw(model);
+    const domain = nsfw ? 'https://civitai.red' : 'https://civitai.com';
     let url = '';
 
     if (model.civitaiModelId) {
@@ -189,12 +230,30 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     } else {
       // Clean query string from filename
       const cleanName = model.fileName
-        .replace(/\.(safetensors|pt|ckpt|bin|gguf)$/i, '')
+        .replace(/\.(safetensors|pt|ckpt|bin)$/i, '')
         .replace(/^models--/, '')
         .replace(/_/g, ' ')
         .trim();
       url = `${domain}/models?query=${encodeURIComponent(cleanName)}`;
     }
+
+    return {
+      url,
+      label: nsfw
+        ? model.civitaiModelId
+          ? 'Open model on CivitAI.red (NSFW)'
+          : 'Search model on CivitAI.red (NSFW)'
+        : model.civitaiModelId
+        ? 'Open model on CivitAI.com (SFW)'
+        : 'Search model on CivitAI.com',
+      isHf: false,
+      isNsfw: nsfw,
+    };
+  };
+
+  const handleOpenModelLink = (model: LocalModel) => {
+    const { url } = getModelExternalUrl(model);
+    if (!url) return;
 
     if (window.civitaiAPI && typeof window.civitaiAPI.openExternal === 'function') {
       window.civitaiAPI.openExternal(url);
@@ -754,26 +813,25 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                       </button>
                     )}
 
-                    {/* CivitAI External Link Button */}
-                    <button
-                      onClick={() => handleOpenCivitai(model)}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                        isModelNsfw(model)
-                          ? 'text-rose-400 hover:text-rose-300 hover:bg-rose-500/15'
-                          : 'text-purple-400 hover:text-purple-300 hover:bg-purple-500/15'
-                      }`}
-                      title={
-                        isModelNsfw(model)
-                          ? model.civitaiModelId
-                            ? `Open model on CivitAI.red (NSFW)`
-                            : `Search model on CivitAI.red (NSFW)`
-                          : model.civitaiModelId
-                          ? `Open model on CivitAI.com (SFW)`
-                          : `Search model on CivitAI.com`
-                      }
-                    >
-                      <ExternalLink size={16} />
-                    </button>
+                    {/* External Link Button (Hugging Face for GGUF/blobs, CivitAI / CivitAI.red for others) */}
+                    {(() => {
+                      const { label, isHf, isNsfw } = getModelExternalUrl(model);
+                      return (
+                        <button
+                          onClick={() => handleOpenModelLink(model)}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            isHf
+                              ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/15'
+                              : isNsfw
+                              ? 'text-rose-400 hover:text-rose-300 hover:bg-rose-500/15'
+                              : 'text-purple-400 hover:text-purple-300 hover:bg-purple-500/15'
+                          }`}
+                          title={label}
+                        >
+                          <ExternalLink size={16} />
+                        </button>
+                      );
+                    })()}
 
                     <button
                       onClick={() => handleOpenFolder(model.filePath)}
