@@ -17,3 +17,4 @@ build-release.*
 build-local.*
 build-all.*
 migrations/
+Civitai-manager-ComfyUI.code-workspace
