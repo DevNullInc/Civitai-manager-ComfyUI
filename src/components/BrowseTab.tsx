@@ -187,79 +187,102 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
     'Detection',
   ];
 
+  const PAGE_SIZE = 48;
+
   const fetchModels = async (pageToFetch?: number, cursorOverride?: string) => {
     const pageNum = pageToFetch ?? currentPage;
-    const targetCursor = cursorOverride !== undefined ? cursorOverride : (pageNum > 1 ? pageCursors[pageNum] : undefined);
+    const initialCursor = cursorOverride !== undefined ? cursorOverride : (pageNum > 1 ? pageCursors[pageNum] : undefined);
 
     setLoading(true);
     setError(null);
     const startTime = performance.now();
 
-    const params: SearchParams = {
-      query: query.trim() || undefined,
-      types: selectedType !== 'All' ? [selectedType as ModelType] : undefined,
-      baseModels: selectedBaseModel !== 'All' ? [selectedBaseModel] : undefined,
-      sort,
-      period,
-      nsfw: includeNsfw,
-      limit: 50,
-      page: pageNum,
-      cursor: targetCursor,
-    };
-
-    // Construct preview URL for debug panel
-    const urlParams = new URLSearchParams();
-    if (params.query) urlParams.append('query', params.query);
-    if (params.types) params.types.forEach((t) => urlParams.append('types', t));
-    if (params.baseModels) params.baseModels.forEach((b) => urlParams.append('baseModels', b));
-    if (params.sort) urlParams.append('sort', params.sort);
-    if (params.period) urlParams.append('period', params.period);
-    if (params.nsfw !== undefined) urlParams.append('nsfw', String(params.nsfw));
-    urlParams.append('limit', '50');
-    if (targetCursor) {
-      urlParams.append('cursor', targetCursor);
-    } else if (pageNum > 1) {
-      urlParams.append('page', String(pageNum));
-    }
-
-    const constructedUrl = `https://civitai.com/api/v1/models?${urlParams.toString()}`;
-
-    setDebugInfo({
-      timestamp: new Date().toLocaleTimeString(),
-      status: 'loading',
-      requestParams: params,
-      apiUrl: constructedUrl,
-    });
-
     try {
-      let result;
-      if (window.civitaiAPI) {
-        result = await window.civitaiAPI.searchModels(params);
-      } else {
-        result = { items: [] };
+      const collected: CivitAIModel[] = [];
+      let currentCursor = initialCursor;
+      let finalNextCursor: string | undefined = undefined;
+      let lastMeta: any = { currentPage: pageNum, pageSize: PAGE_SIZE };
+      let iterations = 0;
+      const maxIterations = 8; // Auto-accumulate up to 8 batches (up to 800 CivitAI items) to fill 48 clean items
+
+      while (collected.length < PAGE_SIZE && iterations < maxIterations) {
+        iterations++;
+        const requestLimit = (!includeNsfw || maxNsfwLevel < 5) ? 100 : PAGE_SIZE;
+
+        const params: SearchParams = {
+          query: query.trim() || undefined,
+          types: selectedType !== 'All' ? [selectedType as ModelType] : undefined,
+          baseModels: selectedBaseModel !== 'All' ? [selectedBaseModel] : undefined,
+          sort,
+          period,
+          nsfw: includeNsfw,
+          limit: requestLimit,
+          page: pageNum,
+          cursor: currentCursor,
+        };
+
+        let result: any = { items: [] };
+        if (window.civitaiAPI) {
+          result = await window.civitaiAPI.searchModels(params);
+        }
+
+        const items: CivitAIModel[] = result?.items || [];
+        lastMeta = result?.metadata || lastMeta;
+
+        // Filter items according to NSFW preferences
+        const passing = items.filter((model) => {
+          const isNsfw = isModelNsfwOrMature(model);
+          const level = mapCivitaiNsfwLevel(model.nsfwLevel ?? (model.nsfw ? 4 : 1));
+
+          if (!includeNsfw) {
+            if (isNsfw || level > 2) return false;
+          } else {
+            if (level > maxNsfwLevel) return false;
+          }
+          return true;
+        });
+
+        collected.push(...passing);
+
+        // Find next cursor from metadata or nextPage
+        let nextCur = lastMeta.nextCursor;
+        if (!nextCur && lastMeta.nextPage) {
+          try {
+            const parsedUrl = new URL(lastMeta.nextPage);
+            const c = parsedUrl.searchParams.get('cursor');
+            if (c) nextCur = c;
+          } catch (e) {}
+        }
+
+        finalNextCursor = nextCur;
+        currentCursor = nextCur;
+
+        // If no more items returned or no next cursor, end of catalog reached
+        if (!nextCur || items.length === 0) {
+          break;
+        }
+
+        // If we filled our 48 items, stop
+        if (collected.length >= PAGE_SIZE) {
+          break;
+        }
       }
 
-      const items = result?.items || [];
+      const finalItems = collected.slice(0, PAGE_SIZE);
       const durationMs = Math.round(performance.now() - startTime);
 
-      setModels(items);
-      const meta = result?.metadata || { currentPage: pageNum, pageSize: 50 };
-      setMetadata(meta);
+      setModels(finalItems);
+      setMetadata({
+        ...lastMeta,
+        currentPage: pageNum,
+        pageSize: PAGE_SIZE,
+        nextCursor: finalNextCursor,
+      });
 
-      // Extract nextCursor from metadata or from nextPage url if present
-      let nextCursor = meta.nextCursor;
-      if (!nextCursor && meta.nextPage) {
-        try {
-          const parsedUrl = new URL(meta.nextPage);
-          const c = parsedUrl.searchParams.get('cursor');
-          if (c) nextCursor = c;
-        } catch (e) {}
-      }
-
-      if (nextCursor) {
+      if (finalNextCursor) {
         setPageCursors((prev) => ({
           ...prev,
-          [pageNum + 1]: nextCursor,
+          [pageNum + 1]: finalNextCursor,
         }));
       }
 
@@ -267,9 +290,9 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
         timestamp: new Date().toLocaleTimeString(),
         durationMs,
         status: 'success',
-        requestParams: params,
-        apiUrl: constructedUrl,
-        resultCount: items.length,
+        requestParams: { query, selectedType, selectedBaseModel, sort, period, includeNsfw, pageNum },
+        apiUrl: `https://civitai.com/api/v1/models?limit=${PAGE_SIZE}&page=${pageNum}`,
+        resultCount: finalItems.length,
       });
     } catch (err: any) {
       const durationMs = Math.round(performance.now() - startTime);
@@ -280,12 +303,11 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
         timestamp: new Date().toLocaleTimeString(),
         durationMs,
         status: 'error',
-        requestParams: params,
-        apiUrl: constructedUrl,
+        requestParams: {},
+        apiUrl: 'https://civitai.com/api/v1/models',
         resultCount: 0,
         error: errMsg,
       });
-      // Automatically expand debug info on error so the user sees the issue immediately
       setShowDebug(true);
     } finally {
       setLoading(false);
@@ -370,28 +392,10 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
     setCurrentPage(1);
     setPageCursors({});
     fetchModels(1, '');
-  }, [selectedType, selectedBaseModel, sort, period, includeNsfw]);
+  }, [selectedType, selectedBaseModel, sort, period, includeNsfw, maxNsfwLevel]);
 
-  // Strict NSFW & Mature Content Filtering for Clean View
-  const displayedModels = React.useMemo(() => {
-    return models.filter((model) => {
-      const isNsfw = isModelNsfwOrMature(model);
-      const level = mapCivitaiNsfwLevel(model.nsfwLevel ?? (model.nsfw ? 4 : 1));
-
-      if (!includeNsfw) {
-        // Hide all adult, mature, or R/X content when "Include Mature Content" is unchecked
-        if (isNsfw || level > 2) {
-          return false;
-        }
-      } else {
-        // When checked, respect Settings slider (1 to 5)
-        if (level > maxNsfwLevel) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [models, includeNsfw, maxNsfwLevel]);
+  // Models are already filtered and stacked to exactly 48 items in fetchModels
+  const displayedModels = models;
 
   // Fetch local library models and ignored updates list
   const fetchLocalLibraryStatus = async () => {
@@ -815,9 +819,9 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
             {/* Next Page */}
             <button
               onClick={() => handlePageChange(currentPage + 1)}
-              disabled={!metadata.nextPage && !metadata.nextCursor && !pageCursors[currentPage + 1] && displayedModels.length < 50}
+              disabled={!metadata.nextPage && !metadata.nextCursor && !pageCursors[currentPage + 1] && displayedModels.length < PAGE_SIZE}
               className={`px-4 py-2 rounded-xl border flex items-center gap-1.5 transition-all ${
-                !metadata.nextPage && !metadata.nextCursor && !pageCursors[currentPage + 1] && displayedModels.length < 50
+                !metadata.nextPage && !metadata.nextCursor && !pageCursors[currentPage + 1] && displayedModels.length < PAGE_SIZE
                   ? 'bg-slate-950/40 border-slate-900 text-slate-600 cursor-not-allowed'
                   : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold border-transparent shadow-lg shadow-purple-600/25 cursor-pointer glow-purple'
               }`}
