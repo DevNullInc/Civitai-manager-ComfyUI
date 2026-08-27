@@ -312,7 +312,7 @@ export const SettingsTab: React.FC = () => {
     try {
       const exportData = {
         _format: 'civitai-model-manager-settings',
-        version: '1.1.0',
+        version: '1.2.0',
         exportedAt: new Date().toISOString(),
         settings: config,
       };
