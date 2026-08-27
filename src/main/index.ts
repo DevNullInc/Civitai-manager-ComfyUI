@@ -1042,25 +1042,23 @@ logger.onLog((logPayload) => {
   }
 });
 
-// Single Instance Lock: Ensure only one instance of the app runs at a time in production.
-const gotTheLock = app.isPackaged ? app.requestSingleInstanceLock() : true;
+// Single Instance Lock: Ensure only one instance of the app runs at a time.
+const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   logger.info('Another instance of CivitAI Model Manager is already running. Focusing existing window and exiting.');
   app.quit();
 } else {
-  if (app.isPackaged) {
-    app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
-      logger.info('Second instance detected. Restoring and focusing existing window.');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        if (mainWindow.isMinimized()) {
-          mainWindow.restore();
-        }
-        mainWindow.show();
-        mainWindow.focus();
+  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+    logger.info('Second instance detected. Restoring and focusing existing window.');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
       }
-    });
-  }
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
 
   app.whenReady().then(async () => {
     await dbManager.init();
