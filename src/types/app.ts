@@ -111,6 +111,8 @@ export interface DownloadTask {
   computedPath: string;
   requiresAuth?: boolean;
   isHashMismatch?: boolean;
+  deleteOldVersionFile?: string;
+  deleteOldModelId?: string;
 }
 
 export interface LocalModel {
@@ -128,11 +130,13 @@ export interface LocalModel {
   civitaiCreator?: string;
   previewUrl?: string;
   modelType?: ModelType;
+  nsfw?: boolean;
   isMatched: boolean;
   hasUpdate?: boolean;
   updateVersionId?: number;
   updateVersionName?: string;
   updateDownloadUrl?: string;
+  ignoredVersionId?: number;
   isDuplicate?: boolean;
 }
 

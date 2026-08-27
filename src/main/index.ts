@@ -396,12 +396,13 @@ function startHttpBridgeServer() {
       } else if (url === '/api/delete-local-model' && req.method === 'POST') {
         const body = await getBody();
         const model = await dbManager.get('SELECT * FROM local_models WHERE id = ?', [body.id]);
+        const deleteFromDisk = body.deleteFromDisk !== false;
         if (!model) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: 'Model not found' }));
         } else {
           try {
-            if (fs.existsSync(model.file_path)) {
+            if (deleteFromDisk && fs.existsSync(model.file_path)) {
               fs.unlinkSync(model.file_path);
             }
             await dbManager.run('DELETE FROM local_models WHERE id = ?', [body.id]);
@@ -431,6 +432,64 @@ function startHttpBridgeServer() {
         const status = libraryScanner.getScanStatus();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(status));
+      } else if (url === '/api/ignore-model-update' && req.method === 'POST') {
+        const body = await getBody();
+        const success = await versionManager.ignoreUpdate(body.modelId, body.versionId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success }));
+      } else if (url === '/api/unignore-model-update' && req.method === 'POST') {
+        const body = await getBody();
+        const success = await versionManager.unignoreUpdate(body.modelId, body.versionId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success }));
+      } else if (url === '/api/get-ignored-updates' && req.method === 'GET') {
+        const ignored = await versionManager.getIgnoredUpdates();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(ignored));
+      } else if (url === '/api/ignore-duplicate-set' && req.method === 'POST') {
+        const body = await getBody();
+        const success = await libraryScanner.ignoreDuplicateSet(body.sha256, body.count || 2);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success }));
+      } else if (url === '/api/unignore-duplicate-set' && req.method === 'POST') {
+        const body = await getBody();
+        const success = await libraryScanner.unignoreDuplicateSet(body.sha256);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success }));
+      } else if (url === '/api/get-ignored-duplicates' && req.method === 'GET') {
+        const ignored = await libraryScanner.getIgnoredDuplicates();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(ignored));
+      } else if (url === '/api/match-unidentified-models' && req.method === 'POST') {
+        const result = await libraryScanner.matchUnidentifiedModels();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if (url === '/api/export-backup-zip' && req.method === 'GET') {
+        const zipBuffer = await backupService.createBackupZip();
+        const filename = `cmm-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+        res.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': zipBuffer.length,
+        });
+        res.end(zipBuffer);
+        return;
+      } else if (url === '/api/import-backup-zip' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (chunk) => chunks.push(chunk));
+        req.on('end', async () => {
+          try {
+            const fullBuffer = Buffer.concat(chunks);
+            const result = await backupService.restoreBackup(fullBuffer);
+            await libraryScanner.flagDuplicates();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (e: any) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: e.message }));
+          }
+        });
+        return;
       } else if (url === '/api/clear-library' && req.method === 'POST') {
         await dbManager.run('DELETE FROM local_models;');
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -478,37 +537,6 @@ function registerIpcHandlers() {
     } catch (e: any) {
       logger.error('Failed to clear library database:', e);
       return { success: false, error: e?.message || 'Unknown error' };
-    }
-  });
-
-  // Delete a local model from the database and filesystem
-  ipcMain.handle('delete-local-model', async (_event: unknown, modelId: string) => {
-    // Get model info first
-    const model = await dbManager.get('SELECT * FROM local_models WHERE id = ?', [modelId]);
-    if (!model) return { success: false, error: 'Model not found' };
-    try {
-      if (fs.existsSync(model.file_path)) {
-        fs.unlinkSync(model.file_path);
-      }
-      await dbManager.run('DELETE FROM local_models WHERE id = ?', [modelId]);
-      await libraryScanner.flagDuplicates();
-      return { success: true };
-    } catch (e: any) {
-      logger.error('Failed to delete model', e);
-      return { success: false, error: e?.message || 'Unknown error' };
-    }
-  });
-
-  // Open folder / reveal file in explorer
-  ipcMain.handle('open-folder', (_event: unknown, filePath: string) => {
-    try {
-      if (filePath) {
-        shell.showItemInFolder(filePath);
-        return { success: true };
-      }
-      return { success: false, error: 'No path provided' };
-    } catch (e: any) {
-      return { success: false, error: e?.message };
     }
   });
 
@@ -663,6 +691,10 @@ function registerIpcHandlers() {
     return libraryScanner.getScanStatus();
   });
 
+  ipcMain.handle('match-unidentified-models', async () => {
+    return await libraryScanner.matchUnidentifiedModels();
+  });
+
   ipcMain.handle('get-local-models', async () => {
     const rows = await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
     return rows.map((r: any) => ({
@@ -674,13 +706,16 @@ function registerIpcHandlers() {
       sha256: r.sha256,
       civitaiModelId: r.civitai_model_id,
       civitaiVersionId: r.civitai_version_id,
+      civitaiName: r.civitai_name || undefined,
       previewUrl: r.preview_url,
       modelType: r.model_type,
+      nsfw: !!r.nsfw,
       isMatched: !!r.civitai_version_id,
       hasUpdate: !!r.has_update,
       updateVersionId: r.update_version_id,
       updateVersionName: r.update_version_name,
       updateDownloadUrl: r.update_download_url,
+      ignoredVersionId: r.ignored_version_id,
       isDuplicate: !!r.is_duplicate,
     }));
   });
@@ -762,15 +797,116 @@ function registerIpcHandlers() {
     });
   });
 
-  ipcMain.handle('export-backup', async (_event: unknown, filePath: string) => {
-    await backupService.exportBackup(filePath);
-    return true;
+  ipcMain.handle('ignore-model-update', async (_event: unknown, modelId: number, versionId: number) => {
+    return await versionManager.ignoreUpdate(modelId, versionId);
   });
 
-  ipcMain.handle('import-backup', async (_event: unknown, filePath: string) => {
-    await backupService.importBackup(filePath);
-    return true;
+  ipcMain.handle('unignore-model-update', async (_event: unknown, modelId: number, versionId: number) => {
+    return await versionManager.unignoreUpdate(modelId, versionId);
   });
+
+  ipcMain.handle('get-ignored-updates', async () => {
+    return await versionManager.getIgnoredUpdates();
+  });
+
+  ipcMain.handle('export-backup', async (_event: unknown, targetFilePath?: string) => {
+    try {
+      let dest = targetFilePath;
+      if (!dest) {
+        const { dialog } = require('electron');
+        const defaultName = `cmm-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+        const result = await dialog.showSaveDialog({
+          title: 'Save Complete CMM Backup Archive (.zip)',
+          defaultPath: defaultName,
+          filters: [
+            { name: 'ZIP Archive (*.zip)', extensions: ['zip'] },
+            { name: 'All Files (*.*)', extensions: ['*'] },
+          ],
+        });
+        if (result.canceled || !result.filePath) return { success: false, canceled: true };
+        dest = result.filePath;
+      }
+      if (!dest) {
+        return { success: false, canceled: true };
+      }
+      await backupService.exportBackup(dest);
+      return { success: true, filePath: dest };
+    } catch (e: any) {
+      logger.error('Failed to export backup:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('import-backup', async (_event: unknown, sourceFilePath?: string | Buffer) => {
+    try {
+      let src = sourceFilePath;
+      if (!src) {
+        const { dialog } = require('electron');
+        const result = await dialog.showOpenDialog({
+          title: 'Select CMM Backup Archive to Restore',
+          properties: ['openFile'],
+          filters: [
+            { name: 'CMM Backup (*.zip, *.json)', extensions: ['zip', 'json'] },
+            { name: 'All Files (*.*)', extensions: ['*'] },
+          ],
+        });
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+          return { success: false, canceled: true };
+        }
+        src = result.filePaths[0];
+      }
+      if (!src) {
+        return { success: false, canceled: true };
+      }
+      const restoreResult = await backupService.restoreBackup(src);
+      await libraryScanner.flagDuplicates();
+      return restoreResult;
+    } catch (e: any) {
+      logger.error('Failed to import backup:', e);
+      return { success: false, error: e.message };
+    }
+  });
+  ipcMain.handle('delete-local-model', async (_event: unknown, id: string, deleteFromDisk: boolean = true) => {
+    const model = await dbManager.get('SELECT * FROM local_models WHERE id = ?', [id]);
+    if (!model) {
+      return { success: false, error: 'Model not found' };
+    }
+    try {
+      if (deleteFromDisk && fs.existsSync(model.file_path)) {
+        fs.unlinkSync(model.file_path);
+      }
+      await dbManager.run('DELETE FROM local_models WHERE id = ?', [id]);
+      await libraryScanner.flagDuplicates();
+      return { success: true };
+    } catch (delErr: any) {
+      logger.error(`Failed to delete local model ${id}:`, delErr);
+      return { success: false, error: delErr.message };
+    }
+  });
+
+  ipcMain.handle('open-folder', async (_event: unknown, filePath: string) => {
+    if (filePath) {
+      try {
+        const { exec } = require('child_process');
+        exec(`explorer.exe /select,"${filePath}"`);
+        return true;
+      } catch (e) {}
+    }
+    return false;
+  });
+
+  ipcMain.handle('ignore-duplicate-set', async (_event: unknown, sha256: string, count: number = 2) => {
+    return await libraryScanner.ignoreDuplicateSet(sha256, count);
+  });
+
+  ipcMain.handle('unignore-duplicate-set', async (_event: unknown, sha256: string) => {
+    return await libraryScanner.unignoreDuplicateSet(sha256);
+  });
+
+  ipcMain.handle('get-ignored-duplicates', async () => {
+    return await libraryScanner.getIgnoredDuplicates();
+  });
+
   // External Link & System Info
   ipcMain.handle('open-external', async (_event: unknown, url: string) => {
     if (url && (url.startsWith('https://') || url.startsWith('http://'))) {

@@ -80,6 +80,13 @@ export interface CivitAIModelVersion {
   downloadUrl: string;
   files: CivitAIFile[];
   images?: CivitAIImage[];
+  type?: ModelType;
+  model?: {
+    name?: string;
+    type?: ModelType;
+    nsfw?: boolean;
+    poi?: boolean;
+  };
 }
 
 export interface CivitAICreator {

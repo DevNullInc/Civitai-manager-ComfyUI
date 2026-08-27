@@ -8,61 +8,328 @@
  * (at your option) any later version.
  */
 import fs from 'fs';
+import path from 'path';
+import AdmZip from 'adm-zip';
 import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
 
-export interface BackupData {
+export interface BackupManifest {
+  format: 'civitai-model-manager-backup-zip' | 'civitai-model-manager-settings';
   version: string;
-  timestamp: string;
-  config: any[];
-  localModels: any[];
-  downloads: any[];
+  createdAt: string;
+  stats: {
+    modelsCount: number;
+    downloadsCount: number;
+    configCount: number;
+    ignoredUpdatesCount: number;
+    ignoredDuplicatesCount: number;
+  };
+}
+
+export interface RestoreResult {
+  success: boolean;
+  message?: string;
+  stats?: {
+    modelsRestored: number;
+    downloadsRestored: number;
+    configKeysRestored: number;
+    ignoredUpdatesRestored: number;
+    ignoredDuplicatesRestored: number;
+  };
 }
 
 export class BackupService {
-  async exportBackup(destinationPath: string): Promise<void> {
+  /**
+   * Generates a complete .zip backup archive in memory or returns a Buffer.
+   */
+  async createBackupZip(): Promise<Buffer> {
     try {
-      const config = await dbManager.all('SELECT * FROM app_config;');
-      const localModels = await dbManager.all('SELECT * FROM local_models;');
-      const downloads = await dbManager.all('SELECT * FROM downloads;');
+      const configRows = (await dbManager.all('SELECT * FROM app_config;')) || [];
+      const modelRows = (await dbManager.all('SELECT * FROM local_models;')) || [];
+      const downloadRows = (await dbManager.all('SELECT * FROM downloads;')) || [];
+      
+      let ignoredUpdatesRows: any[] = [];
+      try {
+        ignoredUpdatesRows = (await dbManager.all('SELECT * FROM ignored_model_updates;')) || [];
+      } catch (e) {}
 
-      const backup: BackupData = {
+      let ignoredDuplicatesRows: any[] = [];
+      try {
+        ignoredDuplicatesRows = (await dbManager.all('SELECT * FROM ignored_duplicates;')) || [];
+      } catch (e) {}
+
+      const manifest: BackupManifest = {
+        format: 'civitai-model-manager-backup-zip',
         version: '1.1.0',
-        timestamp: new Date().toISOString(),
-        config,
-        localModels,
-        downloads,
+        createdAt: new Date().toISOString(),
+        stats: {
+          modelsCount: modelRows.length,
+          downloadsCount: downloadRows.length,
+          configCount: configRows.length,
+          ignoredUpdatesCount: ignoredUpdatesRows.length,
+          ignoredDuplicatesCount: ignoredDuplicatesRows.length,
+        },
       };
 
-      fs.writeFileSync(destinationPath, JSON.stringify(backup, null, 2), 'utf8');
-      logger.info(`Backup successfully exported to: ${destinationPath}`);
-    } catch (err) {
-      logger.error('Failed to export backup:', err);
+      const zip = new AdmZip();
+
+      // 1. Manifest
+      zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
+
+      // 2. Structured JSON snapshots
+      zip.addFile('config.json', Buffer.from(JSON.stringify(configRows, null, 2), 'utf8'));
+      zip.addFile('models.json', Buffer.from(JSON.stringify(modelRows, null, 2), 'utf8'));
+      zip.addFile('downloads.json', Buffer.from(JSON.stringify(downloadRows, null, 2), 'utf8'));
+      zip.addFile('ignored_updates.json', Buffer.from(JSON.stringify(ignoredUpdatesRows, null, 2), 'utf8'));
+      zip.addFile('ignored_duplicates.json', Buffer.from(JSON.stringify(ignoredDuplicatesRows, null, 2), 'utf8'));
+
+      // 3. Raw SQLite DB snapshot if file exists
+      const dbPath = path.join(process.cwd(), 'civitai_manager.sqlite');
+      if (fs.existsSync(dbPath)) {
+        try {
+          // Checkpoint WAL to flush to main DB before reading
+          await dbManager.exec('PRAGMA wal_checkpoint(TRUNCATE);').catch(() => {});
+          const dbBuffer = fs.readFileSync(dbPath);
+          zip.addFile('database.sqlite', dbBuffer);
+        } catch (dbReadErr) {
+          logger.warn('Could not attach raw SQLite file to zip, JSON tables will be used:', dbReadErr);
+        }
+      }
+
+      const zipBuffer = zip.toBuffer();
+      logger.info(`Backup zip generated successfully (${zipBuffer.length} bytes, ${modelRows.length} models)`);
+      return zipBuffer;
+    } catch (err: any) {
+      logger.error('Failed to create backup zip:', err);
       throw err;
     }
   }
 
-  async importBackup(sourcePath: string): Promise<void> {
-    try {
-      const content = fs.readFileSync(sourcePath, 'utf8');
-      const backup: BackupData = JSON.parse(content);
+  /**
+   * Exports backup .zip to a physical destination file path.
+   */
+  async exportBackup(destinationPath: string): Promise<void> {
+    const buffer = await this.createBackupZip();
+    fs.writeFileSync(destinationPath, buffer);
+    logger.info(`Backup successfully exported to: ${destinationPath}`);
+  }
 
-      if (!backup.localModels || !Array.isArray(backup.localModels)) {
-        throw new Error('Invalid backup file format');
+  /**
+   * Restores from a .zip buffer or file path (also backwards-compatible with legacy .json backups).
+   */
+  async restoreBackup(source: Buffer | string): Promise<RestoreResult> {
+    try {
+      let zipBuffer: Buffer;
+      if (typeof source === 'string') {
+        if (!fs.existsSync(source)) {
+          throw new Error(`Backup file not found at: ${source}`);
+        }
+        zipBuffer = fs.readFileSync(source);
+      } else {
+        zipBuffer = source;
+      }
+
+      // Check if this is a legacy plain JSON file
+      const firstFewBytes = zipBuffer.slice(0, 50).toString('utf8').trim();
+      if (firstFewBytes.startsWith('{')) {
+        return await this.restoreFromJsonString(zipBuffer.toString('utf8'));
+      }
+
+      // Parse as standard ZIP archive
+      const zip = new AdmZip(zipBuffer);
+      const entries = zip.getEntries();
+      const getEntryText = (name: string): string | null => {
+        const entry = entries.find((e) => e.entryName === name || e.name === name);
+        return entry ? entry.getData().toString('utf8') : null;
+      };
+
+      let configRows: any[] = [];
+      let modelRows: any[] = [];
+      let downloadRows: any[] = [];
+      let ignoredUpdatesRows: any[] = [];
+      let ignoredDuplicatesRows: any[] = [];
+
+      const configText = getEntryText('config.json');
+      if (configText) {
+        try { configRows = JSON.parse(configText); } catch (e) {}
+      }
+
+      const modelsText = getEntryText('models.json');
+      if (modelsText) {
+        try { modelRows = JSON.parse(modelsText); } catch (e) {}
+      }
+
+      const downloadsText = getEntryText('downloads.json');
+      if (downloadsText) {
+        try { downloadRows = JSON.parse(downloadsText); } catch (e) {}
+      }
+
+      const ignoredUpdatesText = getEntryText('ignored_updates.json');
+      if (ignoredUpdatesText) {
+        try { ignoredUpdatesRows = JSON.parse(ignoredUpdatesText); } catch (e) {}
+      }
+
+      const ignoredDuplicatesText = getEntryText('ignored_duplicates.json');
+      if (ignoredDuplicatesText) {
+        try { ignoredDuplicatesRows = JSON.parse(ignoredDuplicatesText); } catch (e) {}
       }
 
       await dbManager.exec('BEGIN TRANSACTION;');
 
-      if (backup.config && Array.isArray(backup.config)) {
-        for (const cfg of backup.config) {
-          await dbManager.run(
-            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
-            [cfg.key, cfg.value]
-          );
+      // 1. Restore App Config
+      if (Array.isArray(configRows)) {
+        for (const cfg of configRows) {
+          if (cfg && cfg.key !== undefined) {
+            await dbManager.run(
+              'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+              [cfg.key, cfg.value]
+            );
+          }
         }
       }
 
-      for (const lm of backup.localModels) {
+      // 2. Restore Local Models
+      if (Array.isArray(modelRows)) {
+        for (const lm of modelRows) {
+          if (lm && lm.id && lm.file_path) {
+            await dbManager.run(
+              `INSERT OR REPLACE INTO local_models 
+                (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id, civitai_version_id, scanned_at, preview_url, model_type, is_duplicate, ignored_version_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+              [
+                lm.id,
+                lm.file_path,
+                lm.file_name,
+                lm.file_size,
+                lm.modified_at,
+                lm.sha256,
+                lm.civitai_model_id,
+                lm.civitai_version_id,
+                lm.scanned_at || new Date().toISOString(),
+                lm.preview_url || null,
+                lm.model_type || null,
+                lm.is_duplicate || 0,
+                lm.ignored_version_id || null,
+              ]
+            );
+          }
+        }
+      }
+
+      // 3. Restore Downloads
+      if (Array.isArray(downloadRows)) {
+        for (const d of downloadRows) {
+          if (d && d.id) {
+            await dbManager.run(
+              `INSERT OR REPLACE INTO downloads 
+                (id, model_id, model_name, version_id, version_name, file_name, download_url, destination_path, total_bytes, downloaded_bytes, status, progress, speed, eta, created_at, completed_at, error)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+              [
+                d.id,
+                d.model_id,
+                d.model_name,
+                d.version_id,
+                d.version_name,
+                d.file_name,
+                d.download_url,
+                d.destination_path,
+                d.total_bytes || 0,
+                d.downloaded_bytes || 0,
+                d.status || 'completed',
+                d.progress || 100,
+                d.speed || 0,
+                d.eta || 0,
+                d.created_at || new Date().toISOString(),
+                d.completed_at || null,
+                d.error || null,
+              ]
+            );
+          }
+        }
+      }
+
+      // 4. Restore Ignored Model Updates
+      await dbManager.run(`
+        CREATE TABLE IF NOT EXISTS ignored_model_updates (
+          model_id INTEGER NOT NULL,
+          version_id INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (model_id, version_id)
+        );
+      `);
+      if (Array.isArray(ignoredUpdatesRows)) {
+        for (const iu of ignoredUpdatesRows) {
+          if (iu && iu.model_id && iu.version_id) {
+            await dbManager.run(
+              'INSERT OR REPLACE INTO ignored_model_updates (model_id, version_id, created_at) VALUES (?, ?, ?);',
+              [iu.model_id, iu.version_id, iu.created_at || new Date().toISOString()]
+            );
+          }
+        }
+      }
+
+      // 5. Restore Ignored Duplicates
+      await dbManager.run(`
+        CREATE TABLE IF NOT EXISTS ignored_duplicates (
+          sha256 TEXT PRIMARY KEY,
+          known_count INTEGER DEFAULT 2,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      if (Array.isArray(ignoredDuplicatesRows)) {
+        for (const id of ignoredDuplicatesRows) {
+          if (id && id.sha256) {
+            await dbManager.run(
+              'INSERT OR REPLACE INTO ignored_duplicates (sha256, known_count, created_at) VALUES (?, ?, ?);',
+              [id.sha256.toUpperCase(), id.known_count || 2, id.created_at || new Date().toISOString()]
+            );
+          }
+        }
+      }
+
+      await dbManager.exec('COMMIT;');
+      logger.info(`Backup zip restored successfully: ${modelRows.length} models, ${downloadRows.length} downloads, ${configRows.length} config keys.`);
+
+      return {
+        success: true,
+        message: 'Backup restored successfully',
+        stats: {
+          modelsRestored: modelRows.length,
+          downloadsRestored: downloadRows.length,
+          configKeysRestored: configRows.length,
+          ignoredUpdatesRestored: ignoredUpdatesRows.length,
+          ignoredDuplicatesRestored: ignoredDuplicatesRows.length,
+        },
+      };
+    } catch (err: any) {
+      await dbManager.exec('ROLLBACK;').catch(() => {});
+      logger.error('Failed to restore backup zip:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Backwards-compatible legacy JSON restorer.
+   */
+  private async restoreFromJsonString(jsonStr: string): Promise<RestoreResult> {
+    const data = JSON.parse(jsonStr);
+    await dbManager.exec('BEGIN TRANSACTION;');
+
+    let configCount = 0;
+    let modelCount = 0;
+
+    if (data.settings) {
+      for (const [key, val] of Object.entries(data.settings)) {
+        await dbManager.run(
+          'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+          [key, typeof val === 'string' ? val : JSON.stringify(val)]
+        );
+        configCount++;
+      }
+    }
+
+    if (Array.isArray(data.localModels)) {
+      for (const lm of data.localModels) {
         await dbManager.run(
           `INSERT OR REPLACE INTO local_models 
             (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id, civitai_version_id, scanned_at, is_duplicate)
@@ -76,19 +343,26 @@ export class BackupService {
             lm.sha256,
             lm.civitai_model_id,
             lm.civitai_version_id,
-            lm.scanned_at,
+            lm.scanned_at || new Date().toISOString(),
             lm.is_duplicate || 0,
           ]
         );
+        modelCount++;
       }
-
-      await dbManager.exec('COMMIT;');
-      logger.info(`Backup successfully imported from: ${sourcePath}`);
-    } catch (err) {
-      await dbManager.exec('ROLLBACK;').catch(() => {});
-      logger.error('Failed to import backup:', err);
-      throw err;
     }
+
+    await dbManager.exec('COMMIT;');
+    return {
+      success: true,
+      message: 'Legacy JSON backup restored successfully',
+      stats: {
+        modelsRestored: modelCount,
+        downloadsRestored: 0,
+        configKeysRestored: configCount,
+        ignoredUpdatesRestored: 0,
+        ignoredDuplicatesRestored: 0,
+      },
+    };
   }
 }
 

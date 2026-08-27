@@ -13,6 +13,7 @@ import path from 'path';
 import { DownloadTask, ConflictStrategy } from '../types/app';
 import { computeFileSHA256 } from '../utils/hash';
 import { sanitizeFileName } from '../utils/pathUtils';
+import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
 
 export class DownloadManager {
@@ -327,6 +328,25 @@ export class DownloadManager {
         fs.unlinkSync(resolvedPath);
       }
       fs.renameSync(partFile, resolvedPath);
+
+      // If task requested to delete superseded old version upon successful download completion
+      if (task.deleteOldVersionFile && typeof task.deleteOldVersionFile === 'string') {
+        try {
+          const oldPath = path.resolve(task.deleteOldVersionFile);
+          const newPath = path.resolve(resolvedPath);
+          if (oldPath !== newPath && fs.existsSync(oldPath)) {
+            fs.unlinkSync(oldPath);
+            logger.info(`Deleted superseded version file after successful update: ${oldPath}`);
+            if (task.deleteOldModelId) {
+              await dbManager.run('DELETE FROM local_models WHERE id = ?;', [task.deleteOldModelId]);
+            } else {
+              await dbManager.run('DELETE FROM local_models WHERE file_path = ?;', [oldPath]);
+            }
+          }
+        } catch (delErr) {
+          logger.warn(`Failed to delete superseded version file ${task.deleteOldVersionFile}:`, delErr);
+        }
+      }
 
       task.status = 'completed';
       task.progress = 100;

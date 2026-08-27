@@ -148,6 +148,20 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      matchUnidentifiedModels: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/match-unidentified-models`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (!res.ok) return { totalChecked: 0, newlyMatched: 0 };
+          return await res.json();
+        } catch (e) {
+          console.error('matchUnidentifiedModels failed:', e);
+          return { totalChecked: 0, newlyMatched: 0 };
+        }
+      },
+
       clearLibrary: async () => {
         try {
           const res = await fetch(`${API_BASE}/clear-library`, {
@@ -251,31 +265,121 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      ignoreModelUpdate: async (modelId: number, versionId: number) => {
+        try {
+          const res = await fetch(`${API_BASE}/ignore-model-update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelId, versionId }),
+          });
+          return await res.json();
+        } catch (e) {
+          return false;
+        }
+      },
+
+      unignoreModelUpdate: async (modelId: number, versionId: number) => {
+        try {
+          const res = await fetch(`${API_BASE}/unignore-model-update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelId, versionId }),
+          });
+          return await res.json();
+        } catch (e) {
+          return false;
+        }
+      },
+
+      getIgnoredUpdates: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/get-ignored-updates`);
+          if (!res.ok) return [];
+          return await res.json();
+        } catch (e) {
+          return [];
+        }
+      },
+
+      ignoreDuplicateSet: async (sha256: string, count: number = 2) => {
+        try {
+          const res = await fetch(`${API_BASE}/ignore-duplicate-set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sha256, count }),
+          });
+          return await res.json();
+        } catch (e) {
+          return false;
+        }
+      },
+
+      unignoreDuplicateSet: async (sha256: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/unignore-duplicate-set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sha256 }),
+          });
+          return await res.json();
+        } catch (e) {
+          return false;
+        }
+      },
+
+      getIgnoredDuplicates: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/get-ignored-duplicates`);
+          if (!res.ok) return [];
+          return await res.json();
+        } catch (e) {
+          return [];
+        }
+      },
+
       onUpdateCheckProgress: (_callback: (progress: any) => void) => {},
 
-      exportBackup: async (filePath: string) => {
-        const res = await fetch(`${API_BASE}/export-backup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath }),
-        });
-        return await res.json();
+      exportBackup: async (_filePath?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/export-backup-zip`);
+          if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
+          const blob = await res.blob();
+          const filename = `cmm-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          return { success: true, filename };
+        } catch (e: any) {
+          return { success: false, error: e.message };
+        }
       },
 
-      importBackup: async (filePath: string) => {
-        const res = await fetch(`${API_BASE}/import-backup`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath }),
-        });
-        return await res.json();
+      importBackup: async (fileOrBuffer?: any) => {
+        try {
+          let bodyData: any = fileOrBuffer;
+          if (!bodyData) {
+            return { success: false, error: 'No backup data provided' };
+          }
+          const res = await fetch(`${API_BASE}/import-backup-zip`, {
+            method: 'POST',
+            body: bodyData,
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { success: false, error: e.message };
+        }
       },
 
-      deleteLocalModel: async (id: string) => {
+      deleteLocalModel: async (id: string, deleteFromDisk: boolean = true) => {
         const res = await fetch(`${API_BASE}/delete-local-model`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id }),
+          body: JSON.stringify({ id, deleteFromDisk }),
         });
         return await res.json();
       },

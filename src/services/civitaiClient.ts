@@ -154,10 +154,10 @@ export class CivitAIClient {
   async bulkLookupByHashes(
     hashes: string[],
     onProgress?: (done: number, total: number) => void
-  ): Promise<CivitAIModelVersion[]> {
-    if (hashes.length === 0) return [];
+  ): Promise<Map<string, CivitAIModelVersion>> {
+    if (hashes.length === 0) return new Map();
 
-    const results: CivitAIModelVersion[] = [];
+    const resultMap = new Map<string, CivitAIModelVersion>();
     const CONCURRENCY = 4;
     let completed = 0;
 
@@ -167,7 +167,17 @@ export class CivitAIClient {
         try {
           const version = await this.lookupByHash(hash);
           if (version) {
-            results.push(version);
+            resultMap.set(hash.toUpperCase(), version);
+            // Also index other hash keys in files (SHA256, AutoV1, AutoV2, etc.)
+            if (version.files && Array.isArray(version.files)) {
+              for (const f of version.files) {
+                if (f.hashes) {
+                  for (const h of Object.values(f.hashes)) {
+                    if (h) resultMap.set(String(h).toUpperCase(), version);
+                  }
+                }
+              }
+            }
           }
         } catch (err) {
           logger.warn(`Hash lookup skipped/failed for ${hash}:`, err);
@@ -179,7 +189,7 @@ export class CivitAIClient {
       await Promise.all(promises);
     }
 
-    return results;
+    return resultMap;
   }
 
   async fetchEnums(): Promise<{ modelTypes: ModelType[]; baseModels: string[] }> {

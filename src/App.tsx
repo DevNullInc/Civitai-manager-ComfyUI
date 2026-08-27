@@ -109,7 +109,11 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleQueueDownload = async (model: CivitAIModel, version: CivitAIModelVersion) => {
+  const handleQueueDownload = async (
+    model: CivitAIModel,
+    version: CivitAIModelVersion,
+    options?: { deleteOldVersionFile?: string; deleteOldModelId?: string }
+  ) => {
     const primaryFile = version.files?.[0];
     const fileName = primaryFile?.name || `${model.name}_${version.name}.safetensors`;
 
@@ -125,6 +129,8 @@ function AppContent() {
       downloadUrl: version.downloadUrl || `https://civitai.com/api/download/models/${version.id}`,
       sizeKB: primaryFile?.sizeKB || 0,
       sha256: primaryFile?.hashes?.SHA256,
+      deleteOldVersionFile: options?.deleteOldVersionFile,
+      deleteOldModelId: options?.deleteOldModelId,
     };
 
     if (!window.civitaiAPI) return;

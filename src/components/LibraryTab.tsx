@@ -21,6 +21,11 @@ import {
   Search,
   Sparkles,
   Trash2,
+  BookmarkMinus,
+  X,
+  Eye,
+  EyeOff,
+  ShieldCheck,
   ChevronUp,
   ChevronDown,
   Folder,
@@ -30,6 +35,8 @@ import {
   AlertTriangle,
   Square,
   ArrowUpDown,
+  SearchCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { FallbackImage } from './FallbackImage';
 import { useScan } from '../context/ScanContext';
@@ -43,12 +50,21 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   const { isScanning, scanProgress, lastCompletedAt, startScan, cancelScan } = useScan();
   const [localModels, setLocalModels] = useState<LocalModel[]>([]);
   const [loading, setLoading] = useState(false);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [matchingUnidentified, setMatchingUnidentified] = useState(false);
+  const [updateSummary, setUpdateSummary] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+
+  // Delete Options Modal State
+  const [modelToDelete, setModelToDelete] = useState<LocalModel | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // Duplicate Resolution State
   const [expandedDuplicateHash, setExpandedDuplicateHash] = useState<string | null>(null);
   const [selectedKeepers, setSelectedKeepers] = useState<{ [hash: string]: string }>({});
   const [resolvingHash, setResolvingHash] = useState<string | null>(null);
   const [resolutionFeedback, setResolutionFeedback] = useState<string | null>(null);
+  const [ignoredDuplicates, setIgnoredDuplicates] = useState<{ sha256: string; knownCount: number }[]>([]);
 
   // Filters with LocalStorage Persistence
   const [filter, setFilter] = useState<'all' | 'matched' | 'updates' | 'unidentified' | 'duplicates'>(
@@ -87,6 +103,17 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     localStorage.setItem('civitai_lib_sort_asc', String(sortAsc));
   }, [sortAsc]);
 
+  const loadIgnoredDuplicates = async () => {
+    try {
+      if (window.civitaiAPI && typeof window.civitaiAPI.getIgnoredDuplicates === 'function') {
+        const ignored = await window.civitaiAPI.getIgnoredDuplicates();
+        if (ignored) setIgnoredDuplicates(ignored);
+      }
+    } catch (e) {
+      console.error('Failed to load ignored duplicates:', e);
+    }
+  };
+
   const loadLocalModels = async () => {
     setLoading(true);
     try {
@@ -103,7 +130,34 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
 
   useEffect(() => {
     loadLocalModels();
+    loadIgnoredDuplicates();
   }, [lastCompletedAt]);
+
+  const handleIgnoreDuplicateSet = async (sha256: string, count: number) => {
+    if (!window.civitaiAPI || typeof window.civitaiAPI.ignoreDuplicateSet !== 'function') return;
+    try {
+      await window.civitaiAPI.ignoreDuplicateSet(sha256, count);
+      setResolutionFeedback(`Marked SHA256 as intentionally duplicated (${count} copies). Excluded from duplicate warnings.`);
+      setTimeout(() => setResolutionFeedback(null), 5000);
+      await loadLocalModels();
+      await loadIgnoredDuplicates();
+    } catch (e: any) {
+      alert(`Failed to ignore duplicate set: ${e?.message || e}`);
+    }
+  };
+
+  const handleUnignoreDuplicateSet = async (sha256: string) => {
+    if (!window.civitaiAPI || typeof window.civitaiAPI.unignoreDuplicateSet !== 'function') return;
+    try {
+      await window.civitaiAPI.unignoreDuplicateSet(sha256);
+      setResolutionFeedback(`Restored duplicate warnings for SHA256: ${sha256.substring(0, 12)}...`);
+      setTimeout(() => setResolutionFeedback(null), 5000);
+      await loadLocalModels();
+      await loadIgnoredDuplicates();
+    } catch (e: any) {
+      alert(`Failed to unignore duplicate set: ${e?.message || e}`);
+    }
+  };
 
   const handleOpenFolder = async (filePath: string) => {
     try {
@@ -112,6 +166,40 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
       }
     } catch (e) {
       console.warn('Could not open folder:', e);
+    }
+  };
+
+  const isModelNsfw = (model: LocalModel): boolean => {
+    if (model.nsfw) return true;
+    const textToTest = `${model.fileName} ${model.filePath} ${model.civitaiName || ''}`;
+    return /nsfw|xxx|hentai|porn|erotic|lewd|nude|uncensored|adult|breast|boob|cleavage|pussy|vagina|penis|dick|cock|dildo|sensual|fetish|bdsm|milf|anal|sex|naked|topless|bottomless|ecchi|r18|bikini|lingerie|thong|waifu/i.test(
+      textToTest
+    );
+  };
+
+  const handleOpenCivitai = (model: LocalModel) => {
+    const isNsfw = isModelNsfw(model);
+    const domain = isNsfw ? 'https://civitai.red' : 'https://civitai.com';
+    let url = '';
+
+    if (model.civitaiModelId) {
+      url = `${domain}/models/${model.civitaiModelId}${
+        model.civitaiVersionId ? `?modelVersionId=${model.civitaiVersionId}` : ''
+      }`;
+    } else {
+      // Clean query string from filename
+      const cleanName = model.fileName
+        .replace(/\.(safetensors|pt|ckpt|bin|gguf)$/i, '')
+        .replace(/^models--/, '')
+        .replace(/_/g, ' ')
+        .trim();
+      url = `${domain}/models?query=${encodeURIComponent(cleanName)}`;
+    }
+
+    if (window.civitaiAPI && typeof window.civitaiAPI.openExternal === 'function') {
+      window.civitaiAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -150,8 +238,6 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     await loadLocalModels();
   };
 
-  const [clearing, setClearing] = useState(false);
-
   const handleClearLibrary = async () => {
     if (isScanning) {
       alert('Cannot clear library while scanning is in progress. Please stop the scan first.');
@@ -186,8 +272,28 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     }
   };
 
-  const [checkingUpdates, setCheckingUpdates] = useState(false);
-  const [updateSummary, setUpdateSummary] = useState<string | null>(null);
+  const handleMatchUnidentified = async () => {
+    if (!window.civitaiAPI || typeof window.civitaiAPI.matchUnidentifiedModels !== 'function') return;
+    setMatchingUnidentified(true);
+    setUpdateSummary(null);
+    try {
+      const result = await window.civitaiAPI.matchUnidentifiedModels();
+      await loadLocalModels();
+      if (result && result.newlyMatched !== undefined) {
+        if (result.newlyMatched > 0) {
+          setUpdateSummary(`Successfully matched ${result.newlyMatched} of ${result.totalChecked} unidentified models with CivitAI!`);
+        } else {
+          setUpdateSummary(`Checked ${result.totalChecked} unidentified models (no matches found on CivitAI).`);
+        }
+      }
+      setTimeout(() => setUpdateSummary(null), 8000);
+    } catch (e: any) {
+      console.error('Failed to match models with CivitAI:', e);
+      alert(`CivitAI matching failed: ${e?.message || e}`);
+    } finally {
+      setMatchingUnidentified(false);
+    }
+  };
 
   const handleCheckAllUpdates = async () => {
     if (!window.civitaiAPI || typeof window.civitaiAPI.checkAllUpdates !== 'function') return;
@@ -211,42 +317,65 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     }
   };
 
-  const filteredModels = localModels
-    .filter((model) => {
-      const matchesSearch =
-        (model.fileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (model.filePath || '').toLowerCase().includes(searchQuery.toLowerCase());
-
-      if (!matchesSearch) return false;
-
-      // Type filter
-      if (typeFilter !== 'all' && model.modelType !== typeFilter) return false;
-
-      // Top-level filter
-      if (filter === 'matched') return model.isMatched;
-      if (filter === 'updates') return model.hasUpdate;
-      if (filter === 'unidentified') return !model.isMatched;
-      if (filter === 'duplicates') return model.isDuplicate;
-      return true;
-    })
-    .sort((a, b) => {
-      let comparison = 0;
-      if (sortBy === 'name') {
-        comparison = (a.fileName || '').localeCompare(b.fileName || '');
-      } else if (sortBy === 'type') {
-        const typeA = (a.modelType || 'Other').toLowerCase();
-        const typeB = (b.modelType || 'Other').toLowerCase();
-        comparison = typeA.localeCompare(typeB);
-        if (comparison === 0) {
-          comparison = (a.fileName || '').localeCompare(b.fileName || '');
+  const duplicateGroups = React.useMemo(() => {
+    const groups = new Map<string, LocalModel[]>();
+    localModels.forEach((m) => {
+      if (m.sha256 && m.isDuplicate) {
+        if (!groups.has(m.sha256)) {
+          groups.set(m.sha256, []);
         }
-      } else if (sortBy === 'size') {
-        comparison = (a.fileSize || 0) - (b.fileSize || 0);
-      } else if (sortBy === 'date') {
-        comparison = (a.modifiedAt || 0) - (b.modifiedAt || 0);
+        groups.get(m.sha256)!.push(m);
       }
-      return sortAsc ? comparison : -comparison;
     });
+    return groups;
+  }, [localModels]);
+
+  const filteredModels = React.useMemo(() => {
+    const seenDuplicateHashes = new Set<string>();
+
+    return localModels
+      .filter((model) => {
+        const matchesSearch =
+          (model.fileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (model.filePath || '').toLowerCase().includes(searchQuery.toLowerCase());
+
+        if (!matchesSearch) return false;
+
+        // Type filter
+        if (typeFilter !== 'all' && model.modelType !== typeFilter) return false;
+
+        // Top-level filter
+        if (filter === 'matched') return model.isMatched;
+        if (filter === 'updates') return model.hasUpdate;
+        if (filter === 'unidentified') return !model.isMatched;
+        if (filter === 'duplicates') {
+          if (!model.isDuplicate || !model.sha256) return false;
+          // In duplicates view, show each duplicate hash group once as a consolidated master card
+          if (seenDuplicateHashes.has(model.sha256)) return false;
+          seenDuplicateHashes.add(model.sha256);
+          return true;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        let comparison = 0;
+        if (sortBy === 'name') {
+          comparison = (a.fileName || '').localeCompare(b.fileName || '');
+        } else if (sortBy === 'type') {
+          const typeA = (a.modelType || 'Other').toLowerCase();
+          const typeB = (b.modelType || 'Other').toLowerCase();
+          comparison = typeA.localeCompare(typeB);
+          if (comparison === 0) {
+            comparison = (a.fileName || '').localeCompare(b.fileName || '');
+          }
+        } else if (sortBy === 'size') {
+          comparison = (a.fileSize || 0) - (b.fileSize || 0);
+        } else if (sortBy === 'date') {
+          comparison = (a.modifiedAt || 0) - (b.modifiedAt || 0);
+        }
+        return sortAsc ? comparison : -comparison;
+      });
+  }, [localModels, searchQuery, typeFilter, filter, sortBy, sortAsc]);
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 pb-20">
@@ -279,6 +408,25 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
               <span>Scan ComfyUI Folders</span>
             </button>
           )}
+
+          {/* Identify with CivitAI Button */}
+          <button
+            onClick={handleMatchUnidentified}
+            disabled={isScanning || matchingUnidentified || checkingUpdates || localModels.length === 0}
+            title="Query CivitAI hash database for all unidentified models to fetch names, preview images, and metadata"
+            className={`flex items-center gap-2 px-5 py-3 border font-bold rounded-2xl text-sm transition-all shadow-md cursor-pointer disabled:opacity-50 active:scale-95 ${
+              localModels.some((m) => !m.isMatched)
+                ? 'bg-gradient-to-r from-indigo-900/60 to-purple-900/60 hover:from-indigo-900/80 hover:to-purple-900/80 border-indigo-500/40 text-indigo-200 glow-purple'
+                : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 hover:border-indigo-500/50 text-slate-200 hover:text-indigo-300'
+            }`}
+          >
+            <SearchCheck size={18} className={matchingUnidentified ? 'text-indigo-400 animate-spin' : 'text-indigo-400'} />
+            <span>
+              {matchingUnidentified
+                ? 'Identifying...'
+                : `Identify with CivitAI${localModels.filter((m) => !m.isMatched).length > 0 ? ` (${localModels.filter((m) => !m.isMatched).length})` : ''}`}
+            </span>
+          </button>
 
           {/* Check for Updates Button */}
           <button
@@ -384,13 +532,12 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
       <div className="glass-panel p-4 rounded-2xl flex flex-wrap gap-4 items-center justify-between text-sm shadow-xl">
         <div className="flex flex-wrap gap-2">
           {(['all', 'matched', 'updates', 'unidentified', 'duplicates'] as const).map((t) => {
-            const count = localModels.filter((m) => {
-              if (t === 'matched') return m.isMatched;
-              if (t === 'updates') return m.hasUpdate;
-              if (t === 'unidentified') return !m.isMatched;
-              if (t === 'duplicates') return m.isDuplicate;
-              return true;
-            }).length;
+            let count = 0;
+            if (t === 'matched') count = localModels.filter((m) => m.isMatched).length;
+            else if (t === 'updates') count = localModels.filter((m) => m.hasUpdate).length;
+            else if (t === 'unidentified') count = localModels.filter((m) => !m.isMatched).length;
+            else if (t === 'duplicates') count = duplicateGroups.size;
+            else count = localModels.length;
 
             return (
               <button
@@ -416,7 +563,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             className="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:border-purple-500 cursor-pointer"
           >
             <option value="all">All Types</option>
-            {['Checkpoint','LORA','LoCon','DoRA','TextualInversion','Hypernetwork','VAE','Controlnet','Upscaler','MotionModule','AestheticGradient','Poses','Wildcards','Workflows','Detection','Other'].map((t) => (
+            {['Checkpoint','LORA','LLM','LoCon','DoRA','TextualInversion','Hypernetwork','VAE','Controlnet','Upscaler','MotionModule','AestheticGradient','Poses','Wildcards','Workflows','Detection','Other'].map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
@@ -426,12 +573,12 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-transparent text-xs font-semibold text-slate-200 px-2 py-1 focus:outline-none cursor-pointer"
+              className="bg-transparent px-2.5 py-1 text-xs font-semibold text-slate-200 focus:outline-none cursor-pointer"
             >
-              <option value="name">Sort: Name (A-Z)</option>
-              <option value="type">Sort: Type</option>
-              <option value="size">Sort: File Size</option>
-              <option value="date">Sort: Date Modified</option>
+              <option value="name" className="bg-slate-900">Name</option>
+              <option value="type" className="bg-slate-900">Type</option>
+              <option value="size" className="bg-slate-900">Size</option>
+              <option value="date" className="bg-slate-900">Date Modified</option>
             </select>
 
             {/* Sort Asc/Desc Direction Toggle */}
@@ -486,7 +633,11 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             const duplicateCopies = model.sha256
               ? localModels.filter((m) => m.sha256 === model.sha256)
               : [model];
-            const isExpanded = !!model.sha256 && expandedDuplicateHash === model.sha256;
+            const isExpanded = !!model.sha256 && (
+              filter === 'duplicates'
+                ? expandedDuplicateHash !== `collapsed_${model.sha256}`
+                : expandedDuplicateHash === model.sha256
+            );
             const currentKeeperId = (model.sha256 && selectedKeepers[model.sha256]) || model.id;
 
             return (
@@ -501,27 +652,38 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                 {/* Main Card Row */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 w-full">
                   <div className="flex items-center gap-4 flex-1 min-w-0">
-                    {/* Preview thumbnail if available */}
+                    {/* Preview thumbnail if available, otherwise HardDrive icon */}
                     {model.previewUrl ? (
-                      <FallbackImage
-                        src={model.previewUrl}
-                        alt={model.fileName}
-                        className="w-12 h-12 rounded-lg object-cover bg-slate-950 flex-shrink-0 border border-slate-800"
-                        fallbackIcon={<HardDrive size={18} className="text-purple-400" />}
-                        fallbackText=""
-                      />
+                      <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border border-purple-500/30 shadow-md bg-slate-950">
+                        <FallbackImage
+                          src={model.previewUrl}
+                          alt={model.civitaiName || model.fileName}
+                          className="w-full h-full object-cover"
+                          fallbackIcon={
+                            <div className="w-full h-full bg-slate-900 flex items-center justify-center text-purple-400">
+                              <HardDrive size={20} />
+                            </div>
+                          }
+                          fallbackText=""
+                        />
+                      </div>
                     ) : (
-                      <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-purple-400 flex-shrink-0 shadow-inner">
-                        <HardDrive size={22} />
+                      <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-purple-400 flex-shrink-0 shadow-inner">
+                        <HardDrive size={20} />
                       </div>
                     )}
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-slate-100 text-sm truncate">{model.fileName}</h3>
-                        {model.civitaiType && (
+                      <div className="flex items-center gap-2 flex-wrap max-w-full">
+                        <h3
+                          className="font-bold text-slate-100 text-sm truncate max-w-[15rem] sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl"
+                          title={model.civitaiName ? `${model.civitaiName} (${model.fileName})` : model.fileName}
+                        >
+                          {model.civitaiName || model.fileName}
+                        </h3>
+                        {(model.modelType || model.civitaiType) && (
                           <span className="text-[10px] font-bold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-md">
-                            {model.civitaiType}
+                            {model.modelType || model.civitaiType}
                           </span>
                         )}
                         {model.isDuplicate && (
@@ -529,9 +691,18 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setExpandedDuplicateHash(
-                                expandedDuplicateHash === model.sha256 ? null : (model.sha256 || null)
-                              );
+                              if (!model.sha256) return;
+                              if (filter === 'duplicates') {
+                                setExpandedDuplicateHash(
+                                  expandedDuplicateHash === `collapsed_${model.sha256}`
+                                    ? null
+                                    : `collapsed_${model.sha256}`
+                                );
+                              } else {
+                                setExpandedDuplicateHash(
+                                  expandedDuplicateHash === model.sha256 ? null : model.sha256
+                                );
+                              }
                             }}
                             className={`flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border transition-all cursor-pointer ${
                               isExpanded
@@ -583,6 +754,27 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                       </button>
                     )}
 
+                    {/* CivitAI External Link Button */}
+                    <button
+                      onClick={() => handleOpenCivitai(model)}
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        isModelNsfw(model)
+                          ? 'text-rose-400 hover:text-rose-300 hover:bg-rose-500/15'
+                          : 'text-purple-400 hover:text-purple-300 hover:bg-purple-500/15'
+                      }`}
+                      title={
+                        isModelNsfw(model)
+                          ? model.civitaiModelId
+                            ? `Open model on CivitAI.red (NSFW)`
+                            : `Search model on CivitAI.red (NSFW)`
+                          : model.civitaiModelId
+                          ? `Open model on CivitAI.com (SFW)`
+                          : `Search model on CivitAI.com`
+                      }
+                    >
+                      <ExternalLink size={16} />
+                    </button>
+
                     <button
                       onClick={() => handleOpenFolder(model.filePath)}
                       className="text-slate-400 hover:text-amber-300 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
@@ -593,17 +785,9 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
 
                     {/* Delete button */}
                     <button
-                      onClick={async () => {
-                        if (!window.confirm(`Delete ${model.fileName} from disk?`)) return;
-                        const res = await window.civitaiAPI.deleteLocalModel(model.id);
-                        if (res?.success) {
-                          loadLocalModels();
-                        } else {
-                          alert(res?.error || 'Failed to delete model');
-                        }
-                      }}
-                      className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
-                      title="Delete model"
+                      onClick={() => setModelToDelete(model)}
+                      className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Delete or remove model"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -615,7 +799,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                   <div className="w-full pt-3.5 border-t border-amber-500/20 bg-slate-950/60 p-4 rounded-xl space-y-3.5 shadow-inner animate-fadeIn">
                     {/* Header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Copy size={15} className="text-amber-400" />
                         <span className="text-xs font-bold text-slate-100">
                           Duplicate Copies on Disk ({duplicateCopies.length} found)
@@ -623,9 +807,14 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                         <span className="text-[10px] text-slate-400 font-mono bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">
                           SHA256: {model.sha256?.substring(0, 12)}...
                         </span>
+                        {model.sha256 && ignoredDuplicates.some((ig) => ig.sha256.toUpperCase() === model.sha256!.toUpperCase()) && (
+                          <span className="text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+                            <ShieldCheck size={11} /> Intentionally Duplicated
+                          </span>
+                        )}
                       </div>
                       <span className="text-[11px] text-amber-300/80 font-medium">
-                        Select which copy to keep. Other copies will be deleted from disk.
+                        Select which copy to keep, or ignore this duplicate set.
                       </span>
                     </div>
 
@@ -645,37 +834,29 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                                 : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
                             }`}
                           >
-                            <div className="flex items-start gap-3 min-w-0 flex-1">
-                              <input
-                                type="radio"
-                                name={`keeper_${model.sha256}`}
-                                checked={isKeeper}
-                                onChange={() => model.sha256 && setSelectedKeepers((prev) => ({ ...prev, [model.sha256!]: copy.id }))}
-                                className="mt-1 w-4 h-4 text-emerald-500 bg-slate-950 border-slate-700 focus:ring-emerald-500 cursor-pointer"
-                              />
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="flex-shrink-0">
+                                {isKeeper ? (
+                                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center text-emerald-400">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                                  </div>
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full border-2 border-slate-600 hover:border-slate-400" />
+                                )}
+                              </div>
 
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs font-bold text-slate-100 truncate">
-                                    {copy.fileName}
-                                  </span>
-                                  {isKeeper ? (
-                                    <span className="flex items-center gap-1 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
-                                      <Check size={10} /> Keeper (Retain this file)
-                                    </span>
-                                  ) : (
-                                    <span className="flex items-center gap-1 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded bg-red-500/15 border border-red-500/30 text-red-300">
-                                      <Trash2 size={10} /> Duplicate (To Be Deleted)
+                                  <span className="text-xs font-bold text-slate-100 truncate">{copy.fileName}</span>
+                                  {isKeeper && (
+                                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded">
+                                      Keep This File
                                     </span>
                                   )}
                                 </div>
-
-                                {/* Folder Location */}
-                                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-slate-300 font-mono bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-800/80 break-all">
-                                  <Folder size={12} className="text-amber-400 flex-shrink-0" />
-                                  <span className="font-semibold text-slate-200">{folderDir}</span>
-                                </div>
-
+                                <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5" title={copy.filePath}>
+                                  📁 {folderDir}
+                                </p>
                                 <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400">
                                   <span>Size: <strong className="text-slate-200">{(copy.fileSize / 1024 / 1024).toFixed(1)} MB</strong></span>
                                   <span>•</span>
@@ -703,11 +884,38 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
 
                     {/* Footer Actions */}
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-800/80">
-                      <span className="text-[11px] text-slate-400">
-                        {duplicateCopies.length > 1
-                          ? `Will permanently delete ${duplicateCopies.length - 1} copy(ies) from disk.`
-                          : 'No other copies found on disk.'}
-                      </span>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-[11px] text-slate-400">
+                          {duplicateCopies.length > 1
+                            ? `Will permanently delete ${duplicateCopies.length - 1} copy(ies) from disk.`
+                            : 'No other copies found on disk.'}
+                        </span>
+
+                        {/* Ignore / Unignore Duplicate Set Button */}
+                        {model.sha256 && (
+                          ignoredDuplicates.some((ig) => ig.sha256.toUpperCase() === model.sha256!.toUpperCase()) ? (
+                            <button
+                              type="button"
+                              onClick={() => model.sha256 && handleUnignoreDuplicateSet(model.sha256)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                              title="Restore duplicate warnings for this file set"
+                            >
+                              <Eye size={13} className="text-slate-400" />
+                              <span>Unignore Duplicate Set</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => model.sha256 && handleIgnoreDuplicateSet(model.sha256, duplicateCopies.length)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                              title="Mark this SHA256 as intentionally duplicated (e.g. required by specific custom nodes). Excludes from duplicate warnings until a new copy is found."
+                            >
+                              <EyeOff size={13} className="text-amber-400" />
+                              <span>Ignore This Duplicate Set</span>
+                            </button>
+                          )
+                        )}
+                      </div>
 
                       <button
                         type="button"
@@ -728,6 +936,136 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Delete / Remove Options Modal */}
+      {modelToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4 animate-fadeIn">
+          <div className="glass-panel w-full max-w-md rounded-3xl overflow-hidden flex flex-col border border-slate-700/70 shadow-2xl animate-scaleUp">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-100">Delete Model</h3>
+                  <p className="text-xs text-slate-400">Choose how to remove this model</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isDeleting && setModelToDelete(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Target Model Info */}
+            <div className="p-5 space-y-4 text-xs text-slate-300">
+              <div className="p-3.5 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Target Model</span>
+                <p className="font-bold text-slate-100 text-sm truncate">{modelToDelete.fileName}</p>
+                <p className="text-[11px] text-slate-400 font-mono truncate">{modelToDelete.filePath}</p>
+                <div className="pt-1.5 flex items-center gap-3 text-[11px] text-slate-400 font-medium">
+                  <span>Size: <strong className="text-slate-200">{(modelToDelete.fileSize / 1024 / 1024).toFixed(1)} MB</strong></span>
+                  <span>Type: <strong className="text-purple-300">{modelToDelete.modelType || 'Other'}</strong></span>
+                </div>
+              </div>
+
+              {/* Option 1: Remove from Library Only */}
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    if (window.civitaiAPI) {
+                      const res = await window.civitaiAPI.deleteLocalModel(modelToDelete.id, false);
+                      if (res?.success) {
+                        setResolutionFeedback(`Removed ${modelToDelete.fileName} from Library catalog (File preserved on disk).`);
+                        setTimeout(() => setResolutionFeedback(null), 5000);
+                        setModelToDelete(null);
+                        await loadLocalModels();
+                      } else {
+                        alert(res?.error || 'Failed to remove model');
+                      }
+                    }
+                  } catch (err: any) {
+                    alert(err?.message || 'Error removing model');
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="w-full text-left p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <BookmarkMinus size={18} className="text-amber-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <span className="font-bold text-sm text-amber-200 group-hover:text-amber-100 block">
+                      Remove from Library Only
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                      Clears this model from the manager catalog & database cache. The physical file remains on your hard drive and ComfyUI can still use it.
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2: Delete from Disk & Library */}
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    if (window.civitaiAPI) {
+                      const res = await window.civitaiAPI.deleteLocalModel(modelToDelete.id, true);
+                      if (res?.success) {
+                        setResolutionFeedback(`Permanently deleted ${modelToDelete.fileName} from disk & library.`);
+                        setTimeout(() => setResolutionFeedback(null), 5000);
+                        setModelToDelete(null);
+                        await loadLocalModels();
+                      } else {
+                        alert(res?.error || 'Failed to delete model from disk');
+                      }
+                    }
+                  } catch (err: any) {
+                    alert(err?.message || 'Error deleting model');
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="w-full text-left p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Trash2 size={18} className="text-rose-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <span className="font-bold text-sm text-rose-200 group-hover:text-rose-100 block">
+                      Delete from Disk & Library
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-normal">
+                      Permanently deletes the physical <code className="text-rose-300 font-mono text-[10px]">.safetensors</code> file from storage and removes its library record. This cannot be undone.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-800/80 bg-slate-900/40 flex justify-end">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setModelToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
