@@ -789,6 +789,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                 : expandedDuplicateHash === model.sha256
             );
             const currentKeeperId = (model.sha256 && selectedKeepers[model.sha256]) || model.id;
+            const isNsfwModel = isModelNsfw(model);
+            const shouldBlur = isNsfwModel && blurNsfw;
 
             return (
               <div
@@ -801,16 +803,22 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
               >
                 {/* Main Card Row */}
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 w-full">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                  <div
+                    className={`flex items-center gap-4 flex-1 min-w-0 transition-all duration-300 ${
+                      shouldBlur
+                        ? 'filter blur-[7px] hover:blur-none opacity-60 hover:opacity-100 select-none cursor-pointer'
+                        : ''
+                    }`}
+                    title={shouldBlur ? 'NSFW model: Hover to reveal name and path details' : undefined}
+                  >
                     {/* Preview thumbnail if available, otherwise HardDrive icon */}
                     {model.previewUrl ? (
                       <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border border-purple-500/30 shadow-md bg-slate-950 relative group">
                         <FallbackImage
                           src={model.previewUrl}
                           alt={model.civitaiName || model.fileName}
-                          className={`w-full h-full object-cover transition-all duration-300 ${
-                            isModelNsfw(model) && blurNsfw ? 'blur-md group-hover:blur-none scale-110' : ''
-                          }`}
+                          isBlurred={shouldBlur}
+                          className="w-full h-full object-cover transition-all duration-300"
                           fallbackIcon={
                             <div className="w-full h-full bg-slate-900 flex items-center justify-center text-purple-400">
                               <HardDrive size={20} />
@@ -818,8 +826,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                           }
                           fallbackText=""
                         />
-                        {isModelNsfw(model) && blurNsfw && (
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:opacity-0 transition-opacity pointer-events-none">
+                        {shouldBlur && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
                             <span className="text-[9px] font-extrabold text-rose-300 font-mono px-1 py-0.5 bg-rose-950/90 rounded border border-rose-500/50 shadow-sm">
                               18+
                             </span>
@@ -843,6 +851,11 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                         {(model.modelType || model.civitaiType) && (
                           <span className="text-[10px] font-bold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-md">
                             {model.modelType || model.civitaiType}
+                          </span>
+                        )}
+                        {shouldBlur && (
+                          <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-md">
+                            NSFW (Hover to reveal)
                           </span>
                         )}
                         {model.isDuplicate && (

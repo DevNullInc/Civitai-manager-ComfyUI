@@ -77,7 +77,8 @@ export const FallbackImage: React.FC<FallbackImageProps> = ({
       src={currentUrl}
       alt={alt || 'Model preview'}
       onError={handleError}
-      className={`${className} ${isBlurred ? 'blur-lg scale-110' : ''}`}
+      className={`${className} ${isBlurred ? 'blur-md scale-110' : ''}`}
+      style={isBlurred ? { filter: 'blur(10px)', transform: 'scale(1.1)', transition: 'filter 0.3s ease, transform 0.3s ease' } : undefined}
       {...props}
     />
   );
