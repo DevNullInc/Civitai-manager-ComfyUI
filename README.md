@@ -7,6 +7,22 @@
 
 ---
 
+## 📸 Screenshots
+
+<p align="center">
+  <sub><i>Click any screenshot to expand and view full resolution.</i></sub>
+</p>
+
+| **Discover & Browse Catalog** | **Local Model Library & Deduplication** |
+| :---: | :---: |
+| <a href="docs/screenshots/browse-tab.png"><img src="docs/screenshots/browse-tab.png" alt="Discover AI Models" width="460" /></a> | <a href="docs/screenshots/library-tab.png"><img src="docs/screenshots/library-tab.png" alt="Local Model Library" width="460" /></a> |
+
+| **Concurrent Downloads & Auto-Sorting** | **Multi-Folder Settings & Backup** |
+| :---: | :---: |
+| <a href="docs/screenshots/downloads-tab.png"><img src="docs/screenshots/downloads-tab.png" alt="Downloads Manager" width="460" /></a> | <a href="docs/screenshots/settings-tab.png"><img src="docs/screenshots/settings-tab.png" alt="Settings & Backup" width="460" /></a> |
+
+---
+
 ## 🎯 Why CMM?
 
 If you've been manually downloading models from CivitAI, creating folders, moving files, and losing track of what you have, this tool is for you. CMM acts as a **Steam-like library manager** for your AI models:
