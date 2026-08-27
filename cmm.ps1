@@ -151,7 +151,85 @@ function Stop-App {
   return $true
 }
 
+function Ensure-NodeInstalled {
+  $nodeCmd = Get-Command 'node' -ErrorAction SilentlyContinue
+  $npmCmd = Get-Command 'npm' -ErrorAction SilentlyContinue
+  $npxCmd = Get-Command 'npx' -ErrorAction SilentlyContinue
+
+  if (-not $nodeCmd -or -not $npmCmd -or -not $npxCmd) {
+    Write-Status '!' 'Node.js runtime was not detected on this system.' 'Yellow'
+    Write-Host ''
+    Write-Host '  CivitAI Model Manager requires Node.js (v20+ LTS recommended).' -ForegroundColor Yellow
+    Write-Host ''
+
+    $installed = $false
+    # Check if winget is available
+    $wingetCmd = Get-Command 'winget' -ErrorAction SilentlyContinue
+    if ($wingetCmd) {
+      Write-Status '>>' 'Attempting automatic Node.js installation via Windows Package Manager (winget)...' 'Cyan'
+      try {
+        & winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements --silent
+        if ($LASTEXITCODE -eq 0) {
+          $installed = $true
+        }
+      } catch {
+        Write-Status '!!' "Winget installation encountered an issue: $_" 'Red'
+      }
+    }
+
+    # If winget was not available or failed, download and run official MSI installer from nodejs.org
+    if (-not $installed) {
+      Write-Status '>>' 'Downloading official Node.js LTS installer from nodejs.org...' 'Cyan'
+      $tempMsi = Join-Path $env:TEMP 'node-lts-installer.msi'
+      try {
+        $nodeDownloadUrl = 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi'
+        Invoke-WebRequest -Uri $nodeDownloadUrl -OutFile $tempMsi -UseBasicParsing
+        Write-Status '>>' 'Running Node.js installer (passive mode)...' 'Cyan'
+        $installerProc = Start-Process msiexec.exe -ArgumentList "/i `"$tempMsi`" /passive /norestart" -PassThru -Wait
+        if ($installerProc.ExitCode -eq 0) {
+          $installed = $true
+        }
+      } catch {
+        Write-Status '!!' "Failed downloading Node.js installer: $_" 'Red'
+        Write-Host ''
+        Write-Host '  Please download and install Node.js manually from: https://nodejs.org/' -ForegroundColor Cyan
+        throw 'Node.js is required to run CivitAI Model Manager.'
+      }
+    }
+
+    # Refresh current PowerShell session environment PATH
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = "$machinePath;$userPath"
+
+    $recheck = Get-Command 'node' -ErrorAction SilentlyContinue
+    if ($recheck) {
+      $nodeVer = & node -v
+      Write-Status 'ok' "Node.js environment verified ($nodeVer)!" 'Green'
+    } else {
+      Write-Status '!' 'Node.js was installed. If commands fail, please restart your PowerShell terminal.' 'Yellow'
+    }
+  }
+
+  # Check if project dependencies (node_modules) are installed
+  $nodeModulesDir = Join-Path $ProjectRoot 'node_modules'
+  if (-not (Test-Path $nodeModulesDir)) {
+    Write-Status '>>' 'node_modules not found. Installing project dependencies (npm install)...' 'Cyan'
+    Push-Location $ProjectRoot
+    try {
+      & npm install
+      if ($LASTEXITCODE -ne 0) {
+        throw 'npm install failed.'
+      }
+      Write-Status 'ok' 'Dependencies installed successfully.' 'Green'
+    } finally {
+      Pop-Location
+    }
+  }
+}
+
 function Start-App {
+  Ensure-NodeInstalled
   # Check if already running or if ports 5173/5174 are in use
   $existing = Get-RunningProcs
   if ($existing.Count -gt 0) {
@@ -304,6 +382,7 @@ function Show-Status {
 # -- Banner ----------------------------------------------------------------
 
 function Invoke-AppPackage {
+  Ensure-NodeInstalled
   Write-Status '>>' 'Building production assets...' 'Cyan'
   
   Write-Status '>>' 'Building renderer process with Vite...' 'Cyan'
