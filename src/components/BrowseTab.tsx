@@ -66,6 +66,36 @@ const DEFAULT_BASE_MODELS = [
   'Qwen',
 ];
 
+export function mapCivitaiNsfwLevel(nsfwLevel?: number | boolean): number {
+  if (typeof nsfwLevel === 'boolean') return nsfwLevel ? 4 : 1;
+  if (typeof nsfwLevel !== 'number') return 1;
+  // CivitAI bitflags: 1=PG, 2=PG13, 4=R, 8=X, 16=XXX, 32=Blocked
+  if (nsfwLevel >= 16) return 5; // XXX
+  if (nsfwLevel >= 8) return 4;  // X
+  if (nsfwLevel >= 4) return 3;  // R
+  if (nsfwLevel >= 2) return 2;  // PG13
+  return 1; // PG
+}
+
+export function isModelNsfwOrMature(model: CivitAIModel): boolean {
+  if (model.nsfw === true) return true;
+  if (typeof model.nsfwLevel === 'number' && model.nsfwLevel >= 4) return true;
+  const firstVersion = model.modelVersions?.[0];
+  const firstImg = firstVersion?.images?.[0];
+  if (
+    firstImg?.nsfw === true ||
+    firstImg?.nsfw === 'Mature' ||
+    firstImg?.nsfw === 'X' ||
+    firstImg?.nsfw === 'Explicit'
+  ) {
+    return true;
+  }
+  if (typeof firstImg?.nsfwLevel === 'number' && firstImg.nsfwLevel >= 4) {
+    return true;
+  }
+  return false;
+}
+
 interface BrowseTabProps {
   onQueueDownload: (
     model: CivitAIModel,
@@ -94,7 +124,8 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
     apiUrl: 'https://civitai.com/api/v1/models',
   });
 
-  // Filters with LocalStorage Persistence
+  // Settings & Filters with LocalStorage Persistence
+  const [maxNsfwLevel, setMaxNsfwLevel] = useState<number>(5);
   const [query, setQuery] = useState<string>(() => localStorage.getItem('civitai_browse_query') || '');
   const [selectedType, setSelectedType] = useState<string>(() => localStorage.getItem('civitai_browse_type') || 'All');
   const [selectedBaseModel, setSelectedBaseModel] = useState<string>(() => localStorage.getItem('civitai_browse_base_model') || 'All');
@@ -317,6 +348,23 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
     localStorage.setItem('civitai_browse_page', String(currentPage));
   }, [currentPage]);
 
+  // Load configuration for NSFW visibility levels
+  useEffect(() => {
+    if (window.civitaiAPI) {
+      window.civitaiAPI
+        .getConfig()
+        .then((cfg) => {
+          if (typeof cfg?.nsfw_max_visible_level === 'number') {
+            setMaxNsfwLevel(cfg.nsfw_max_visible_level);
+          }
+          if (typeof cfg?.nsfw_blur_enabled === 'boolean') {
+            setNsfwBlur(cfg.nsfw_blur_enabled);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // Fetch models on initial mount or when filters change (resets to page 1)
   useEffect(() => {
     setCurrentPage(1);
@@ -325,17 +373,25 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
   }, [selectedType, selectedBaseModel, sort, period, includeNsfw]);
 
   // Strict NSFW & Mature Content Filtering for Clean View
-  const displayedModels = models.filter((model) => {
-    if (!includeNsfw) {
-      if (model.nsfw === true) return false;
-      const firstVersion = model.modelVersions?.[0];
-      const firstImg = firstVersion?.images?.[0];
-      if (firstImg?.nsfw === true || firstImg?.nsfw === 'Mature' || firstImg?.nsfw === 'X') {
-        return false;
+  const displayedModels = React.useMemo(() => {
+    return models.filter((model) => {
+      const isNsfw = isModelNsfwOrMature(model);
+      const level = mapCivitaiNsfwLevel(model.nsfwLevel ?? (model.nsfw ? 4 : 1));
+
+      if (!includeNsfw) {
+        // Hide all adult, mature, or R/X content when "Include Mature Content" is unchecked
+        if (isNsfw || level > 2) {
+          return false;
+        }
+      } else {
+        // When checked, respect Settings slider (1 to 5)
+        if (level > maxNsfwLevel) {
+          return false;
+        }
       }
-    }
-    return true;
-  });
+      return true;
+    });
+  }, [models, includeNsfw, maxNsfwLevel]);
 
   // Fetch local library models and ignored updates list
   const fetchLocalLibraryStatus = async () => {
@@ -619,7 +675,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
                 }
               });
             });
-            const isNsfw = model.nsfw || (typeof model.nsfwLevel === 'number' && model.nsfwLevel > 1);
+            const isNsfw = isModelNsfwOrMature(model);
             const installStatus = getModelInstallStatus(model);
 
             return (
