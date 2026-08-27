@@ -32,6 +32,7 @@ export class DatabaseManager {
           // Enable Write-Ahead Logging (WAL) for concurrent read/write support
           await this.exec('PRAGMA journal_mode = WAL;');
           await this.exec('PRAGMA foreign_keys = ON;');
+          await this.ensureBaseSchema();
           await this.runMigrations();
           await this.cleanupPhantomDuplicates();
           logger.info(`SQLite database initialized at: ${this.dbPath}`);
@@ -43,13 +44,151 @@ export class DatabaseManager {
     });
   }
 
+  private async ensureBaseSchema(): Promise<void> {
+    // 1. App Configuration Table
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS app_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        comfyui_root TEXT,
+        comfyui_folders TEXT,
+        civitai_api_key TEXT,
+        mirror_url TEXT,
+        folder_mappings TEXT,
+        advanced_mappings TEXT,
+        organize_by_base_model INTEGER DEFAULT 0,
+        organize_by_creator INTEGER DEFAULT 0,
+        conflict_strategy TEXT DEFAULT 'rename',
+        nsfw_max_visible_level INTEGER DEFAULT 1,
+        nsfw_blur_enabled INTEGER DEFAULT 1,
+        strict_hash_verification INTEGER DEFAULT 0,
+        max_concurrent_downloads INTEGER DEFAULT 3,
+        default_download_folder TEXT
+      );
+    `);
+
+    // Seed default app_config row if table is newly created
+    const configExists = await this.get('SELECT id FROM app_config WHERE id = 1;');
+    if (!configExists) {
+      await this.run(`
+        INSERT INTO app_config (
+          id, comfyui_root, comfyui_folders, folder_mappings, advanced_mappings,
+          conflict_strategy, nsfw_max_visible_level, nsfw_blur_enabled, max_concurrent_downloads
+        ) VALUES (
+          1, '', '[]', '{}', '{"filename_patterns":[]}',
+          'rename', 1, 1, 3
+        );
+      `);
+    }
+
+    // 2. Local Models Table
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS local_models (
+        id TEXT PRIMARY KEY,
+        file_path TEXT NOT NULL UNIQUE,
+        file_name TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        modified_at INTEGER NOT NULL,
+        sha256 TEXT,
+        civitai_model_id INTEGER,
+        civitai_version_id INTEGER,
+        civitai_name TEXT,
+        scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_duplicate INTEGER DEFAULT 0,
+        preview_url TEXT,
+        model_type TEXT,
+        nsfw INTEGER DEFAULT 0,
+        has_update INTEGER DEFAULT 0,
+        update_version_id INTEGER,
+        update_version_name TEXT,
+        update_download_url TEXT,
+        ignored_version_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_local_models_sha256 ON local_models(sha256);
+      CREATE INDEX IF NOT EXISTS idx_local_models_civitai_version ON local_models(civitai_version_id);
+      CREATE INDEX IF NOT EXISTS idx_local_models_civitai_model ON local_models(civitai_model_id);
+      CREATE INDEX IF NOT EXISTS idx_local_models_file_path ON local_models(file_path);
+    `);
+
+    // 3. Downloads Table
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS downloads (
+        id TEXT PRIMARY KEY,
+        model_version_id INTEGER NOT NULL,
+        model_id INTEGER NOT NULL,
+        model_name TEXT NOT NULL,
+        version_name TEXT NOT NULL,
+        model_type TEXT NOT NULL,
+        base_model TEXT,
+        target_folder TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        download_url TEXT NOT NULL,
+        size_kb INTEGER,
+        sha256 TEXT,
+        status TEXT DEFAULT 'pending',
+        progress INTEGER DEFAULT 0,
+        downloaded_bytes INTEGER DEFAULT 0,
+        total_bytes INTEGER DEFAULT 0,
+        speed_bps INTEGER DEFAULT 0,
+        error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME,
+        computed_path TEXT,
+        delete_old_version_file TEXT,
+        delete_old_model_id TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+    `);
+
+    // 4. Ignored Model Updates Table
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS ignored_model_updates (
+        model_id INTEGER,
+        version_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (model_id, version_id)
+      );
+    `);
+
+    // 5. Ignored Duplicates Table
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS ignored_duplicates (
+        sha256 TEXT PRIMARY KEY,
+        known_count INTEGER DEFAULT 2,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Ensure all columns exist for existing database files (graceful migration)
+    const columnUpdates = [
+      'ALTER TABLE local_models ADD COLUMN preview_url TEXT;',
+      'ALTER TABLE local_models ADD COLUMN model_type TEXT;',
+      'ALTER TABLE local_models ADD COLUMN nsfw INTEGER DEFAULT 0;',
+      'ALTER TABLE local_models ADD COLUMN civitai_name TEXT;',
+      'ALTER TABLE local_models ADD COLUMN has_update INTEGER DEFAULT 0;',
+      'ALTER TABLE local_models ADD COLUMN update_version_id INTEGER;',
+      'ALTER TABLE local_models ADD COLUMN update_version_name TEXT;',
+      'ALTER TABLE local_models ADD COLUMN update_download_url TEXT;',
+      'ALTER TABLE local_models ADD COLUMN ignored_version_id INTEGER;',
+      'ALTER TABLE downloads ADD COLUMN delete_old_version_file TEXT;',
+      'ALTER TABLE downloads ADD COLUMN delete_old_model_id TEXT;',
+    ];
+
+    for (const sql of columnUpdates) {
+      await this.exec(sql).catch(() => {});
+    }
+  }
+
   private async runMigrations(): Promise<void> {
     const versionRow: any = await this.get('PRAGMA user_version;');
     const currentVersion = versionRow ? versionRow.user_version : 0;
     logger.info(`Current SQLite schema version: ${currentVersion}`);
 
     const migrationsDir = path.join(process.cwd(), 'migrations');
-    if (!fs.existsSync(migrationsDir)) return;
+    if (!fs.existsSync(migrationsDir)) {
+      // Standalone execution without external SQL files
+      await this.exec('PRAGMA user_version = 8;').catch(() => {});
+      return;
+    }
 
     const migrationFiles = fs
       .readdirSync(migrationsDir)
@@ -64,8 +203,15 @@ export class DatabaseManager {
       if (fileVersion > currentVersion) {
         logger.info(`Applying migration: ${file}`);
         const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-        await this.exec(sql);
-        await this.exec(`PRAGMA user_version = ${fileVersion};`);
+        try {
+          await this.exec(sql);
+        } catch (e: any) {
+          // Gracefully ignore duplicate column / table already exists errors
+          if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+            logger.warn(`Migration ${file} notice:`, e.message);
+          }
+        }
+        await this.exec(`PRAGMA user_version = ${fileVersion};`).catch(() => {});
       }
     }
   }
