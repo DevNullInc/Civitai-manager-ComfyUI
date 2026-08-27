@@ -45,40 +45,13 @@ export class DatabaseManager {
   }
 
   private async ensureBaseSchema(): Promise<void> {
-    // 1. App Configuration Table
+    // 1. App Configuration Table (Key-Value)
     await this.exec(`
       CREATE TABLE IF NOT EXISTS app_config (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        comfyui_root TEXT,
-        comfyui_folders TEXT,
-        civitai_api_key TEXT,
-        mirror_url TEXT,
-        folder_mappings TEXT,
-        advanced_mappings TEXT,
-        organize_by_base_model INTEGER DEFAULT 0,
-        organize_by_creator INTEGER DEFAULT 0,
-        conflict_strategy TEXT DEFAULT 'rename',
-        nsfw_max_visible_level INTEGER DEFAULT 1,
-        nsfw_blur_enabled INTEGER DEFAULT 1,
-        strict_hash_verification INTEGER DEFAULT 0,
-        max_concurrent_downloads INTEGER DEFAULT 3,
-        default_download_folder TEXT
+        key TEXT PRIMARY KEY,
+        value TEXT
       );
     `);
-
-    // Seed default app_config row if table is newly created
-    const configExists = await this.get('SELECT id FROM app_config WHERE id = 1;');
-    if (!configExists) {
-      await this.run(`
-        INSERT INTO app_config (
-          id, comfyui_root, comfyui_folders, folder_mappings, advanced_mappings,
-          conflict_strategy, nsfw_max_visible_level, nsfw_blur_enabled, max_concurrent_downloads
-        ) VALUES (
-          1, '', '[]', '{}', '{"filename_patterns":[]}',
-          'rename', 1, 1, 3
-        );
-      `);
-    }
 
     // 2. Local Models Table
     await this.exec(`
