@@ -30,7 +30,7 @@ import { AboutTab } from './components/AboutTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ScanStatusBar } from './components/ScanStatusBar';
 import { DownloadFolderPromptModal } from './components/DownloadFolderPromptModal';
-import { ScanProvider } from './context/ScanContext';
+import { ScanProvider, useScan } from './context/ScanContext';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
 
 type Tab = 'browse' | 'library' | 'downloads' | 'settings' | 'about';
@@ -44,6 +44,7 @@ export default function App() {
 }
 
 function AppContent() {
+  const { isScanning, scanProgress } = useScan();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const saved = localStorage.getItem('civitai_active_tab');
     if (
@@ -58,6 +59,7 @@ function AppContent() {
     return 'browse';
   });
   const [activeDownloadsCount, setActiveDownloadsCount] = useState<number>(0);
+  const [hasFoldersConfigured, setHasFoldersConfigured] = useState<boolean>(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [pendingDownloadPrompt, setPendingDownloadPrompt] = useState<{
     model: CivitAIModel;
@@ -70,6 +72,21 @@ function AppContent() {
 
   useEffect(() => {
     localStorage.setItem('civitai_active_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (window.civitaiAPI) {
+      window.civitaiAPI
+        .getConfig()
+        .then((cfg) => {
+          const hasFolders = Boolean(
+            (cfg?.comfyui_folders && cfg.comfyui_folders.length > 0 && cfg.comfyui_folders[0]) ||
+              cfg?.comfyui_root
+          );
+          setHasFoldersConfigured(hasFolders);
+        })
+        .catch(() => {});
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -288,11 +305,67 @@ function AppContent() {
           </button>
         </nav>
 
-        {/* Right: Engine Status Badge */}
-        <div className="flex items-center gap-2 shrink-0 bg-slate-900/80 border border-slate-800 px-3.5 py-1.5 rounded-xl text-[11px] font-medium text-slate-400">
-          <Activity size={14} className="text-emerald-400" />
-          <span>Auto-Sorter Ready</span>
-        </div>
+        {/* Right: Dynamic Engine & Activity Status Badge */}
+        {(() => {
+          if (isScanning) {
+            const pct = scanProgress?.totalFiles
+              ? Math.round((scanProgress.scannedFiles / scanProgress.totalFiles) * 100)
+              : 0;
+            return (
+              <button
+                onClick={() => setActiveTab('library')}
+                className="flex items-center gap-2 shrink-0 bg-amber-500/10 border border-amber-500/30 px-3.5 py-1.5 rounded-xl text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer shadow-sm animate-pulse"
+                title="Library scan in progress. Click to view Library."
+              >
+                <Activity size={14} className="text-amber-400 animate-spin" />
+                <span>Scanning Library {pct > 0 ? `(${pct}%)` : '...'}</span>
+              </button>
+            );
+          }
+
+          if (activeDownloadsCount > 0) {
+            return (
+              <button
+                onClick={() => setActiveTab('downloads')}
+                className="flex items-center gap-2 shrink-0 bg-purple-500/15 border border-purple-500/30 px-3.5 py-1.5 rounded-xl text-[11px] font-semibold text-purple-300 hover:bg-purple-500/25 transition-all cursor-pointer shadow-sm glow-purple"
+                title={`${activeDownloadsCount} download(s) in progress. Click to view Downloads.`}
+              >
+                <Download size={14} className="text-purple-400 animate-bounce" />
+                <span>
+                  {activeDownloadsCount} {activeDownloadsCount === 1 ? 'Download' : 'Downloads'} Active
+                </span>
+              </button>
+            );
+          }
+
+          if (!hasFoldersConfigured) {
+            return (
+              <button
+                onClick={() => setActiveTab('settings')}
+                className="flex items-center gap-2 shrink-0 bg-amber-500/10 border border-amber-500/30 px-3.5 py-1.5 rounded-xl text-[11px] font-semibold text-amber-400 hover:bg-amber-500/20 transition-all cursor-pointer shadow-sm"
+                title="No ComfyUI model folder paths configured. Click to configure in Settings."
+              >
+                <Layers size={14} className="text-amber-400" />
+                <span>Configure Folders</span>
+              </button>
+            );
+          }
+
+          return (
+            <button
+              onClick={() => setActiveTab('settings')}
+              className="flex items-center gap-2 shrink-0 bg-slate-900/80 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 px-3.5 py-1.5 rounded-xl text-[11px] font-medium text-slate-300 hover:text-white transition-all cursor-pointer"
+              title="ComfyUI Auto-Sorter active & ready. Click to manage Folder Mappings in Settings."
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <Activity size={13} className="text-emerald-400" />
+              <span>Auto-Sorter Ready</span>
+            </button>
+          );
+        })()}
       </header>
 
       {/* Scrollable Container */}
