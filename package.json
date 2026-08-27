@@ -62,6 +62,9 @@
     "vite": "^6.1.0",
     "vitest": "^3.0.6"
   },
+  "overrides": {
+    "@tootallnate/once": "^2.0.1"
+  },
   "build": {
     "appId": "com.devnullinc.civitai-manager-comfyui",
     "productName": "CivitAI Model Manager",
