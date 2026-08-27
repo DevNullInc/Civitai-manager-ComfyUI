@@ -497,6 +497,30 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 
 ---
 
+## ☕ Buy me a coffee or something please?
+
+If CMM saves you time organizing your ComfyUI models or makes your workflow easier, consider supporting ongoing development!
+
+<p align="center">
+  <a href="https://cash.app/$StygianRenegade/1.00">
+    <img src="https://img.shields.io/badge/CashApp-$1.00_Coffee-00D632?style=for-the-badge&logo=cashapp&logoColor=white" alt="Buy $1 Coffee" />
+  </a>
+  &nbsp;
+  <a href="https://cash.app/$StygianRenegade/5.00">
+    <img src="https://img.shields.io/badge/CashApp-$5.00_Coffee_%26_Snack-00D632?style=for-the-badge&logo=cashapp&logoColor=white" alt="Buy $5 Coffee & Snack" />
+  </a>
+  &nbsp;
+  <a href="https://cash.app/$StygianRenegade/10.00">
+    <img src="https://img.shields.io/badge/CashApp-$10.00_Lunch_%26_Fuel-00D632?style=for-the-badge&logo=cashapp&logoColor=white" alt="Buy $10 Lunch & Fuel" />
+  </a>
+</p>
+
+- ☕ **[$1.00 — Quick Coffee](https://cash.app/$StygianRenegade/1.00)**
+- 🥪 **[$5.00 — Coffee & Snack](https://cash.app/$StygianRenegade/5.00)**
+- 🍕 **[$10.00 — Lunch & Fuel](https://cash.app/$StygianRenegade/10.00)**
+
+---
+
 ## 🙏 Author & Acknowledgments
 
 - **Lead Developer / Maintainer**: **TheStygianRenegade** / **/dev/null Inc**
@@ -506,7 +530,7 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 
 ---
 
-## 📧 Support
+## 📧 Support & Feedback
 
 - **Issues**: [GitHub Issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues)
 - **Vulnerability Reporting**: [GitHub Security](https://github.com/DevNullInc/Civitai-manager-ComfyUI/security)

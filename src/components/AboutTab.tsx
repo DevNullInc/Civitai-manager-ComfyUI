@@ -158,6 +158,29 @@ export function AboutTab() {
                 <span className="font-semibold text-slate-200">DevNullInc</span>
               </div>
             </div>
+            <div className="pt-2 border-t border-slate-800/80 space-y-2">
+              <span className="text-[11px] font-bold text-slate-400 block">Buy me a coffee or something please?</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => openLink('https://cash.app/$StygianRenegade/1.00')}
+                  className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <span>☕ $1.00</span>
+                </button>
+                <button
+                  onClick={() => openLink('https://cash.app/$StygianRenegade/5.00')}
+                  className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <span>🥪 $5.00</span>
+                </button>
+                <button
+                  onClick={() => openLink('https://cash.app/$StygianRenegade/10.00')}
+                  className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <span>🍕 $10.00</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] text-slate-400">
