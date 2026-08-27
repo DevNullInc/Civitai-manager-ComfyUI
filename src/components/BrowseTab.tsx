@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { FallbackImage } from './FallbackImage';
 import { CivitAIModel, CivitAIModelVersion, ModelType, SearchParams } from '../types/civitai';
+import { LocalModel } from '../types/app';
 
 export interface DebugInfo {
   timestamp: string;
@@ -66,13 +67,22 @@ const DEFAULT_BASE_MODELS = [
 ];
 
 interface BrowseTabProps {
-  onQueueDownload: (model: CivitAIModel, version: CivitAIModelVersion) => void;
+  onQueueDownload: (
+    model: CivitAIModel,
+    version: CivitAIModelVersion,
+    options?: { deleteOldVersionFile?: string; deleteOldModelId?: string }
+  ) => void;
 }
 
 export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
   const [models, setModels] = useState<CivitAIModel[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Local Library State & Ignored Updates
+  const [localModels, setLocalModels] = useState<LocalModel[]>([]);
+  const [ignoredUpdates, setIgnoredUpdates] = useState<{ modelId: number; versionId: number }[]>([]);
+  const [deleteOldOnUpdate, setDeleteOldOnUpdate] = useState<boolean>(false);
 
   // Debug Diagnostics
   const [showDebug, setShowDebug] = useState<boolean>(false);
@@ -327,6 +337,100 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
     return true;
   });
 
+  // Fetch local library models and ignored updates list
+  const fetchLocalLibraryStatus = async () => {
+    try {
+      if (window.civitaiAPI) {
+        const [models, ignored] = await Promise.all([
+          window.civitaiAPI.getLocalModels(),
+          typeof window.civitaiAPI.getIgnoredUpdates === 'function' ? window.civitaiAPI.getIgnoredUpdates() : [],
+        ]);
+        if (models) setLocalModels(models);
+        if (ignored) setIgnoredUpdates(ignored);
+      }
+    } catch (e) {
+      console.error('Failed to load local models in BrowseTab:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchLocalLibraryStatus();
+  }, []);
+
+  // Map of civitaiModelId -> Set of installed civitaiVersionIds
+  const installedMap = React.useMemo(() => {
+    const map = new Map<number, Set<number>>();
+    localModels.forEach((m) => {
+      if (m.civitaiModelId) {
+        if (!map.has(m.civitaiModelId)) {
+          map.set(m.civitaiModelId, new Set<number>());
+        }
+        if (m.civitaiVersionId) {
+          map.get(m.civitaiModelId)!.add(m.civitaiVersionId);
+        }
+      }
+    });
+    return map;
+  }, [localModels]);
+
+  // Set of `${modelId}_${versionId}` marked as ignored
+  const ignoredSet = React.useMemo(() => {
+    const set = new Set<string>();
+    ignoredUpdates.forEach((item) => {
+      set.add(`${item.modelId}_${item.versionId}`);
+    });
+    return set;
+  }, [ignoredUpdates]);
+
+  // Helper to determine status for a model in the browse grid
+  const getModelInstallStatus = (model: CivitAIModel) => {
+    const installedVersions = installedMap.get(model.id);
+    if (!installedVersions || installedVersions.size === 0) {
+      return { isInstalled: false, hasUpdate: false, installedVersions: new Set<number>() };
+    }
+
+    let hasUninstalledNewer = false;
+    let latestUnignoredVersion: CivitAIModelVersion | undefined;
+
+    if (model.modelVersions && model.modelVersions.length > 0) {
+      const latestVer = model.modelVersions[0];
+      const isLatestInstalled = installedVersions.has(latestVer.id);
+      const isLatestIgnored = ignoredSet.has(`${model.id}_${latestVer.id}`);
+
+      if (!isLatestInstalled && !isLatestIgnored) {
+        hasUninstalledNewer = true;
+        latestUnignoredVersion = latestVer;
+      }
+    }
+
+    return {
+      isInstalled: true,
+      hasUpdate: hasUninstalledNewer,
+      updateVersion: latestUnignoredVersion,
+      installedVersions,
+    };
+  };
+
+  const handleIgnoreVersion = async (modelId: number, versionId: number) => {
+    if (!window.civitaiAPI || typeof window.civitaiAPI.ignoreModelUpdate !== 'function') return;
+    try {
+      await window.civitaiAPI.ignoreModelUpdate(modelId, versionId);
+      await fetchLocalLibraryStatus();
+    } catch (e) {
+      console.error('Failed to ignore update:', e);
+    }
+  };
+
+  const handleUnignoreVersion = async (modelId: number, versionId: number) => {
+    if (!window.civitaiAPI || typeof window.civitaiAPI.unignoreModelUpdate !== 'function') return;
+    try {
+      await window.civitaiAPI.unignoreModelUpdate(modelId, versionId);
+      await fetchLocalLibraryStatus();
+    } catch (e) {
+      console.error('Failed to unignore update:', e);
+    }
+  };
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setCurrentPage(1);
@@ -344,6 +448,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
 
   const openModelDetails = (model: CivitAIModel) => {
     setActiveModel(model);
+    setDeleteOldOnUpdate(false);
     if (model.modelVersions && model.modelVersions.length > 0) {
       setSelectedVersion(model.modelVersions[0]);
     } else {
@@ -353,7 +458,14 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
 
   const triggerDownload = (version: CivitAIModelVersion) => {
     if (!activeModel) return;
-    onQueueDownload(activeModel, version);
+    const oldInstalledModel = (deleteOldOnUpdate && activeModel)
+      ? localModels.find((m) => m.civitaiModelId === activeModel.id)
+      : undefined;
+
+    onQueueDownload(activeModel, version, {
+      deleteOldVersionFile: oldInstalledModel?.filePath,
+      deleteOldModelId: oldInstalledModel?.id,
+    });
     setDownloadSuccess(`Queued download for ${activeModel.name} (${version.name})`);
     setTimeout(() => setDownloadSuccess(null), 3000);
   };
@@ -508,12 +620,13 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
               });
             });
             const isNsfw = model.nsfw || (typeof model.nsfwLevel === 'number' && model.nsfwLevel > 1);
+            const installStatus = getModelInstallStatus(model);
 
             return (
               <div
                 key={model.id}
                 onClick={() => openModelDetails(model)}
-                className="glass-card rounded-2xl overflow-hidden cursor-pointer flex flex-col group border border-slate-800/80 hover:border-purple-500/40"
+                className="glass-card rounded-2xl overflow-hidden cursor-pointer flex flex-col group border border-slate-800/80 hover:border-purple-500/40 relative"
               >
                 {/* Image Preview Container */}
                 <div className="relative aspect-[4/3] bg-slate-950 overflow-hidden">
@@ -525,17 +638,38 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
                     className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                   />
 
-                  {/* Type Badge */}
-                  <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-slate-950/80 border border-purple-500/40 text-purple-300 backdrop-blur-md shadow-md">
-                    {model.type}
-                  </span>
-
-                  {/* NSFW Badge */}
-                  {isNsfw && (
-                    <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-lg text-[9px] font-extrabold bg-red-950/90 border border-red-500/40 text-red-400 backdrop-blur-md">
-                      NSFW
+                  {/* Top-Left: Type & NSFW Badges */}
+                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+                    <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-slate-950/85 border border-purple-500/40 text-purple-300 backdrop-blur-md shadow-md">
+                      {model.type}
                     </span>
-                  )}
+                    {isNsfw && (
+                      <span className="px-2 py-0.5 rounded-lg text-[9px] font-extrabold bg-red-950/90 border border-red-500/40 text-red-400 backdrop-blur-md shadow-md">
+                        NSFW
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Top-Right: Installed / Update Status Badges */}
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+                    {installStatus.hasUpdate ? (
+                      <span
+                        className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-amber-500 text-slate-950 border border-amber-300 backdrop-blur-md shadow-lg shadow-amber-950/50 flex items-center gap-1 animate-pulse"
+                        title={`Update Available: ${installStatus.updateVersion?.name || 'Newer release available'}`}
+                      >
+                        <Sparkles size={11} className="stroke-[2.5]" />
+                        <span>Update Available</span>
+                      </span>
+                    ) : installStatus.isInstalled ? (
+                      <span
+                        className="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 backdrop-blur-md shadow-lg shadow-emerald-950/40 flex items-center gap-1"
+                        title="Model is installed in your ComfyUI library"
+                      >
+                        <CheckCircle2 size={11} className="text-emerald-400" />
+                        <span>Installed</span>
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* Model Info */}
@@ -669,25 +803,122 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
                 </div>
               )}
 
-              {/* Version Selector */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Select Target Version
-                </label>
+              {/* Version Selector & Update Controls */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Select Target Version
+                  </label>
+                  {selectedVersion && (
+                    <div className="flex items-center gap-2">
+                      {installedMap.get(activeModel.id)?.has(selectedVersion.id) ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-lg">
+                          <CheckCircle2 size={12} />
+                          <span>Installed</span>
+                        </span>
+                      ) : ignoredSet.has(`${activeModel.id}_${selectedVersion.id}`) ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-slate-400 bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-lg">
+                          <EyeOff size={12} />
+                          <span>Update Ignored</span>
+                        </span>
+                      ) : (installedMap.get(activeModel.id)?.size || 0) > 0 ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 rounded-lg">
+                          <Sparkles size={12} />
+                          <span>Newer Version</span>
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+
                 <select
                   value={selectedVersion?.id || ''}
                   onChange={(e) => {
                     const ver = activeModel.modelVersions.find((v) => v.id === parseInt(e.target.value, 10));
                     if (ver) setSelectedVersion(ver);
                   }}
-                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-sm text-slate-100 focus:border-purple-500 focus:outline-none font-medium"
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-sm text-slate-100 focus:border-purple-500 focus:outline-none font-medium cursor-pointer"
                 >
-                  {activeModel.modelVersions.map((v) => (
-                    <option key={v.id} value={v.id} className="bg-slate-900">
-                      {v.name} ({v.baseModel}) {v.publishedAt ? `- ${new Date(v.publishedAt).toLocaleDateString()}` : ''}
-                    </option>
-                  ))}
+                  {activeModel.modelVersions.map((v) => {
+                    const isInstalled = installedMap.get(activeModel.id)?.has(v.id);
+                    const isIgnored = ignoredSet.has(`${activeModel.id}_${v.id}`);
+                    let tag = '';
+                    if (isInstalled) tag = ' ✓ [Installed]';
+                    else if (isIgnored) tag = ' ⊘ [Ignored Update]';
+                    else if ((installedMap.get(activeModel.id)?.size || 0) > 0) tag = ' ✦ [Update]';
+
+                    return (
+                      <option key={v.id} value={v.id} className="bg-slate-900">
+                        {v.name} ({v.baseModel}){tag} {v.publishedAt ? `- ${new Date(v.publishedAt).toLocaleDateString()}` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
+
+                {/* Selective Update Ignore / Notice Card */}
+                {selectedVersion && !installedMap.get(activeModel.id)?.has(selectedVersion.id) && (installedMap.get(activeModel.id)?.size || 0) > 0 && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-slate-900/90 border border-slate-800 rounded-2xl animate-fadeIn">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                        <Sparkles size={14} className="text-amber-400" />
+                        <span>
+                          {ignoredSet.has(`${activeModel.id}_${selectedVersion.id}`)
+                            ? 'Update Ignored for this Version'
+                            : 'Different Version Available'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        {ignoredSet.has(`${activeModel.id}_${selectedVersion.id}`)
+                          ? 'This version is marked as ignored and will not trigger "Update Available" badges.'
+                          : 'Ignore this version if it is built for a base model or format you do not use.'}
+                      </p>
+                    </div>
+
+                    <div>
+                      {ignoredSet.has(`${activeModel.id}_${selectedVersion.id}`) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleUnignoreVersion(activeModel.id, selectedVersion.id)}
+                          className="px-3.5 py-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-semibold transition-all cursor-pointer"
+                        >
+                          Unignore Version
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleIgnoreVersion(activeModel.id, selectedVersion.id)}
+                          className="px-3.5 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-xs text-amber-300 font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                          title="Ignore this version from triggering update notices"
+                        >
+                          <EyeOff size={13} />
+                          <span>Ignore This Update</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Checkbox to delete old version file on completion */}
+                {selectedVersion && !installedMap.get(activeModel.id)?.has(selectedVersion.id) && (installedMap.get(activeModel.id)?.size || 0) > 0 && (
+                  <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-2xl animate-fadeIn">
+                    <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-300 select-none">
+                      <input
+                        type="checkbox"
+                        checked={deleteOldOnUpdate}
+                        onChange={(e) => setDeleteOldOnUpdate(e.target.checked)}
+                        className="mt-0.5 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                      />
+                      <div className="space-y-0.5 flex-1">
+                        <span className="font-semibold text-slate-200">
+                          Delete previous version ({localModels.find((m) => m.civitaiModelId === activeModel.id)?.fileName || 'existing file'}) upon completion
+                        </span>
+                        <p className="text-[11px] text-slate-500 leading-normal">
+                          The old file will only be deleted after the update is 100% downloaded and verified. If the download fails or is cancelled, your existing version remains intact.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Version Specs Grid */}
@@ -758,10 +989,16 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
               {selectedVersion && (
                 <button
                   onClick={() => triggerDownload(selectedVersion)}
-                  className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple"
+                  className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer"
                 >
                   <Download size={18} />
-                  <span>Download to ComfyUI</span>
+                  <span>
+                    {installedMap.get(activeModel.id)?.has(selectedVersion.id)
+                      ? 'Re-download Version'
+                      : (installedMap.get(activeModel.id)?.size || 0) > 0
+                      ? 'Update to This Version'
+                      : 'Download to ComfyUI'}
+                  </span>
                 </button>
               )}
             </div>

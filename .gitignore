@@ -15,4 +15,13 @@ civitai_manager.sqlite-shm
 build-release.*
 build-local.*
 build-all.*
+migrations/001_initial.sql
+migrations/002_add_indexes.sql
+migrations/003_add_preview_and_type.sql
 migrations/004_add_update_columns.sql
+migrations/005_add_ignored_updates.sql
+migrations/006_add_ignored_duplicates.sql
+src/services/libraryScanner.ts
+migrations/007_add_nsfw_column.sql
+migrations/008_add_civitai_name.sql
+

@@ -58,7 +58,8 @@ export class VersionManager {
       }
 
       const latestVersion = fullModel.modelVersions[0];
-      const hasUpdate = latestVersion.id !== localModel.civitaiVersionId;
+      const isIgnored = await this.isUpdateIgnored(localModel.civitaiModelId, latestVersion.id);
+      const hasUpdate = latestVersion.id !== localModel.civitaiVersionId && !isIgnored;
       const downloadUrl = civitaiClient.getDownloadUrl(latestVersion.id);
 
       // Persist update status to database
@@ -133,7 +134,10 @@ export class VersionManager {
 
         if (fullModel && fullModel.modelVersions && fullModel.modelVersions.length > 0) {
           const latestVersion = fullModel.modelVersions[0];
-          if (latestVersion.id !== currentVersionId) {
+          const isIgnored = await this.isUpdateIgnored(modelId, latestVersion.id);
+          const hasUpdate = latestVersion.id !== currentVersionId && !isIgnored;
+
+          if (hasUpdate) {
             updatesFound++;
             const downloadUrl = civitaiClient.getDownloadUrl(latestVersion.id);
 
@@ -170,6 +174,58 @@ export class VersionManager {
       updatesFound,
       modelsWithUpdates,
     };
+  }
+
+  async isUpdateIgnored(modelId: number, versionId: number): Promise<boolean> {
+    try {
+      const row = await dbManager.get(
+        'SELECT 1 FROM ignored_model_updates WHERE model_id = ? AND version_id = ?;',
+        [modelId, versionId]
+      );
+      return !!row;
+    } catch {
+      return false;
+    }
+  }
+
+  async ignoreUpdate(modelId: number, versionId: number): Promise<boolean> {
+    try {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO ignored_model_updates (model_id, version_id) VALUES (?, ?);',
+        [modelId, versionId]
+      );
+      // Clear has_update for this model if this was the update version
+      await dbManager.run(
+        'UPDATE local_models SET has_update = 0 WHERE civitai_model_id = ? AND update_version_id = ?;',
+        [modelId, versionId]
+      );
+      return true;
+    } catch (err) {
+      logger.error('Failed to ignore update:', err);
+      return false;
+    }
+  }
+
+  async unignoreUpdate(modelId: number, versionId: number): Promise<boolean> {
+    try {
+      await dbManager.run(
+        'DELETE FROM ignored_model_updates WHERE model_id = ? AND version_id = ?;',
+        [modelId, versionId]
+      );
+      return true;
+    } catch (err) {
+      logger.error('Failed to unignore update:', err);
+      return false;
+    }
+  }
+
+  async getIgnoredUpdates(): Promise<{ modelId: number; versionId: number }[]> {
+    try {
+      const rows = await dbManager.all('SELECT model_id, version_id FROM ignored_model_updates;');
+      return rows.map((r: any) => ({ modelId: r.model_id, versionId: r.version_id }));
+    } catch {
+      return [];
+    }
   }
 
   async getVersionHistory(modelId: number): Promise<CivitAIModelVersion[]> {

@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Power,
   FileJson,
+  Archive,
   Copy,
   Check,
   Upload,
@@ -53,17 +54,17 @@ export const SettingsTab: React.FC = () => {
 
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isImportingBackup, setIsImportingBackup] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pastedJsonText, setPastedJsonText] = useState('');
+  const [importFeedback, setImportFeedback] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [appAction, setAppAction] = useState<'restarting' | 'shutting-down' | null>(null);
   const [newFolderInput, setNewFolderInput] = useState('');
   const [newPattern, setNewPattern] = useState('');
   const [newFolder, setNewFolder] = useState('');
-  const [appAction, setAppAction] = useState<'restarting' | 'shutting-down' | null>(null);
-
-  // JSON Import & Export State
-  const [importFeedback, setImportFeedback] = useState<string | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [showPasteModal, setShowPasteModal] = useState(false);
-  const [pastedJsonText, setPastedJsonText] = useState('');
-  const [copiedJson, setCopiedJson] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const normalizeFolderPath = (p: string): string => {
@@ -213,30 +214,97 @@ export const SettingsTab: React.FC = () => {
     });
   };
 
-  const handleExportJson = () => {
+  const handleCreateBackupZip = async () => {
+    setIsExportingBackup(true);
     try {
-      const exportData = {
-        _format: 'civitai-model-manager-settings',
-        version: '1.1.0',
-        exportedAt: new Date().toISOString(),
-        settings: config,
-      };
-
-      const jsonStr = JSON.stringify(exportData, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `civitai-manager-settings-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
+      if (window.civitaiAPI && typeof window.civitaiAPI.exportBackup === 'function') {
+        const res = await window.civitaiAPI.exportBackup();
+        if (res?.canceled) {
+          return;
+        }
+        if (res?.success) {
+          setImportFeedback(`Complete system backup archive (.zip) saved successfully!`);
+          setTimeout(() => setImportFeedback(null), 5000);
+        } else if (res?.error) {
+          alert(`Backup failed: ${res.error}`);
+        }
+      } else {
+        alert('Backup service is unavailable.');
+      }
     } catch (err: any) {
       alert(`Export failed: ${err.message}`);
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
+
+  const handleTriggerRestore = async () => {
+    // In Electron with native dialog:
+    if (window.civitaiAPI && !window.civitaiAPI._isMock && typeof window.civitaiAPI.importBackup === 'function') {
+      setIsImportingBackup(true);
+      try {
+        const res: any = await window.civitaiAPI.importBackup();
+        if (res?.canceled) return;
+        if (res?.success) {
+          const stats = res.stats || {};
+          setImportFeedback(
+            `Successfully restored backup! (${stats.modelsRestored || 0} models, ${stats.downloadsRestored || 0} downloads, ${stats.configKeysRestored || 0} config keys)`
+          );
+          setTimeout(() => setImportFeedback(null), 6000);
+          const loaded = await window.civitaiAPI.getConfig();
+          if (loaded) setConfig(loaded);
+        } else {
+          alert(`Restore failed: ${res?.error || 'Unknown error'}`);
+        }
+      } catch (err: any) {
+        alert(`Restore error: ${err.message}`);
+      } finally {
+        setIsImportingBackup(false);
+      }
+    } else {
+      // In Web mode, open file browser for .zip / .json file
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleRestoreFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingBackup(true);
+    try {
+      setImportError(null);
+      const isZip = file.name.endsWith('.zip') || file.type.includes('zip');
+
+      if (isZip) {
+        const arrayBuffer = await file.arrayBuffer();
+        const res: any = await window.civitaiAPI.importBackup(arrayBuffer);
+        if (res?.success) {
+          const stats = res.stats || {};
+          setImportFeedback(
+            `Successfully restored backup! (${stats.modelsRestored || 0} models, ${stats.downloadsRestored || 0} downloads, ${stats.configKeysRestored || 0} config keys)`
+          );
+          setTimeout(() => setImportFeedback(null), 6000);
+          const loaded = await window.civitaiAPI.getConfig();
+          if (loaded) setConfig(loaded);
+        } else {
+          throw new Error(res?.error || 'Failed to restore backup archive');
+        }
+      } else {
+        // Plain text JSON fallback
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        await processImportedConfig(parsed);
+      }
+    } catch (err: any) {
+      console.error('Import parse error:', err);
+      setImportError(`Import failed: ${err.message || 'Invalid backup format'}`);
+      setTimeout(() => setImportError(null), 6000);
+    } finally {
+      setIsImportingBackup(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -301,30 +369,6 @@ export const SettingsTab: React.FC = () => {
     setTimeout(() => setImportFeedback(null), 5000);
   };
 
-  const handleImportJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        setImportError(null);
-        const text = event.target?.result as string;
-        const parsed = JSON.parse(text);
-        await processImportedConfig(parsed);
-      } catch (err: any) {
-        console.error('Import parse error:', err);
-        setImportError(`Import failed: ${err.message || 'Invalid JSON format'}`);
-        setTimeout(() => setImportError(null), 6000);
-      } finally {
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-      }
-    };
-    reader.readAsText(file);
-  };
-
   const handlePasteImportSubmit = async () => {
     try {
       setImportError(null);
@@ -339,12 +383,12 @@ export const SettingsTab: React.FC = () => {
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8 pb-16">
-      {/* Hidden File Input for JSON import */}
+      {/* Hidden File Input for Backup (.zip or .json) import */}
       <input
         type="file"
         ref={fileInputRef}
-        onChange={handleImportJsonFile}
-        accept=".json,application/json"
+        onChange={handleRestoreFileSelected}
+        accept=".zip,.json,application/zip,application/x-zip-compressed,application/json"
         className="hidden"
       />
 
@@ -405,52 +449,65 @@ export const SettingsTab: React.FC = () => {
         </div>
       )}
 
-      {/* Configuration Backup & JSON Sync Card */}
-      <div className="glass-panel p-6 rounded-3xl border border-purple-500/30 space-y-4 shadow-xl glow-purple relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-purple-500/20 text-purple-300">
-              <FileJson size={22} />
+      {/* Complete System Backup & Restore (.ZIP) Card */}
+      <div className="glass-panel p-6 rounded-3xl border border-purple-500/40 space-y-4 shadow-xl glow-purple relative overflow-hidden bg-slate-950/70">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
+          <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
+            <div className="p-3 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
+              <Archive size={24} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100">Cross-Browser Configuration Sync & JSON Backup</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Export your settings to a portable JSON file or paste JSON to instantly replicate folders and rules across any browser or machine.
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-bold text-slate-100">Complete System Backup & Restore (.ZIP)</h2>
+                <span className="text-[10px] font-bold text-purple-300 bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 rounded-md">
+                  Database + Config + History
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Generates a complete <code className="text-purple-300 font-mono text-[11px]">.zip</code> archive containing your entire model catalog database, configuration, download history, and ignore lists. Use it to backup or migrate your entire CMM library to another machine.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+            {/* Create Backup Button */}
             <button
-              onClick={handleExportJson}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 text-xs font-semibold transition-all cursor-pointer"
+              onClick={handleCreateBackupZip}
+              disabled={isExportingBackup}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 cursor-pointer disabled:opacity-50"
             >
-              <Download size={14} />
-              <span>Download JSON</span>
+              <Download size={15} />
+              <span>{isExportingBackup ? 'Creating Backup...' : 'Create Backup (.ZIP)'}</span>
             </button>
 
+            {/* Restore Backup Button */}
+            <button
+              onClick={handleTriggerRestore}
+              disabled={isImportingBackup}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50"
+            >
+              <Upload size={15} className="text-purple-400" />
+              <span>{isImportingBackup ? 'Restoring...' : 'Restore Backup (.ZIP)'}</span>
+            </button>
+
+            {/* Quick Config Copy */}
             <button
               onClick={handleCopyJson}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-2xl bg-slate-900/70 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+              title="Copy current settings JSON to clipboard"
             >
               {copiedJson ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-slate-400" />}
-              <span>{copiedJson ? 'Copied!' : 'Copy JSON'}</span>
+              <span>{copiedJson ? 'Copied' : 'Copy Config'}</span>
             </button>
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-semibold transition-all cursor-pointer"
-            >
-              <Upload size={14} />
-              <span>Upload JSON File</span>
-            </button>
-
+            {/* Quick Config Paste */}
             <button
               onClick={() => setShowPasteModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-2xl bg-slate-900/70 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+              title="Paste raw settings JSON"
             >
               <Code size={14} className="text-indigo-400" />
-              <span>Paste JSON</span>
+              <span>Paste Config</span>
             </button>
           </div>
         </div>

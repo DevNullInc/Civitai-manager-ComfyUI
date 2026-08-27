@@ -35,6 +35,7 @@
   "author": "TheStygianRenegade / /dev/null Inc",
   "license": "GPL-3.0",
   "dependencies": {
+    "adm-zip": "^0.6.0",
     "axios": "^1.7.9",
     "chokidar": "^4.0.3",
     "electron-log": "^5.3.0",
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.13.4",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -81,11 +83,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -102,15 +108,21 @@
       "target": [
         {
           "target": "tar.gz",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Graphics"

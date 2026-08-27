@@ -26,6 +26,7 @@ const api = {
   cancelScan: () => ipcRenderer.invoke('cancel-scan'),
   getScanStatus: () => ipcRenderer.invoke('get-scan-status'),
   getLocalModels: () => ipcRenderer.invoke('get-local-models'),
+  matchUnidentifiedModels: () => ipcRenderer.invoke('match-unidentified-models'),
   clearLibrary: () => ipcRenderer.invoke('clear-library'),
   onScanProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('scan-progress', (_event: unknown, progress: any) => callback(progress));
@@ -45,13 +46,24 @@ const api = {
   // Versioning & Backup
   checkUpdate: (localModel: any) => ipcRenderer.invoke('check-update', localModel),
   checkAllUpdates: () => ipcRenderer.invoke('check-all-updates'),
+  ignoreModelUpdate: (modelId: number, versionId: number) =>
+    ipcRenderer.invoke('ignore-model-update', modelId, versionId),
+  unignoreModelUpdate: (modelId: number, versionId: number) =>
+    ipcRenderer.invoke('unignore-model-update', modelId, versionId),
+  getIgnoredUpdates: () => ipcRenderer.invoke('get-ignored-updates'),
   onUpdateCheckProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('update-check-progress', (_event: unknown, progress: any) => callback(progress));
   },
-  exportBackup: (filePath: string) => ipcRenderer.invoke('export-backup', filePath),
-  importBackup: (filePath: string) => ipcRenderer.invoke('import-backup', filePath),
+  exportBackup: (filePath?: string) => ipcRenderer.invoke('export-backup', filePath),
+  importBackup: (fileOrBuffer?: any) => ipcRenderer.invoke('import-backup', fileOrBuffer),
   // Delete local model
-  deleteLocalModel: (id: string) => ipcRenderer.invoke('delete-local-model', id),
+  deleteLocalModel: (id: string, deleteFromDisk?: boolean) =>
+    ipcRenderer.invoke('delete-local-model', id, deleteFromDisk),
+  ignoreDuplicateSet: (sha256: string, count?: number) =>
+    ipcRenderer.invoke('ignore-duplicate-set', sha256, count),
+  unignoreDuplicateSet: (sha256: string) =>
+    ipcRenderer.invoke('unignore-duplicate-set', sha256),
+  getIgnoredDuplicates: () => ipcRenderer.invoke('get-ignored-duplicates'),
   openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
   // External Link & System Info
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

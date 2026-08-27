@@ -12,13 +12,17 @@
 If you've been manually downloading models from CivitAI, creating folders, moving files, and losing track of what you have, this tool is for you. CMM acts as a **Steam-like library manager** for your AI models:
 
 - **Auto-organizes** downloads into the correct ComfyUI folders (checkpoints → `checkpoints/`, LoRAs → `loras/`, etc.)
-- **Persistent Background Scanning** - scan thousands of models in the background across tabs with a draggable, real-time HUD widget and instant cancellation
+- **Persistent Background Scanning** - scan thousands of models in the background across tabs with a live, real-time footer widget and instant cancellation (after final SHA256 on the last scanned file)
 - **Multi-Criteria Library Sorting** - sort local models by Name, Model Type, File Size, or Date Modified (Ascending / Descending)
-- **Tracks versions** - know when updates are available and downgrade if needed
-- **Cross-Browser JSON Sync** - portable JSON export/import and clipboard sync for multi-browser and multi-machine setups
+- **Browse Tab Update Badging & Selective Update Ignoring** - see instant `Installed` or `Update Available` flags on browse cards; ignore specific updates that target different base models
+- **Safe Version Updating with Old File Removal** - optionally delete superseded previous versions safely *only after* the update download completes 100% and passes SHA256 verification
+- **Intentionally Duplicated Sets** - ignore duplicate sets required across specific custom node paths with automatic re-alerting if a new copy is detected
+- **Dual Delete Modes** - choose to remove models from library catalog only or permanently delete from disk & library
+- **LLM & HuggingFace Hub Cache Support** - parses human-readable folder names from `/blobs/<hash>` cache structures with responsive UI layout protection
+- **Multi-Path Download Routing** - pick target destination when multiple ComfyUI root paths are configured with "Always use this folder" preference
+- **Complete System Backup & Restore (.ZIP)** - export/import your entire model database, configuration, download history, and ignore lists in a standard portable `.zip` archive
 - **Single-Instance Windowing** - focuses existing running window automatically rather than spawning duplicate instances
 - **Dual-source support** - search both civitai.com and civitai.red
-- **Duplicate detection** - find identical models by hash across different folders and resolve with one-click cleanup
 - **Hardware-accelerated hash verification** - 64MB streaming buffer utilizing CPU SHA-NI / AVX-512
 
 ---
@@ -27,13 +31,16 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 
 ### 🔍 Discovery & Search
 - Search across CivitAI's entire model database
+- **Installed & Update Indicators**: Model cards feature instant emerald **`Installed`** or amber **`Update Available`** badges
 - Filter by **Base Model**: SD 1.5, SDXL 1.0, Illustrious, Flux.1 D, Pony, Qwen, Wan Video, and more
-- Filter by **Model Type**: Checkpoint, LoRA, LyCORIS, Embedding, VAE, ControlNet, Upscaler, etc.
+- Filter by **Model Type**: Checkpoint, LoRA, LLM, LyCORIS, Embedding, VAE, ControlNet, Upscaler, etc.
 - Filter by **Rating**: SFW-only or include NSFW content with configurable blur levels
 - Sort by: Most Downloaded, Highest Rated, Newest, Trending
 
-### 📥 Download Management
+### 📥 Download Management & Version Updating
 - **Intelligent auto-sorting**: Downloads route to the correct ComfyUI folder automatically
+- **Multi-Path Destination Prompt**: Choose target directory when multiple folder roots are configured, with "Always use this folder" toggle
+- **Safe Previous Version Cleanup**: Option to delete previous versions only after the update file finishes downloading 100% and passes SHA256 verification
 - **Resume support**: Interrupted downloads resume where they left off
 - **Hash verification**: SHA256 verification ensures file integrity
 - **Queue system**: Download multiple models with priority management
@@ -42,13 +49,16 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 ### 📁 Library Management & Persistent Scanner
 - **Persistent Background Scanning**: Folder indexing continues seamlessly across tab switches
 - **Draggable Floating HUD**: Real-time progress percentage, active file status, and instant stop controls
-- **Multi-Folder Support**: Scan and manage models across multiple drives/paths simultaneously
 - **Multi-Criteria Sorting**: Sort by Name (A-Z), Model Type, File Size, or Date Modified (Asc / Desc) with saved preferences
-- **Duplicate Detection & Resolution**: Interactive keeper picker with full folder path comparison and safe disk cleanup
-- **Version Tracking**: See installed versions vs. latest available with side-by-side version preservation
+- **Dual Delete Modes**: Separate "Remove from Library Only" and "Delete from Disk & Library" dialog options
+- **LLM & HuggingFace Hub Cache Resolution**: Converts raw `/blobs/<hash>` names into clean, readable model folder titles (e.g. `models--Org--ModelName`) with responsive layout protection
+- **Duplicate Detection & Consolidation**: Consolidates duplicate copies into single master cards in the Duplicates tab with interactive keeper selection
+- **Ignore Intentionally Duplicated Sets**: Suppress duplicate warnings for models needed across specific custom node paths, with automatic re-flagging if new duplicate copies are discovered
+- **Selective Update Ignoring**: Mark version updates as ignored so LoRAs or Checkpoints uploaded for different base models don't trigger unwanted update badges
 
-### ⚙️ Cross-Browser Sync & Diagnostics
-- **Cross-Browser JSON Sync**: Export/import settings via portable `.json` files or direct clipboard paste
+### ⚙️ System Backup & Diagnostics
+- **Complete System Backup & Restore (.ZIP)**: Create and restore comprehensive `.zip` archives containing your raw SQLite database, model catalog, download records, folder settings, and ignore sets
+- **Quick Config Sharing**: Direct clipboard copy and paste for quick pattern rule and settings sharing
 - **Console Feedback & Diagnostics**: Built-in system log capture and one-click diagnostic report generation for bug reports
 - **Single-Instance Management**: Automatically detects and focuses existing application windows
 
@@ -279,30 +289,34 @@ CMM recognizes and manages models in these ComfyUI folders:
 
 ## 🎮 Usage Guide
 
-### Searching for Models
-1. Go to **Browse** tab
-2. Enter search terms (e.g., "anime style", "photorealistic")
-3. Apply filters:
-   - **Base Model**: SDXL 1.0, Illustrious, Flux.1 D, etc.
-   - **Type**: Checkpoint, LoRA, Embedding, etc.
-   - **Rating**: Toggle NSFW content
-4. Click **Search**
+### Searching & Browsing Models
+1. Go to **Browse** tab.
+2. Search terms or filter by Base Model, Model Type, and NSFW preferences.
+3. **Instant Installed / Update Badges**:
+   - **`Installed`** (Emerald badge): Indicates this model is already present in your local library.
+   - **`Update Available`** (Amber badge): Indicates a newer version of an installed model is available on CivitAI.
+4. **Selective Update Ignoring**: Click on a model with an update available to view version details. If the new upload is for a different base model (e.g. SDXL vs SD 1.5), click **Ignore This Update** to prevent it from flagging as an update.
 
-### Downloading
-1. Click on a model to view details
-2. Select version from dropdown (if multiple)
-3. Click **Download**
-4. File automatically routes to correct folder
+### Downloading & Safe Version Updating
+1. Click on any model card to open the Details modal.
+2. Select your desired version from the version selector dropdown.
+3. **Destination Selection**: If multiple ComfyUI root paths are configured, CMM prompts you to choose the target folder, with an option to remember your choice.
+4. **Safe Old Version Cleanup**: When downloading an update, check **"Delete previous version upon completion"**. The superseded old file will *only* be deleted after the update has completed downloading 100% and verified its SHA256 integrity hash.
 
-### Managing & Sorting Your Library
+### Managing & Deleting Library Models
 - **Library** tab displays all indexed models across all configured ComfyUI directories.
-- **Sorting**: Use the sort dropdown to order models by:
-  - **Name (A-Z)**
-  - **Model Type** (Checkpoints, LoRAs, VAEs, Embeddings, etc.)
-  - **File Size** (Largest or Smallest files first)
-  - **Date Modified** (Recently updated files)
-- **Ascending / Descending Toggle**: Click the sort direction toggle button to reverse list ordering. Preferences persist automatically.
-- **Clear Library**: Click **Clear Library** next to the scan button to wipe cached SQLite records and perform a fresh, clean scan without deleting your physical files on disk.
+- **Sorting**: Order models by **Name (A-Z)**, **Model Type**, **File Size**, or **Date Modified**, with instant Ascending/Descending toggle.
+- **Dual Delete Modes**:
+  - Click the trash icon on any card to open the delete confirmation modal.
+  - **Remove from Library Only**: Removes the database record and catalog cache while preserving the physical file on disk for ComfyUI workflows.
+  - **Delete from Disk & Library**: Permanently deletes the `.safetensors` file from your hard drive and removes its database entry.
+- **Safety Prompt on Clear Library**: The **Clear Library** button requires explicit confirmation to prevent accidental catalog wipes.
+
+### 👥 Duplicate Resolution & Ignored Duplicate Sets
+1. Click the **Duplicates** filter tab in the Library.
+2. Each unique duplicate group is consolidated into a single master card with all copies listed.
+3. **Keep Selected & Delete Others**: Select which copy to keep with the radio button and click the delete button to remove redundant copies from disk.
+4. **Ignore This Duplicate Set**: If a model must exist in multiple paths (e.g., specific custom node requirements), click **Ignore This Duplicate Set**. This records the SHA-256 in the database and suppresses duplicate warnings until a new, unexpected copy is discovered during a future scan.
 
 ### 🔄 Persistent Background Scanning & Floating HUD
 1. Click **Scan ComfyUI Folders** in the Library tab.
@@ -310,13 +324,12 @@ CMM recognizes and manages models in these ComfyUI folders:
 3. A **draggable floating HUD widget** appears at the bottom of the screen displaying real-time progress, currently scanned file name, and indexing phase.
 4. **Instant Cancellation**: Stop scanning at any time by clicking the red **Stop Scanning** button in the Library tab or the **Stop** icon on the floating HUD.
 
-### 🔄 Cross-Browser Settings Sync (JSON)
+### 📦 Complete System Backup & Restore (.ZIP)
 1. Go to the **Settings** tab.
-2. In the **Cross-Browser Configuration Sync & JSON Backup** card:
-   - **Download JSON**: Generates and downloads a portable `.json` backup of your directory paths, API credentials, and filename pattern rules.
-   - **Copy JSON**: Copies the serialized configuration payload directly to your system clipboard.
-   - **Upload JSON File**: Upload an existing JSON backup to restore or replicate settings across different browsers or machines.
-   - **Paste JSON**: Open the interactive paste modal to input raw JSON and apply settings instantly.
+2. In the **Complete System Backup & Restore (.ZIP)** card:
+   - **Create Backup (.ZIP)**: Generates and downloads a complete standard `.zip` archive containing your SQLite database (`database.sqlite`), model catalog (`models.json`), download history (`downloads.json`), directory paths and pattern rules (`config.json`), and ignore lists.
+   - **Restore Backup (.ZIP)**: Select any `.zip` backup archive (or legacy `.json` file) to restore your entire library state, download queue records, and configurations.
+   - **Copy Config / Paste Config**: Quickly copy or paste raw JSON settings for fast pattern rule sharing across browsers.
 
 ### ℹ️ About & Diagnostics Reporting
 1. Navigate to the **About** tab.

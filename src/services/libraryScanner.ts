@@ -29,6 +29,37 @@ const MODEL_EXTENSIONS = new Set([
   '.tensor',
 ]);
 
+export function resolveModelFileName(filePath: string): string {
+  const baseName = path.basename(filePath);
+  const normalized = filePath.replace(/\\/g, '/');
+
+  // Check if file is inside a HuggingFace hub / cache blobs directory
+  if (normalized.includes('/blobs/')) {
+    const parts = normalized.split('/');
+    const blobsIdx = parts.lastIndexOf('blobs');
+    if (blobsIdx > 0) {
+      const parentDir = parts[blobsIdx - 1];
+      if (parentDir && parentDir.startsWith('models--')) {
+        return parentDir;
+      }
+      if (parentDir && parentDir !== '' && !parentDir.includes(':')) {
+        return parentDir;
+      }
+    }
+  }
+
+  // Check if filename is a pure SHA256 / hex blob hash and parent directory has models-- or model name
+  if (/^[a-fA-F0-9]{40,64}$/.test(baseName)) {
+    const parts = normalized.split('/');
+    const modelFolder = parts.slice(0, -1).reverse().find((p) => p.startsWith('models--'));
+    if (modelFolder) {
+      return modelFolder;
+    }
+  }
+
+  return baseName;
+}
+
 export class LibraryScanner {
   private watcher: FSWatcher | null = null;
   private isScanning = false;
@@ -189,19 +220,23 @@ export class LibraryScanner {
         }
 
         const localId = cached?.id || `loc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const resolvedFileName = resolveModelFileName(filePath);
+        const isLlmPath = filePath.toLowerCase().includes('/llm/') || filePath.toLowerCase().includes('\\llm\\') || filePath.includes('models--');
 
         const localModel: LocalModel = {
           id: localId,
           filePath,
-          fileName: path.basename(filePath),
+          fileName: resolvedFileName,
           fileSize,
           modifiedAt,
           sha256,
           civitaiModelId: cached?.civitai_model_id,
           civitaiVersionId: cached?.civitai_version_id,
+          civitaiName: cached?.civitai_name || undefined,
           isMatched: !!cached?.civitai_version_id,
           previewUrl: cached?.preview_url || undefined,
-          modelType: cached?.model_type || undefined,
+          modelType: cached?.model_type || (isLlmPath ? ('LLM' as any) : undefined),
+          nsfw: !!cached?.nsfw,
         };
 
         scannedModels.push(localModel);
@@ -209,8 +244,8 @@ export class LibraryScanner {
         // Save/Update in SQLite
         await dbManager.run(
           `INSERT OR REPLACE INTO local_models 
-            (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id, civitai_version_id, scanned_at, preview_url, model_type)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)`,
+            (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id, civitai_version_id, civitai_name, scanned_at, preview_url, model_type, nsfw)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)`,
           [
             localModel.id,
             localModel.filePath,
@@ -220,8 +255,10 @@ export class LibraryScanner {
             localModel.sha256,
             localModel.civitaiModelId || null,
             localModel.civitaiVersionId || null,
+            localModel.civitaiName || null,
             localModel.previewUrl || null,
             localModel.modelType || null,
+            localModel.nsfw ? 1 : 0,
           ]
         );
 
@@ -240,26 +277,13 @@ export class LibraryScanner {
         });
 
         const uniqueHashes = Array.from(new Set(hashesToLookup.map((h) => h.hash)));
-        const civitaiVersions = await civitaiClient.bulkLookupByHashes(uniqueHashes, (done, total) => {
+        const versionMap = await civitaiClient.bulkLookupByHashes(uniqueHashes, (done, total) => {
           emitProgress({
             scannedFiles: done,
             totalFiles: total,
             status: 'lookup',
             currentFile: `Checked ${done}/${total} hashes against CivitAI...`,
           });
-        });
-
-        const versionMap = new Map<string, any>();
-        civitaiVersions.forEach((v) => {
-          if (v && v.files) {
-            v.files.forEach((f) => {
-              if (f.hashes) {
-                Object.values(f.hashes).forEach((h) => {
-                  if (h) versionMap.set(h.toUpperCase(), v);
-                });
-              }
-            });
-          }
         });
 
         // Update local models with matched CivitAI info
@@ -270,15 +294,21 @@ export class LibraryScanner {
               item.isMatched = true;
               item.civitaiVersionId = matchedVersion.id;
               item.civitaiModelId = matchedVersion.modelId;
-              item.civitaiName = matchedVersion.name;
+              item.civitaiName = matchedVersion.model?.name || matchedVersion.name;
               item.civitaiBaseModel = matchedVersion.baseModel;
-              const preview = matchedVersion.images && matchedVersion.images[0] ? matchedVersion.images[0].url : null;
+              const preview = this.extractPreviewImage(matchedVersion);
               item.previewUrl = preview || undefined;
-              item.modelType = undefined;
+              const modelType = matchedVersion.model?.type || matchedVersion.type;
+              item.modelType = modelType;
+              const isNsfw = Boolean(
+                matchedVersion.model?.nsfw ||
+                (matchedVersion.images && matchedVersion.images.some((img: any) => img && (img.nsfw || (img.nsfwLevel && img.nsfwLevel > 1))))
+              );
+              item.nsfw = isNsfw;
 
               await dbManager.run(
-                'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ?, preview_url = ?, model_type = ? WHERE id = ?',
-                [matchedVersion.modelId, matchedVersion.id, preview, null, item.id]
+                'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ?, civitai_name = ?, preview_url = ?, model_type = COALESCE(?, model_type), nsfw = ? WHERE id = ?',
+                [matchedVersion.modelId, matchedVersion.id, item.civitaiName || null, preview, modelType || null, isNsfw ? 1 : 0, item.id]
               );
             }
           }
@@ -378,16 +408,113 @@ export class LibraryScanner {
   async flagDuplicates() {
     await dbManager.run('UPDATE local_models SET is_duplicate = 0;');
     await dbManager.run(`
+      CREATE TABLE IF NOT EXISTS ignored_duplicates (
+        sha256 TEXT PRIMARY KEY,
+        known_count INTEGER DEFAULT 2,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Flag as duplicate if distinct physical count > 1 AND (hash is NOT in ignored_duplicates OR count > known_count)
+    await dbManager.run(`
       UPDATE local_models 
       SET is_duplicate = 1 
       WHERE sha256 IN (
-        SELECT sha256 
-        FROM local_models 
-        WHERE sha256 IS NOT NULL AND TRIM(sha256) != ''
-        GROUP BY sha256 
-        HAVING COUNT(DISTINCT file_path COLLATE NOCASE) > 1
+        SELECT lm.sha256 
+        FROM local_models lm
+        LEFT JOIN ignored_duplicates id ON UPPER(lm.sha256) = UPPER(id.sha256)
+        WHERE lm.sha256 IS NOT NULL AND TRIM(lm.sha256) != ''
+        GROUP BY lm.sha256 
+        HAVING COUNT(DISTINCT lm.file_path COLLATE NOCASE) > 1
+           AND (id.sha256 IS NULL OR COUNT(DISTINCT lm.file_path COLLATE NOCASE) > id.known_count)
       );
     `);
+  }
+
+  async ignoreDuplicateSet(sha256: string, knownCount: number = 2): Promise<boolean> {
+    if (!sha256) return false;
+    await dbManager.run(`
+      CREATE TABLE IF NOT EXISTS ignored_duplicates (
+        sha256 TEXT PRIMARY KEY,
+        known_count INTEGER DEFAULT 2,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await dbManager.run(
+      `INSERT OR REPLACE INTO ignored_duplicates (sha256, known_count, created_at) VALUES (?, ?, CURRENT_TIMESTAMP);`,
+      [sha256.toUpperCase(), knownCount]
+    );
+    await this.flagDuplicates();
+    logger.info(`Ignored duplicate set for SHA256: ${sha256} (known count: ${knownCount})`);
+    return true;
+  }
+
+  async unignoreDuplicateSet(sha256: string): Promise<boolean> {
+    if (!sha256) return false;
+    await dbManager.run(`DELETE FROM ignored_duplicates WHERE sha256 = ? COLLATE NOCASE;`, [sha256.toUpperCase()]);
+    await this.flagDuplicates();
+    logger.info(`Unignored duplicate set for SHA256: ${sha256}`);
+    return true;
+  }
+
+  extractPreviewImage(version: any): string | null {
+    if (!version || !version.images || !Array.isArray(version.images) || version.images.length === 0) {
+      return null;
+    }
+    // Look for static image first (exclude .mp4 videos)
+    const staticImg = version.images.find(
+      (img: any) => img && img.url && (img.type === 'image' || !img.url.toLowerCase().endsWith('.mp4'))
+    );
+    return staticImg?.url || version.images[0]?.url || null;
+  }
+
+  async matchUnidentifiedModels(
+    onProgress?: (done: number, total: number) => void
+  ): Promise<{ totalChecked: number; newlyMatched: number }> {
+    const rows: any[] = await dbManager.all(
+      'SELECT id, sha256, file_name, file_path FROM local_models WHERE civitai_version_id IS NULL AND sha256 IS NOT NULL;'
+    );
+
+    if (rows.length === 0) {
+      return { totalChecked: 0, newlyMatched: 0 };
+    }
+
+    logger.info(`Starting CivitAI hash matching for ${rows.length} unidentified model(s)...`);
+    const uniqueHashes = Array.from(new Set(rows.map((r) => r.sha256.toUpperCase())));
+    const versionMap = await civitaiClient.bulkLookupByHashes(uniqueHashes, onProgress);
+
+    let newlyMatched = 0;
+    for (const r of rows) {
+      const hashKey = r.sha256.toUpperCase();
+      const matchedVersion = versionMap.get(hashKey);
+      if (matchedVersion) {
+        const preview = this.extractPreviewImage(matchedVersion);
+        const modelType = matchedVersion.model?.type || matchedVersion.type;
+        const civitaiName = matchedVersion.model?.name || matchedVersion.name || null;
+        const isNsfw = Boolean(
+          matchedVersion.model?.nsfw ||
+          (matchedVersion.images && matchedVersion.images.some((img: any) => img && (img.nsfw || (img.nsfwLevel && img.nsfwLevel > 1))))
+        );
+        await dbManager.run(
+          'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ?, civitai_name = ?, preview_url = ?, model_type = COALESCE(?, model_type), nsfw = ? WHERE id = ?',
+          [matchedVersion.modelId, matchedVersion.id, civitaiName, preview, modelType || null, isNsfw ? 1 : 0, r.id]
+        );
+        newlyMatched++;
+      }
+    }
+
+    await this.flagDuplicates();
+    logger.info(`Matched ${newlyMatched}/${rows.length} previously unidentified models with CivitAI.`);
+    return { totalChecked: rows.length, newlyMatched };
+  }
+
+  async getIgnoredDuplicates(): Promise<{ sha256: string; knownCount: number }[]> {
+    try {
+      const rows: any[] = await dbManager.all(`SELECT sha256, known_count FROM ignored_duplicates;`);
+      return rows.map((r) => ({ sha256: r.sha256, knownCount: r.known_count }));
+    } catch (e) {
+      return [];
+    }
   }
 
   startLiveWatcher(rootPath: string, onChange?: (event: string, filePath: string) => void) {
