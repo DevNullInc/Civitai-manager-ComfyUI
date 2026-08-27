@@ -416,11 +416,12 @@ function startHttpBridgeServer() {
         }
       } else if (url === '/api/open-folder' && req.method === 'POST') {
         const body = await getBody();
-        if (body.filePath) {
+        if (body.filePath && typeof body.filePath === 'string') {
           try {
-            const { exec } = require('child_process');
-            exec(`explorer.exe /select,"${body.filePath}"`);
-          } catch (e) {}
+            shell.showItemInFolder(path.resolve(body.filePath));
+          } catch (e) {
+            logger.warn('Failed to show item in folder via HTTP:', e);
+          }
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
@@ -885,12 +886,13 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('open-folder', async (_event: unknown, filePath: string) => {
-    if (filePath) {
+    if (filePath && typeof filePath === 'string') {
       try {
-        const { exec } = require('child_process');
-        exec(`explorer.exe /select,"${filePath}"`);
+        shell.showItemInFolder(path.resolve(filePath));
         return true;
-      } catch (e) {}
+      } catch (e) {
+        logger.warn('Failed to show item in folder via IPC:', e);
+      }
     }
     return false;
   });
