@@ -4,6 +4,9 @@
 
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)
+[![Roadmap](https://img.shields.io/badge/Roadmap-View%20Upcoming%20Milestones-8a2be2.svg)](ROADMAP.md)
+
+> 🗺️ **Looking for upcoming features and releases? Check out the [Product Roadmap](ROADMAP.md).**
 
 ---
 
