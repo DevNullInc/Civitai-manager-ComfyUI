@@ -333,11 +333,10 @@ CMM recognizes and manages models in these ComfyUI folders:
 3. **Keep Selected & Delete Others**: Select which copy to keep with the radio button and click the delete button to remove redundant copies from disk.
 4. **Ignore This Duplicate Set**: If a model must exist in multiple paths (e.g., specific custom node requirements), click **Ignore This Duplicate Set**. This records the SHA-256 in the database and suppresses duplicate warnings until a new, unexpected copy is discovered during a future scan.
 
-### 🔄 Persistent Background Scanning & Floating HUD
+### 🔄 Persistent Background Scanning
 1. Click **Scan ComfyUI Folders** in the Library tab.
 2. The scanner operates as a global background provider—you can switch between Browse, Downloads, Settings, or About tabs while scanning proceeds uninterrupted.
-3. A **draggable floating HUD widget** appears at the bottom of the screen displaying real-time progress, currently scanned file name, and indexing phase.
-4. **Instant Cancellation**: Stop scanning at any time by clicking the red **Stop Scanning** button in the Library tab or the **Stop** icon on the floating HUD.
+3. **Instant Cancellation**: Stop scanning at any time by clicking the red **Stop Scanning** button in the Library tab or the **Stop** icon on the floating HUD.
 
 ### 📦 Complete System Backup & Restore (.ZIP)
 1. Go to the **Settings** tab.
