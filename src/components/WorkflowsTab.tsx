@@ -33,6 +33,7 @@ import {
   Package,
   Activity,
   ArrowRight,
+  ChevronDown,
   X,
 } from 'lucide-react';
 import {
@@ -65,6 +66,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     return [];
   });
   const [selectedWorkflowIndex, setSelectedWorkflowIndex] = useState<number>(0);
+  const [savedWorkflows, setSavedWorkflows] = useState<WorkflowInfo[]>([]);
   const [isLoadingWorkflows, setIsLoadingWorkflows] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'both' | 'map' | 'matrix'>('both');
@@ -101,13 +103,9 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     } catch {}
   }, [workflows]);
 
-  // Load configured workflows on initial mount if none currently loaded
+  // Load configured workflows on initial mount
   useEffect(() => {
-    if (workflows.length === 0) {
-      loadWorkflows();
-    } else if (workflows[selectedWorkflowIndex]) {
-      resolveWorkflowNodes(workflows[selectedWorkflowIndex]);
-    }
+    loadWorkflows();
   }, []);
 
   // Listen for real-time download progress to update inline progress bars
@@ -125,20 +123,52 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     }
   }, []);
 
-  const loadWorkflows = async () => {
+  const loadWorkflows = async (forceRescan = false) => {
     if (!window.civitaiAPI?.scanWorkflows) return;
     setIsLoadingWorkflows(true);
     try {
       const results: WorkflowInfo[] = await window.civitaiAPI.scanWorkflows();
-      if (results && results.length > 0) {
-        setWorkflows(results);
-        setSelectedWorkflowIndex(0);
-        resolveWorkflowNodes(results[0]);
+      if (results && Array.isArray(results)) {
+        setSavedWorkflows(results);
+        if (workflows.length === 0 || forceRescan) {
+          if (results.length > 0) {
+            setWorkflows(results);
+            setSelectedWorkflowIndex(0);
+            resolveWorkflowNodes(results[0]);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to scan workflows:', err);
     } finally {
       setIsLoadingWorkflows(false);
+    }
+  };
+
+  const handleSelectFromDropdown = (targetIdentifier: string) => {
+    if (!targetIdentifier) return;
+
+    // 1. Check if already present in loaded workflows list
+    const existingIdx = workflows.findIndex(
+      (w) => w.filePath === targetIdentifier || w.fileName === targetIdentifier
+    );
+    if (existingIdx !== -1) {
+      handleSelectWorkflow(existingIdx);
+      return;
+    }
+
+    // 2. Otherwise find from savedWorkflows and add to top of loaded list
+    const found = savedWorkflows.find(
+      (w) => w.filePath === targetIdentifier || w.fileName === targetIdentifier
+    );
+    if (found) {
+      const nextList = [found, ...workflows];
+      setWorkflows(nextList);
+      setSelectedWorkflowIndex(0);
+      setSelectedNodeId(null);
+      setZoomLevel(1);
+      setPanOffset({ x: 0, y: 0 });
+      resolveWorkflowNodes(found);
     }
   };
 
@@ -593,7 +623,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           </button>
 
           <button
-            onClick={loadWorkflows}
+            onClick={() => loadWorkflows(true)}
             disabled={isLoadingWorkflows}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             title="Scan configured ComfyUI directories for workflow files"
@@ -601,6 +631,63 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
             <RefreshCw size={14} className={isLoadingWorkflows ? 'animate-spin text-cyan-400' : ''} />
             <span>Scan Folders</span>
           </button>
+        </div>
+      </div>
+
+      {/* Saved ComfyUI Workflows Dropdown Selector */}
+      <div className="glass-panel p-4 rounded-3xl border border-slate-800/90 shadow-xl bg-slate-900/50 backdrop-blur-md space-y-2.5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+              <Workflow size={16} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-slate-100">
+                  Select Existing ComfyUI Workflow
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  {savedWorkflows.length} {savedWorkflows.length === 1 ? 'workflow' : 'workflows'} found
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Workflows automatically detected in your ComfyUI directory (<code className="text-purple-300 text-[10px]">workflows/</code>, <code className="text-purple-300 text-[10px]">user/default/workflows/</code>)
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => loadWorkflows(true)}
+            disabled={isLoadingWorkflows}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-purple-900/30 border border-slate-700 hover:border-purple-500/50 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
+            title="Rescan ComfyUI directories for newly downloaded or modified workflows"
+          >
+            <RefreshCw size={12} className={isLoadingWorkflows ? 'animate-spin text-purple-400' : ''} />
+            <span>Rescan ComfyUI Folder</span>
+          </button>
+        </div>
+
+        {/* Custom Styled Select Dropdown */}
+        <div className="relative w-full">
+          <select
+            value={activeWorkflow?.filePath || activeWorkflow?.fileName || ''}
+            onChange={(e) => handleSelectFromDropdown(e.target.value)}
+            className="w-full bg-slate-950/80 border border-slate-700/80 hover:border-purple-500/60 focus:border-purple-400 rounded-2xl px-4 py-2.5 text-xs md:text-sm text-slate-100 font-medium appearance-none focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all cursor-pointer pr-10"
+          >
+            <option value="" disabled>
+              {savedWorkflows.length > 0
+                ? '-- Select an existing ComfyUI workflow to load & map --'
+                : '-- No saved workflows found in ComfyUI workflow folders --'}
+            </option>
+            {savedWorkflows.map((wf, idx) => (
+              <option key={wf.filePath || `${wf.fileName}-${idx}`} value={wf.filePath || wf.fileName}>
+                {wf.fileName} ({wf.fileType.toUpperCase()}) — {wf.modelCount} model{wf.modelCount !== 1 ? 's' : ''}, {wf.nodeTypes?.length || 0} nodes
+              </option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+            <ChevronDown size={16} />
+          </div>
         </div>
       </div>
 

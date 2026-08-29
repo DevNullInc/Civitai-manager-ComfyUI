@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### 🌟 Added
+- **Saved ComfyUI Workflows Dropdown Selector**:
+  - Integrated a dedicated workflow selector dropdown situated directly above the drag-and-drop zone in the Workflows tab.
+  - Automatically scans and indexes all existing `.json` workflows and workflow-embedded `.png` images across the user's ComfyUI directory (`workflows/`, `user/default/workflows/`, etc.).
+  - Selecting any workflow from the dropdown instantly loads and renders its visual node map, model dependencies, node resolution matrix, and custom node download status.
+  - Features real-time folder rescanning with a 1-click **"Rescan ComfyUI Folder"** action.
 - **Development Version Update Notice & Startup Git Check**:
   - Top-level fixed `<DevelopmentUpdateBanner />` in the UI indicating when a newer development commit is available on GitHub (with commit hash, message, and direct link).
   - Explicitly informs users that they are running an active **development version** (not a tagged release).

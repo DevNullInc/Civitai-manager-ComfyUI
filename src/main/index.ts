@@ -728,6 +728,59 @@ async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
   }
 }
 
+function resolveWorkflowScanPaths(config: AppConfig, customPaths?: string | string[]): string[] {
+  if (customPaths) {
+    const list = Array.isArray(customPaths) ? customPaths : [customPaths];
+    const filtered = list.filter(Boolean);
+    if (filtered.length > 0) return filtered;
+  }
+
+  const candidateDirs = new Set<string>();
+  const baseRoots = new Set<string>();
+
+  if (config.comfyui_install_dir) baseRoots.add(config.comfyui_install_dir);
+  if (config.comfyui_root) baseRoots.add(config.comfyui_root);
+  if (config.comfyui_folders && config.comfyui_folders.length > 0) {
+    for (const f of config.comfyui_folders) {
+      if (f) {
+        baseRoots.add(f);
+        const parent = path.dirname(f);
+        if (parent && parent !== f) {
+          baseRoots.add(parent);
+        }
+      }
+    }
+  }
+
+  for (const root of baseRoots) {
+    if (!root || !fs.existsSync(root)) continue;
+
+    // Check specific workflow directory subpaths
+    const subPaths = [
+      '',
+      'workflows',
+      path.join('user', 'default', 'workflows'),
+      path.join('user', 'workflows'),
+      'input',
+      'output',
+    ];
+
+    for (const sub of subPaths) {
+      const targetPath = sub ? path.join(root, sub) : root;
+      if (fs.existsSync(targetPath)) {
+        try {
+          const stat = fs.statSync(targetPath);
+          if (stat.isDirectory()) {
+            candidateDirs.add(targetPath);
+          }
+        } catch {}
+      }
+    }
+  }
+
+  return Array.from(candidateDirs);
+}
+
 function startHttpBridgeServer() {
   const apiPort =
     parseInt(process.env.API_PORT || process.env.BRIDGE_PORT || process.env.CMM_PORT || '', 10) || 5174;
@@ -1340,8 +1393,9 @@ function startHttpBridgeServer() {
         }
 
         // 2. Folder paths fallback for disk scanning
-        const folderPaths = body.folderPaths || body.folderPath || body.path || currentConfig.comfyui_folders || [currentConfig.comfyui_root];
-        const workflows = await workflowScanner.scanWorkflows(folderPaths);
+        const customPaths = body.folderPaths || body.folderPath || body.path;
+        const targetPaths = resolveWorkflowScanPaths(currentConfig, customPaths);
+        const workflows = await workflowScanner.scanWorkflows(targetPaths);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(workflows));
       } else if (url === '/api/webhooks/test' && req.method === 'POST') {
@@ -1592,8 +1646,8 @@ function registerIpcHandlers() {
 
   // Workflow Handlers
   ipcMain.handle('scan-workflows', async (_event: unknown, folderPaths?: string | string[]) => {
-    const paths = folderPaths || currentConfig.comfyui_folders || [currentConfig.comfyui_root];
-    return await workflowScanner.scanWorkflows(paths);
+    const targetPaths = resolveWorkflowScanPaths(currentConfig, folderPaths);
+    return await workflowScanner.scanWorkflows(targetPaths);
   });
 
   ipcMain.handle('parse-workflow', async (_event: unknown, workflowData: any, workflowName?: string) => {
