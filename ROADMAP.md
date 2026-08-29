@@ -19,6 +19,7 @@ graph LR
 ## 📌 Planned Releases
 
 ### 🎯 Phase 1: v1.4.0 — Workflow "1-Click Auto-Resolver" & Local API Custom Node Bridge
+>
 > **Goal**: Turn the Workflow Scanner engine into an interactive visual tab with automatic missing model resolution, and provide a secure Local API bridge for external ComfyUI custom nodes.
 
 - [ ] **Dedicated "Workflows" UI Tab**:
@@ -35,10 +36,13 @@ graph LR
   - ~~Complete REST API guide with Python examples for node creators in [`docs/API_REFERENCE.md`](file:///home/stygianrenegade/Projects/manager/Civitai-manager-ComfyUI/docs/API_REFERENCE.md).~~
 - [x] ~~**Direct In-Memory Workflow Parsing Engine**:~~
   - ~~Direct raw JSON / prompt dictionary extraction without requiring disk file paths.~~
+- [x] ~~**4-Tier Node Resolution & GitHub Fallback Engine**:~~
+  - ~~Local directory & `NODE_CLASS_MAPPINGS` scanning, SQLite ETag registry cache, rate-limited GitHub Search API fallback (top 3 candidate cards with topic scoping and query sanitization), and targeted Python runtime dependency installation (`requirements.txt` / `install.py`).~~
 
 ---
 
 ### 🎯 Phase 2: v1.5.0 — Native Hugging Face & GGUF Download Engine
+>
 > **Goal**: Equal-citizen support for Hugging Face `.safetensors`, GGUF quantizations, and next-gen video/image models.
 
 - [ ] **Native Hugging Face Download Pipeline**:
@@ -51,6 +55,7 @@ graph LR
 ---
 
 ### 🎯 Phase 3: v1.6.0 — Storage Optimizer & Hardlink Deduplication
+>
 > **Goal**: Reclaim tens or hundreds of gigabytes of disk space across multiple ComfyUI installations.
 
 - [ ] **NTFS / ext4 Hardlink Deduplication**:
@@ -63,6 +68,7 @@ graph LR
 ---
 
 ### 🎯 Phase 4: v2.0.0 — Smart Collections, Trigger Word Hub & Semantic Search
+>
 > **Goal**: Complete creative workstation and prompt curation engine.
 
 - [ ] **LoRA Trigger Word & Prompt Injector**:
@@ -77,5 +83,6 @@ graph LR
 ## 💬 Community Feedback & Feature Requests
 
 Have a feature request or suggestion for the roadmap?
+
 - Open an issue or discussion on GitHub: [CivitAI-manager-ComfyUI Issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues)
 - Contributions, pull requests, and feedback are always welcome!

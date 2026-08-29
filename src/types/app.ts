@@ -75,6 +75,8 @@ export interface WebhookConfig {
 export interface AppConfig {
   comfyui_root: string;
   comfyui_folders: string[]; // Multi-folder list support
+  comfyui_install_dir?: string; // Root ComfyUI application directory (where main.py and custom_nodes reside)
+  comfyui_custom_nodes_dir?: string; // Optional custom_nodes path override
   civitai_api_key?: string;
   mirror_url?: string;
   huggingface_token?: string;
@@ -106,12 +108,61 @@ export interface WorkflowModelReference {
   localPath?: string;
 }
 
+export interface GitHubNodeRepo {
+  id: number;
+  name: string;
+  fullName: string;
+  author: string;
+  htmlUrl: string;
+  cloneUrl: string;
+  description: string;
+  stars: number;
+  language: string;
+  topics: string[];
+  updatedAt: string;
+}
+
+export interface NodeResolutionResult {
+  nodeType: string;
+  isInstalled: boolean;
+  installedFolder?: string;
+  installedPath?: string;
+  managerMatch?: {
+    title: string;
+    author: string;
+    gitUrl: string;
+    description: string;
+  };
+  githubCandidates: GitHubNodeRepo[];
+  queryUsed?: string;
+}
+
+export interface NodeCloneResult {
+  success: boolean;
+  folderName: string;
+  targetPath: string;
+  hasRequirements: boolean;
+  hasInstallScript: boolean;
+  detectedPythonPath?: string;
+  error?: string;
+}
+
+export interface CustomNodePackage {
+  folderName: string;
+  fullPath: string;
+  hasRequirements: boolean;
+  hasInstallScript: boolean;
+  nodeClasses: string[];
+  gitRemoteUrl?: string;
+}
+
 export interface WorkflowInfo {
   filePath: string;
   fileName: string;
   fileType: 'json' | 'png';
   modelCount: number;
   models: WorkflowModelReference[];
+  nodeTypes?: string[];
 }
 
 export interface DownloadTask {

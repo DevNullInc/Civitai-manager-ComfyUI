@@ -35,6 +35,8 @@ import {
   Server,
   Lock,
   Terminal,
+  Layers,
+  Sparkles,
 } from 'lucide-react';
 import { AppConfig, ConflictStrategy, FilenamePatternRule, DEFAULT_FOLDER_MAP, DEFAULT_FILENAME_PATTERNS } from '../types/app';
 
@@ -42,6 +44,8 @@ export const SettingsTab: React.FC = () => {
   const [config, setConfig] = useState<AppConfig>({
     comfyui_root: '',
     comfyui_folders: [],
+    comfyui_install_dir: '',
+    comfyui_custom_nodes_dir: '',
     civitai_api_key: '',
     mirror_url: '',
     huggingface_token: '',
@@ -79,7 +83,31 @@ export const SettingsTab: React.FC = () => {
   const [hfStatus, setHfStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [testingWebhook, setTestingWebhook] = useState<'dl' | 'up' | null>(null);
   const [webhookStatus, setWebhookStatus] = useState<{ type: string; success?: boolean; message?: string } | null>(null);
+  const [installInfo, setInstallInfo] = useState<{
+    valid?: boolean;
+    inferred?: boolean;
+    installDir?: string;
+    customNodesDir?: string;
+    customNodesExist?: boolean;
+    installedNodes?: string[];
+    nodeCount?: number;
+  } | null>(null);
+  const [inspectingInstall, setInspectingInstall] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const checkInstallDir = async (customPath?: string) => {
+    if (window.civitaiAPI?.inspectComfyUIInstall) {
+      setInspectingInstall(true);
+      try {
+        const res = await window.civitaiAPI.inspectComfyUIInstall(customPath);
+        setInstallInfo(res);
+      } catch {
+        setInstallInfo(null);
+      } finally {
+        setInspectingInstall(false);
+      }
+    }
+  };
 
   const normalizeFolderPath = (p: string): string => {
     if (!p) return '';
@@ -128,9 +156,12 @@ export const SettingsTab: React.FC = () => {
                 ? loaded.max_concurrent_downloads
                 : 2,
             default_download_folder: loaded.default_download_folder || '',
+            comfyui_install_dir: loaded.comfyui_install_dir || '',
+            comfyui_custom_nodes_dir: loaded.comfyui_custom_nodes_dir || '',
             local_api_enabled: loaded.local_api_enabled !== false,
             local_api_port: loaded.local_api_port || 5174,
           });
+          checkInstallDir(loaded.comfyui_install_dir);
         }
       }
     };
@@ -536,6 +567,104 @@ export const SettingsTab: React.FC = () => {
               <span>Paste Config</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* ComfyUI Installation & Custom Nodes Directory */}
+      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5 text-slate-100 font-bold text-base">
+            <Layers className="text-cyan-400" size={20} />
+            <h2>ComfyUI Local Installation & Custom Nodes</h2>
+          </div>
+          {installInfo && (
+            <span
+              className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
+                installInfo.customNodesExist
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : installInfo.valid
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+              }`}
+            >
+              {installInfo.customNodesExist
+                ? `${installInfo.nodeCount} Custom Node${installInfo.nodeCount !== 1 ? 's' : ''} Found`
+                : installInfo.valid
+                ? 'Directory Detected'
+                : 'Not Set'}
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Specify the root directory of your local ComfyUI installation (where <code className="text-cyan-300 font-mono text-[11px]">main.py</code> and the <code className="text-cyan-300 font-mono text-[11px]">custom_nodes/</code> directory reside). This enables CMM to inspect installed custom nodes and check for missing node dependencies when parsing workflows.
+        </p>
+
+        <div className="space-y-3 pt-1">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="e.g. D:\ComfyUI or /home/user/ComfyUI or D:\ComfyUI_windows_portable\ComfyUI"
+              value={config.comfyui_install_dir || ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                setConfig({ ...config, comfyui_install_dir: val });
+                checkInstallDir(val);
+              }}
+              className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+            />
+            <button
+              type="button"
+              onClick={async () => {
+                const primary = config.comfyui_folders[0] || config.comfyui_root || '';
+                let detectedPath = '';
+                if (primary) {
+                  detectedPath = primary.replace(/[\\/]models[\\/]?$/i, '');
+                }
+                setConfig({ ...config, comfyui_install_dir: detectedPath });
+                checkInstallDir(detectedPath);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0"
+              title="Attempt to automatically deduce ComfyUI installation from your model folder path"
+            >
+              <Sparkles size={15} />
+              <span>Auto-Detect</span>
+            </button>
+          </div>
+
+          {/* Real-time Custom Nodes Detection Feedback */}
+          {installInfo && installInfo.customNodesExist && (
+            <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-800/40 text-xs text-cyan-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold flex items-center gap-1.5 text-cyan-300">
+                  <CheckCircle size={15} className="text-emerald-400" />
+                  <span>Detected custom_nodes directory: <code className="font-mono text-[11px] text-cyan-100">{installInfo.customNodesDir}</code></span>
+                </span>
+                {installInfo.inferred && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">Inferred from Models Path</span>
+                )}
+              </div>
+              {installInfo.installedNodes && installInfo.installedNodes.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1 pr-1 custom-scrollbar">
+                  {installInfo.installedNodes.map((nodeName, nIdx) => (
+                    <span
+                      key={nIdx}
+                      className="px-2 py-0.5 rounded-lg bg-slate-900/90 border border-slate-700/80 text-[11px] font-mono text-slate-300"
+                    >
+                      {nodeName}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {installInfo && !installInfo.customNodesExist && config.comfyui_install_dir && (
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>No <code className="font-mono">custom_nodes/</code> folder found in the specified path. Ensure this points to the root directory containing ComfyUI's <code className="font-mono">main.py</code>.</span>
+            </div>
+          )}
         </div>
       </div>
 

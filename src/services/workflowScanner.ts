@@ -78,13 +78,15 @@ export class WorkflowScanner {
         if (!parsedData) continue;
 
         const modelRefs = this.extractModelReferences(parsedData, localModelMap);
-        if (modelRefs.length > 0) {
+        const nodeTypes = this.extractNodeTypes(parsedData);
+        if (modelRefs.length > 0 || nodeTypes.length > 0) {
           results.push({
             filePath,
             fileName: path.basename(filePath),
             fileType: ext === '.json' ? 'json' : 'png',
             modelCount: modelRefs.length,
             models: modelRefs,
+            nodeTypes,
           });
         }
       } catch (err: any) {
@@ -131,13 +133,48 @@ export class WorkflowScanner {
     } catch {}
 
     const modelRefs = this.extractModelReferences(parsed, localModelMap);
+    const nodeTypes = this.extractNodeTypes(parsed);
     return {
       filePath: '',
       fileName: workflowName,
       fileType: 'json',
       modelCount: modelRefs.length,
       models: modelRefs,
+      nodeTypes,
     };
+  }
+
+  extractNodeTypes(data: any): string[] {
+    const types = new Set<string>();
+    if (!data || typeof data !== 'object') return [];
+
+    // Format 1: API prompt format
+    const rootNodes = data.prompt ? data.prompt : data;
+    if (rootNodes && typeof rootNodes === 'object' && !Array.isArray(rootNodes)) {
+      for (const node of Object.values<any>(rootNodes)) {
+        if (node && typeof node === 'object') {
+          const t = node.class_type || node.type;
+          if (t && typeof t === 'string' && t.trim()) {
+            types.add(t.trim());
+          }
+        }
+      }
+    }
+
+    // Format 2: UI workflow format
+    const uiWorkflow = data.workflow ? data.workflow : data;
+    if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
+      for (const node of uiWorkflow.nodes) {
+        if (node && typeof node === 'object') {
+          const t = node.type || node.class_type;
+          if (t && typeof t === 'string' && t.trim()) {
+            types.add(t.trim());
+          }
+        }
+      }
+    }
+
+    return Array.from(types).sort((a, b) => a.localeCompare(b));
   }
 
   private collectWorkflowFiles(dir: string, list: string[], depth = 0) {

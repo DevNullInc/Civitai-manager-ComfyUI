@@ -7,6 +7,7 @@ This document provides complete documentation and code examples for developers b
 ## 🔒 Security & Localhost Isolation
 
 For the protection of the user's local filesystem and machine security, CMM's HTTP Server Bridge is strictly isolated:
+
 - **Binding Address:** `127.0.0.1:<port>` (Default port: **`5174`**).
 - **Settings Toggle:** The API Bridge can be switched **ON** or **OFF** at any time inside the app's **Settings tab** under *Localhost HTTP API Bridge*.
 - **Custom Port Selection:** The port can be customized in Settings or on launch to avoid port collisions (e.g. `./cmm.sh start --api-port 5175` or `.\cmm.ps1 start -ApiPort 5175` or setting `API_PORT=5175`).
@@ -73,9 +74,11 @@ cmm = CMMClient()
 ### 1. Health & Server Status
 
 #### `GET /api/status`
+
 Checks if CMM is running, whether the API Bridge is enabled, and returns the active port.
 
 - **Response `200 OK` (When Enabled):**
+
 ```json
 {
   "status": "online",
@@ -89,6 +92,7 @@ Checks if CMM is running, whether the API Bridge is enabled, and returns the act
 ```
 
 - **Response `200 OK` (When Disabled via Settings Toggle):**
+
 ```json
 {
   "status": "disabled",
@@ -100,6 +104,7 @@ Checks if CMM is running, whether the API Bridge is enabled, and returns the act
   "localhostOnly": true
 }
 ```
+
 *(When disabled, external API endpoints return `503 Service Unavailable` with `{"error": "Local API Bridge is disabled in Settings."}`)*
 
 ---
@@ -107,10 +112,13 @@ Checks if CMM is running, whether the API Bridge is enabled, and returns the act
 ### 2. Configuration & Folders
 
 #### `GET /api/config`
+
 Retrieves current app configuration including ComfyUI paths, folder mappings, conflict strategies, and webhook settings.
 
 #### `POST /api/save-config`
+
 Updates configuration keys.
+
 - **Body:** JSON object matching partial `AppConfig`.
 
 ---
@@ -118,9 +126,11 @@ Updates configuration keys.
 ### 3. Local Library & Model Queries
 
 #### `GET /api/local-models`
+
 Returns all indexed models from the local SQLite database.
 
 - **Response `200 OK`:**
+
 ```json
 [
   {
@@ -141,9 +151,11 @@ Returns all indexed models from the local SQLite database.
 ```
 
 #### `POST /api/scan-library`
+
 Initiates an asynchronous background scan of a specified models directory or configured ComfyUI root.
 
 - **Body:**
+
 ```json
 {
   "rootPath": "/path/to/ComfyUI/models"
@@ -151,9 +163,11 @@ Initiates an asynchronous background scan of a specified models directory or con
 ```
 
 #### `GET /api/get-scan-status`
+
 Returns current progress of active library scan.
 
 - **Response `200 OK`:**
+
 ```json
 {
   "isScanning": false,
@@ -169,9 +183,11 @@ Returns current progress of active library scan.
 ### 4. CivitAI Queries & Downloads
 
 #### `POST /api/search-models`
+
 Searches CivitAI models via proxy query parameters.
 
 - **Body:**
+
 ```json
 {
   "query": "realism",
@@ -182,15 +198,19 @@ Searches CivitAI models via proxy query parameters.
 ```
 
 #### `GET /api/model/:id`
+
 Fetches detailed metadata for a specific CivitAI Model ID.
 
 #### `GET /api/version/:id`
+
 Fetches metadata and download URLs for a specific CivitAI Model Version ID.
 
 #### `POST /api/add-download`
+
 Queues a model for automatic download and folder routing.
 
 - **Body:**
+
 ```json
 {
   "fileName": "hyper-flux-8step.safetensors",
@@ -203,6 +223,7 @@ Queues a model for automatic download and folder routing.
 ```
 
 - **Response `200 OK`:**
+
 ```json
 {
   "id": "dl-uuid-12345",
@@ -215,15 +236,19 @@ Queues a model for automatic download and folder routing.
 ```
 
 #### `GET /api/downloads`
+
 Returns the list of active, paused, queued, and completed downloads with real-time speed, bytes downloaded, and status.
 
 #### `POST /api/pause-download`
+
 - **Body:** `{ "id": "<task-id>" }`
 
 #### `POST /api/resume-download`
+
 - **Body:** `{ "id": "<task-id>" }`
 
 #### `POST /api/cancel-download`
+
 - **Body:** `{ "id": "<task-id>" }`
 
 ---
@@ -231,12 +256,15 @@ Returns the list of active, paused, queued, and completed downloads with real-ti
 ### 5. Workflow Inspection & In-Memory Parsing
 
 #### `POST /api/workflows` or `POST /api/workflow/parse`
+
 Extracts all referenced checkpoints, LoRAs, UNETs, VAEs, CLIP models, and upscalers directly from **in-memory raw JSON** or scanned disk folders.
 
 ##### Option A: Direct Raw JSON In-Memory Payload (Recommended for Custom Nodes)
+
 Send the raw workflow/prompt dictionary directly in the POST body without saving any files to disk.
 
 - **Request Body (Direct Workflow JSON / ComfyUI Canvas Format):**
+
 ```json
 {
   "workflow": {
@@ -257,6 +285,7 @@ Send the raw workflow/prompt dictionary directly in the POST body without saving
 ```
 
 *Or pass the ComfyUI API Prompt format directly:*
+
 ```json
 {
   "prompt": {
@@ -271,6 +300,7 @@ Send the raw workflow/prompt dictionary directly in the POST body without saving
 ```
 
 - **Response `200 OK`:**
+
 ```json
 {
   "fileName": "direct_workflow.json",
@@ -297,7 +327,9 @@ Send the raw workflow/prompt dictionary directly in the POST body without saving
 ```
 
 ##### Option B: Local Disk Folder Scanning
+
 - **Request Body:**
+
 ```json
 {
   "folderPaths": ["/path/to/ComfyUI/workflows"]
@@ -309,9 +341,11 @@ Send the raw workflow/prompt dictionary directly in the POST body without saving
 ### 6. Hugging Face Integration
 
 #### `POST /api/hf/check`
+
 Inspects a Hugging Face repository and returns file lists, sizes, and `.safetensors` model metadata.
 
 - **Body:**
+
 ```json
 {
   "repoId": "black-forest-labs/FLUX.1-dev"
@@ -319,4 +353,5 @@ Inspects a Hugging Face repository and returns file lists, sizes, and `.safetens
 ```
 
 #### `GET /api/hf/whoami`
+
 Returns Hugging Face login authentication status.

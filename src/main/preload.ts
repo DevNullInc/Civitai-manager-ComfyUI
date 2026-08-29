@@ -14,6 +14,7 @@ const api = {
   getConfig: () => ipcRenderer.invoke('get-config'),
   saveConfig: (config: any) => ipcRenderer.invoke('save-config', config),
   setApiKey: (key: string) => ipcRenderer.invoke('set-api-key', key),
+  inspectComfyUIInstall: (customPath?: string) => ipcRenderer.invoke('inspect-comfyui-install', customPath),
 
   // CivitAI API
   searchModels: (params: any) => ipcRenderer.invoke('search-models', params),
@@ -70,6 +71,18 @@ const api = {
   // Workflows & Webhooks
   scanWorkflows: (folderPaths?: string | string[]) => ipcRenderer.invoke('scan-workflows', folderPaths),
   testWebhook: (url: string, event: string) => ipcRenderer.invoke('test-webhook', url, event),
+
+  // Node Resolution & GitHub Fallback
+  resolveMissingNode: (nodeType: string, customNodesDir?: string) =>
+    ipcRenderer.invoke('resolve-missing-node', nodeType, customNodesDir),
+  searchGitHubNodes: (query: string, limit?: number) =>
+    ipcRenderer.invoke('search-github-nodes', query, limit),
+  cloneCustomNode: (gitUrl: string, customFolderName?: string) =>
+    ipcRenderer.invoke('clone-custom-node', gitUrl, customFolderName),
+  installNodeDependencies: (nodeFolderPath: string) =>
+    ipcRenderer.invoke('install-node-dependencies', nodeFolderPath),
+  getInstalledCustomNodes: () =>
+    ipcRenderer.invoke('get-installed-custom-nodes'),
 
   // Hugging Face
   hfCheckModel: (repoId: string) => ipcRenderer.invoke('hf-check-model', repoId),

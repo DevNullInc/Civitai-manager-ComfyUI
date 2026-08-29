@@ -24,6 +24,7 @@ import { imageCacheService } from '../services/imageCacheService';
 import { webhookService } from '../services/webhookService';
 import { huggingfaceClient } from '../services/huggingfaceClient';
 import { workflowScanner } from '../services/workflowScanner';
+import { nodeResolverService } from '../services/nodeResolverService';
 import { encryptKey, decryptKey } from '../utils/secureStorage';
 import { logger } from '../utils/logger';
 import { AppConfig } from '../types/app';
@@ -34,6 +35,8 @@ let mainWindow: BrowserWindow | null = null;
 let currentConfig: AppConfig = {
   comfyui_root: '',
   comfyui_folders: [],
+  comfyui_install_dir: '',
+  comfyui_custom_nodes_dir: '',
   civitai_api_key: '',
   mirror_url: '',
   huggingface_token: '',
@@ -109,6 +112,8 @@ async function loadConfigFromDb() {
 
     if (cfgObj.comfyui_root) currentConfig.comfyui_root = cfgObj.comfyui_root;
     if (cfgObj.comfyui_folders) currentConfig.comfyui_folders = cfgObj.comfyui_folders;
+    if (cfgObj.comfyui_install_dir !== undefined) currentConfig.comfyui_install_dir = cfgObj.comfyui_install_dir;
+    if (cfgObj.comfyui_custom_nodes_dir !== undefined) currentConfig.comfyui_custom_nodes_dir = cfgObj.comfyui_custom_nodes_dir;
     if ((!currentConfig.comfyui_folders || currentConfig.comfyui_folders.length === 0) && currentConfig.comfyui_root) {
       currentConfig.comfyui_folders = [currentConfig.comfyui_root];
     }
@@ -173,6 +178,89 @@ async function loadConfigFromDb() {
   } catch (err) {
     logger.error('Error loading config from SQLite:', err);
   }
+}
+
+function getSubdirectories(dirPath: string): string[] {
+  try {
+    if (!fs.existsSync(dirPath)) return [];
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '__pycache__')
+      .map((e) => e.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
+function inspectComfyUIInstall(installPath?: string) {
+  const rawPath = (installPath || currentConfig.comfyui_install_dir || '').trim();
+
+  // If no explicit path specified, infer from primary model folder (e.g. /path/to/ComfyUI/models -> /path/to/ComfyUI)
+  if (!rawPath) {
+    const primaryModelFolder = currentConfig.comfyui_root || (currentConfig.comfyui_folders && currentConfig.comfyui_folders[0]) || '';
+    if (primaryModelFolder) {
+      const parent = path.dirname(primaryModelFolder);
+      const customNodesInParent = path.join(parent, 'custom_nodes');
+      const hasMainPy = fs.existsSync(path.join(parent, 'main.py'));
+      const hasCustomNodes = fs.existsSync(customNodesInParent);
+
+      if (hasCustomNodes || hasMainPy) {
+        const nodes = hasCustomNodes ? getSubdirectories(customNodesInParent) : [];
+        return {
+          valid: true,
+          inferred: true,
+          installDir: parent,
+          customNodesDir: hasCustomNodes ? customNodesInParent : '',
+          customNodesExist: hasCustomNodes,
+          installedNodes: nodes,
+          nodeCount: nodes.length,
+        };
+      }
+    }
+    return {
+      valid: false,
+      inferred: false,
+      installDir: '',
+      customNodesDir: '',
+      customNodesExist: false,
+      installedNodes: [],
+      nodeCount: 0,
+    };
+  }
+
+  const normalized = path.resolve(rawPath);
+  const exists = fs.existsSync(normalized);
+  if (!exists) {
+    return {
+      valid: false,
+      inferred: false,
+      installDir: normalized,
+      customNodesDir: '',
+      customNodesExist: false,
+      installedNodes: [],
+      nodeCount: 0,
+    };
+  }
+
+  // Check if directory is custom_nodes itself or root ComfyUI directory
+  let customNodesDir = path.join(normalized, 'custom_nodes');
+  if (!fs.existsSync(customNodesDir) && path.basename(normalized).toLowerCase() === 'custom_nodes') {
+    customNodesDir = normalized;
+  }
+
+  const customNodesExist = fs.existsSync(customNodesDir);
+  const installedNodes = customNodesExist ? getSubdirectories(customNodesDir) : [];
+
+  return {
+    valid: true,
+    inferred: false,
+    installDir: normalized,
+    customNodesDir: customNodesExist ? customNodesDir : '',
+    customNodesExist,
+    installedNodes,
+    nodeCount: installedNodes.length,
+  };
 }
 
 function startHttpBridgeServer() {
@@ -273,6 +361,18 @@ function startHttpBridgeServer() {
           await dbManager.run(
             'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
             ['comfyui_folders', JSON.stringify(body.comfyui_folders)]
+          );
+        }
+        if (body.comfyui_install_dir !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['comfyui_install_dir', JSON.stringify(body.comfyui_install_dir)]
+          );
+        }
+        if (body.comfyui_custom_nodes_dir !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['comfyui_custom_nodes_dir', JSON.stringify(body.comfyui_custom_nodes_dir)]
           );
         }
         if (body.civitai_api_key !== undefined) {
@@ -392,6 +492,73 @@ function startHttpBridgeServer() {
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(currentConfig));
+      } else if (url === '/api/comfyui-install' && req.method === 'GET') {
+        const result = inspectComfyUIInstall();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if (url === '/api/check-comfyui-install' && req.method === 'POST') {
+        const body = await getBody();
+        const result = inspectComfyUIInstall(body.installPath || body.path);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if ((url === '/api/nodes/resolve' || url.startsWith('/api/nodes/resolve?')) && (req.method === 'GET' || req.method === 'POST')) {
+        let nodeType = '';
+        if (req.method === 'GET') {
+          const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
+          nodeType = parsedUrl.searchParams.get('nodeType') || parsedUrl.searchParams.get('type') || '';
+        } else {
+          const body = await getBody();
+          nodeType = body.nodeType || body.type || body.name || '';
+        }
+        const targetNodesDir =
+          currentConfig.comfyui_custom_nodes_dir ||
+          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const resolution = await nodeResolverService.resolveMissingNode(
+          nodeType,
+          targetNodesDir,
+          currentConfig.comfyui_install_dir
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(resolution));
+      } else if (url === '/api/nodes/search-github' && req.method === 'POST') {
+        const body = await getBody();
+        const query = body.query || body.q || '';
+        const limit = parseInt(body.limit, 10) || 3;
+        const candidates = await nodeResolverService.searchGitHubNodes(query, limit);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ query, candidates }));
+      } else if (url === '/api/nodes/clone' && req.method === 'POST') {
+        const body = await getBody();
+        const targetNodesDir =
+          body.customNodesDir ||
+          currentConfig.comfyui_custom_nodes_dir ||
+          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const cloneRes = await nodeResolverService.cloneCustomNode(
+          body.gitUrl,
+          targetNodesDir,
+          currentConfig.comfyui_install_dir,
+          body.folderName
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(cloneRes));
+      } else if (url === '/api/nodes/install-deps' && req.method === 'POST') {
+        const body = await getBody();
+        const depRes = await nodeResolverService.installNodeDependencies(
+          body.folderPath || body.targetPath,
+          currentConfig.comfyui_install_dir
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(depRes));
+      } else if (url === '/api/nodes/installed' && req.method === 'GET') {
+        const targetNodesDir =
+          currentConfig.comfyui_custom_nodes_dir ||
+          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const pkgs = await nodeResolverService.inspectLocalCustomNodes(targetNodesDir);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(pkgs));
       } else if (url === '/api/scan-library' && req.method === 'POST') {
         const body = await getBody();
         // Fire-and-forget background scan to prevent HTTP socket headers timeout on large model directories
@@ -758,6 +925,20 @@ function registerIpcHandlers() {
       );
     }
 
+    if (newConfig.comfyui_install_dir !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['comfyui_install_dir', JSON.stringify(newConfig.comfyui_install_dir)]
+      );
+    }
+
+    if (newConfig.comfyui_custom_nodes_dir !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['comfyui_custom_nodes_dir', JSON.stringify(newConfig.comfyui_custom_nodes_dir)]
+      );
+    }
+
     if (newConfig.mirror_url !== undefined) {
       const baseApiUrl = (newConfig.mirror_url && newConfig.mirror_url.trim()) ? newConfig.mirror_url.trim() : 'https://civitai.com/api/v1';
       civitaiClient.setBaseUrl(baseApiUrl);
@@ -897,6 +1078,54 @@ function registerIpcHandlers() {
   ipcMain.handle('scan-workflows', async (_event: unknown, folderPaths?: string | string[]) => {
     const paths = folderPaths || currentConfig.comfyui_folders || [currentConfig.comfyui_root];
     return await workflowScanner.scanWorkflows(paths);
+  });
+
+  // ComfyUI Installation & Custom Node Inspection
+  ipcMain.handle('inspect-comfyui-install', async (_event: unknown, targetPath?: string) => {
+    return inspectComfyUIInstall(targetPath);
+  });
+
+  // Node Resolution & GitHub Fallback Handlers
+  ipcMain.handle('resolve-missing-node', async (_event: unknown, nodeType: string, customNodesDir?: string) => {
+    const targetNodesDir =
+      customNodesDir ||
+      currentConfig.comfyui_custom_nodes_dir ||
+      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    return await nodeResolverService.resolveMissingNode(
+      nodeType,
+      targetNodesDir,
+      currentConfig.comfyui_install_dir
+    );
+  });
+
+  ipcMain.handle('search-github-nodes', async (_event: unknown, query: string, limit = 3) => {
+    return await nodeResolverService.searchGitHubNodes(query, limit);
+  });
+
+  ipcMain.handle('clone-custom-node', async (_event: unknown, gitUrl: string, customFolderName?: string) => {
+    const targetNodesDir =
+      currentConfig.comfyui_custom_nodes_dir ||
+      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    return await nodeResolverService.cloneCustomNode(
+      gitUrl,
+      targetNodesDir,
+      currentConfig.comfyui_install_dir,
+      customFolderName
+    );
+  });
+
+  ipcMain.handle('install-node-dependencies', async (_event: unknown, nodeFolderPath: string) => {
+    return await nodeResolverService.installNodeDependencies(nodeFolderPath, currentConfig.comfyui_install_dir);
+  });
+
+  ipcMain.handle('get-installed-custom-nodes', async () => {
+    const targetNodesDir =
+      currentConfig.comfyui_custom_nodes_dir ||
+      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    return await nodeResolverService.inspectLocalCustomNodes(targetNodesDir);
   });
 
   // Webhook Handlers

@@ -73,6 +73,19 @@ export function setupWebBridgeIfNeeded() {
         });
       },
 
+      inspectComfyUIInstall: async (customPath?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/check-comfyui-install`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ installPath: customPath }),
+          });
+          return await res.json();
+        } catch {
+          return { valid: false, customNodesExist: false, installedNodes: [], nodeCount: 0 };
+        }
+      },
+
       searchModels: async (params: any) => {
         const res = await fetch(`${API_BASE}/search-models`, {
           method: 'POST',
@@ -430,6 +443,68 @@ export function setupWebBridgeIfNeeded() {
           return await res.json();
         } catch (e: any) {
           return { success: false, error: e.message };
+        }
+      },
+
+      resolveMissingNode: async (nodeType: string, customNodesDir?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/nodes/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeType, customNodesDir }),
+          });
+          return await res.json();
+        } catch (e) {
+          return { nodeType, isInstalled: false, githubCandidates: [] };
+        }
+      },
+
+      searchGitHubNodes: async (query: string, limit = 3) => {
+        try {
+          const res = await fetch(`${API_BASE}/nodes/search-github`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, limit }),
+          });
+          const data = await res.json();
+          return data.candidates || [];
+        } catch (e) {
+          return [];
+        }
+      },
+
+      cloneCustomNode: async (gitUrl: string, customFolderName?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/nodes/clone`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gitUrl, folderName: customFolderName }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { success: false, error: e.message };
+        }
+      },
+
+      installNodeDependencies: async (nodeFolderPath: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/nodes/install-deps`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folderPath: nodeFolderPath }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { success: false, output: '', error: e.message };
+        }
+      },
+
+      getInstalledCustomNodes: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/nodes/installed`);
+          return await res.json();
+        } catch (e) {
+          return [];
         }
       },
 

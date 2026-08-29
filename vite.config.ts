@@ -12,6 +12,7 @@ import { encryptKey, decryptKey } from './src/utils/secureStorage';
 let currentConfig: any = {
   comfyui_root: '',
   comfyui_folders: [],
+  comfyui_install_dir: '',
   civitai_api_key: '',
   folder_mappings: {},
   advanced_mappings: { filename_patterns: [] },
@@ -36,6 +37,7 @@ async function loadConfig() {
 
     if (cfgObj.comfyui_root) currentConfig.comfyui_root = cfgObj.comfyui_root;
     if (cfgObj.comfyui_folders) currentConfig.comfyui_folders = cfgObj.comfyui_folders;
+    if (cfgObj.comfyui_install_dir) currentConfig.comfyui_install_dir = cfgObj.comfyui_install_dir;
     if ((!currentConfig.comfyui_folders || currentConfig.comfyui_folders.length === 0) && currentConfig.comfyui_root) {
       currentConfig.comfyui_folders = [currentConfig.comfyui_root];
     }
@@ -87,6 +89,12 @@ function apiServerPlugin(): Plugin {
               await dbManager.run(
                 'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
                 ['comfyui_folders', JSON.stringify(body.comfyui_folders)]
+              );
+            }
+            if (body.comfyui_install_dir !== undefined) {
+              await dbManager.run(
+                'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+                ['comfyui_install_dir', JSON.stringify(body.comfyui_install_dir)]
               );
             }
             if (body.civitai_api_key !== undefined) {
