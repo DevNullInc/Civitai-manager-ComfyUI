@@ -29,10 +29,12 @@ graph LR
 - [ ] **Decoupled ComfyUI Custom Node Extension Package**:
   - Maintained as an independent companion repository/package with ComfyUI's custom node folder structure (`custom_nodes/comfyui-civitai-manager-node`).
   - Seamlessly communicates with CMM via the native HTTP Bridge on `127.0.0.1:5174`.
-- [ ] **Localhost-Only Security Hardening**:
-  - Strict `127.0.0.1` binding with remote IP filtering and Origin verification to guarantee zero remote/LAN access to local filesystem operations.
-- [ ] **Custom Node Developer Documentation**:
-  - Complete REST API guide with Python examples for node creators in [`docs/API_REFERENCE.md`](file:///home/stygianrenegade/Projects/manager/Civitai-manager-ComfyUI/docs/API_REFERENCE.md).
+- [x] ~~**Localhost-Only Security Hardening**:~~
+  - ~~Strict `127.0.0.1` binding with remote IP filtering, Origin verification, and in-app Settings toggle to guarantee zero remote/LAN access to local filesystem operations.~~
+- [x] ~~**Custom Node Developer Documentation**:~~
+  - ~~Complete REST API guide with Python examples for node creators in [`docs/API_REFERENCE.md`](file:///home/stygianrenegade/Projects/manager/Civitai-manager-ComfyUI/docs/API_REFERENCE.md).~~
+- [x] ~~**Direct In-Memory Workflow Parsing Engine**:~~
+  - ~~Direct raw JSON / prompt dictionary extraction without requiring disk file paths.~~
 
 ---
 
