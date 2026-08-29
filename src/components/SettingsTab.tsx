@@ -407,7 +407,7 @@ export const SettingsTab: React.FC = () => {
   };
 
   const handleScaffoldFolders = async (targetDir?: string) => {
-    if (!window.civitaiAPI?.scaffoldModelFolders) return;
+    if (!window.civitaiAPI?.scaffoldModelFolders || (!targetDir && config.comfyui_folders.length === 0)) return;
     setIsScaffolding(true);
     setScaffoldFeedback(null);
 
@@ -1206,17 +1206,27 @@ export const SettingsTab: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => handleScaffoldFolders()}
+              onClick={config.comfyui_folders.length > 0 ? () => handleScaffoldFolders() : undefined}
               disabled={isScaffolding || config.comfyui_folders.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-purple-900/30 border border-slate-700 hover:border-purple-500/50 text-purple-300 hover:text-purple-200 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-40 active:scale-95"
-              title="Automatically build any missing standard ComfyUI model subfolders (checkpoints, loras, vae, controlnet, etc.) in your configured model directories"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                config.comfyui_folders.length === 0
+                  ? 'bg-slate-900/60 border border-slate-800/80 text-slate-500 cursor-not-allowed opacity-50'
+                  : 'bg-slate-800 hover:bg-purple-900/30 border border-slate-700 hover:border-purple-500/50 text-purple-300 hover:text-purple-200 cursor-pointer active:scale-95'
+              }`}
+              title={
+                config.comfyui_folders.length === 0
+                  ? 'Please select or configure a main model folder first'
+                  : 'Automatically build any missing standard ComfyUI model subfolders (checkpoints, loras, vae, controlnet, etc.) in your configured model directories'
+              }
             >
               {isScaffolding ? (
                 <Loader2 size={13} className="animate-spin text-purple-400" />
               ) : (
-                <Sparkles size={13} className="text-purple-400" />
+                <Sparkles size={13} className={config.comfyui_folders.length === 0 ? 'text-slate-600' : 'text-purple-400'} />
               )}
-              <span>Build Missing Subfolders</span>
+              <span className={config.comfyui_folders.length === 0 ? 'line-through text-slate-500' : ''}>
+                Build Missing Subfolders
+              </span>
             </button>
             <span className="text-xs text-slate-400">
               {config.comfyui_folders.length} folder{config.comfyui_folders.length !== 1 ? 's' : ''} configured
