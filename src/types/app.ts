@@ -304,3 +304,16 @@ export interface ScanProgress {
   status: 'idle' | 'scanning' | 'hashing' | 'lookup' | 'completed' | 'failed';
   error?: string;
 }
+
+export interface AppUpdateCheckResult {
+  isUpdateAvailable: boolean;
+  isDevelopmentVersion: boolean;
+  currentCommit?: string;
+  remoteCommit?: string;
+  remoteCommitMessage?: string;
+  remoteCommitDate?: string;
+  remoteCommitAuthor?: string;
+  githubUrl: string;
+  isPackaged: boolean;
+  error?: string;
+}

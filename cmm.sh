@@ -256,6 +256,9 @@ start_app() {
 
   cd "$SCRIPT_DIR"
 
+  # Check for Git development updates
+  check_git_updates
+
   # 1. Build project
   write_status ">>" "Building project..." "$C_CYAN"
   
@@ -377,6 +380,54 @@ invoke_package() {
   echo ""
 }
 
+check_git_updates() {
+  # Check if release mode is forced or configured in src/version.ts
+  if [ "$CMM_RELEASE_BUILD" = "true" ] || [ "$NODE_ENV" = "production" ]; then
+    return 0
+  fi
+  if [ -f "$SCRIPT_DIR/src/version.ts" ] && grep -q "IS_DEV_BUILD: false" "$SCRIPT_DIR/src/version.ts"; then
+    return 0
+  fi
+
+  if [ -d "$SCRIPT_DIR/.git" ] && command -v git >/dev/null 2>&1; then
+    local local_sha=""
+    local_sha=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || true)
+    local remote_sha=""
+    if command -v timeout >/dev/null 2>&1; then
+      remote_sha=$(timeout 2 git -C "$SCRIPT_DIR" ls-remote --heads origin main 2>/dev/null | awk '{print substr($1, 1, 7)}' || true)
+    else
+      remote_sha=$(git -C "$SCRIPT_DIR" ls-remote --heads origin main 2>/dev/null | awk '{print substr($1, 1, 7)}' || true)
+    fi
+
+    if [ -n "$remote_sha" ] && [ -n "$local_sha" ] && [ "$remote_sha" != "$local_sha" ]; then
+      echo ""
+      write_status "!" "DEVELOPMENT UPDATE: Newer commit available on GitHub ($remote_sha)!" "$C_YELLOW"
+      echo -e "      ${C_GRAY}Current Local Commit : ${C_CYAN}$local_sha${C_RESET}"
+      echo -e "      ${C_GRAY}Latest Remote Commit : ${C_GREEN}$remote_sha${C_RESET} ${C_GRAY}(main branch)${C_RESET}"
+      echo -e "      ${C_YELLOW}Note: You are running an active development version (not a tagged release).${C_RESET}"
+      echo -e "      ${C_YELLOW}Run  ./cmm.sh update  or  git pull  to update your development copy.${C_RESET}"
+      echo ""
+    fi
+  fi
+}
+
+update_app() {
+  if [ ! -d "$SCRIPT_DIR/.git" ] || ! command -v git >/dev/null 2>&1; then
+    write_status "!!" "This installation is not a Git clone. Cannot update automatically." "$C_RED"
+    echo -e "  ${C_YELLOW}To update standalone builds, download the latest development release from GitHub.${C_RESET}"
+    exit 1
+  fi
+
+  write_status ">>" "Pulling latest development updates from GitHub (git pull origin main)..." "$C_CYAN"
+  git -C "$SCRIPT_DIR" pull origin main
+  write_status "ok" "Git repository updated successfully." "$C_GREEN"
+
+  ensure_node_installed
+  write_status ">>" "Rebuilding application..." "$C_CYAN"
+  (cd "$SCRIPT_DIR" && npm run build)
+  write_status "ok" "Update and rebuild complete! Run ./cmm.sh start to launch." "$C_GREEN"
+}
+
 # Print Banner
 echo ""
 echo -e "  ${C_MAGENTA}+----------------------------------------------+${C_RESET}"
@@ -401,6 +452,9 @@ case "$ACTION" in
   status)
     show_status
     ;;
+  update|pull)
+    update_app
+    ;;
   package|publish|dist)
     invoke_package
     ;;
@@ -411,6 +465,7 @@ case "$ACTION" in
     echo "  start                    Start the desktop app and Vite web server (default)"
     echo "  stop                     Stop all running CMM processes"
     echo "  restart                  Restart the application"
+    echo "  update                   Pull latest development commits and rebuild"
     echo "  status                   Show running process status & endpoints"
     echo "  package / dist           Package standalone Linux binaries (.zip, .tar.gz)"
     echo ""

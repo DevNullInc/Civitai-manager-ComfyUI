@@ -586,6 +586,22 @@ export function setupWebBridgeIfNeeded() {
         return true;
       },
 
+      checkAppUpdate: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/app-update`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return await res.json();
+        } catch (e: any) {
+          return {
+            isUpdateAvailable: false,
+            isDevelopmentVersion: true,
+            githubUrl: 'https://github.com/DevNullInc/Civitai-manager-ComfyUI',
+            isPackaged: false,
+            error: e.message,
+          };
+        }
+      },
+
       getSystemInfo: async () => {
         return {
           version: '1.3.0',

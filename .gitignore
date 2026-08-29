@@ -22,3 +22,4 @@ update-version.ps1
 scripts/update-version.js
 k7q2w9x4.md
 tests/workflowScanner.test.ts
+cmm-dev.*

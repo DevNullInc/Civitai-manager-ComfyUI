@@ -26,7 +26,7 @@
 
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('start', 'stop', 'restart', 'status', 'package', 'publish', 'dist', 'scan', 'download', 'check-updates', 'export', 'hf', 'workflows', 'help')]
+  [ValidateSet('start', 'stop', 'restart', 'status', 'update', 'package', 'publish', 'dist', 'scan', 'download', 'check-updates', 'export', 'hf', 'workflows', 'help')]
   [string]$Action = 'start',
 
   [int]$Port = 5173,
@@ -284,8 +284,74 @@ function Ensure-NodeInstalled {
   }
 }
 
+function Check-GitUpdates {
+  # Check if release mode is forced or configured in src/version.ts
+  if ($env:CMM_RELEASE_BUILD -eq 'true' -or $env:NODE_ENV -eq 'production') {
+    return
+  }
+  $versionFile = Join-Path $ProjectRoot 'src\version.ts'
+  if (Test-Path $versionFile) {
+    $versionContent = Get-Content $versionFile -Raw
+    if ($versionContent -match 'IS_DEV_BUILD:\s*false') {
+      return
+    }
+  }
+
+  if (Test-Path (Join-Path $ProjectRoot '.git')) {
+    try {
+      $localSha = (git rev-parse --short HEAD 2>$null)
+      $remoteOutput = (git ls-remote --heads origin main 2>$null)
+      if ($remoteOutput) {
+        $fullSha = ($remoteOutput.Split("`t")[0]).Trim()
+        $remoteSha = if ($fullSha.Length -ge 7) { $fullSha.Substring(0, 7) } else { $fullSha }
+        if ($remoteSha -and $localSha -and ($remoteSha -ne $localSha)) {
+          Write-Host ''
+          Write-Status '!' "DEVELOPMENT UPDATE: Newer commit available on GitHub ($remoteSha)!" 'Yellow'
+          Write-Host "      Current Local Commit : $localSha" -ForegroundColor Cyan
+          Write-Host "      Latest GitHub Commit : $remoteSha (main branch)" -ForegroundColor Green
+          Write-Host '      Note: You are running an active development version (not a tagged release).' -ForegroundColor Yellow
+          Write-Host '      Run .\cmm.ps1 update or git pull to update your development copy.' -ForegroundColor Yellow
+          Write-Host ''
+        }
+      }
+    } catch { }
+  }
+}
+
+function Update-App {
+  if (-not (Test-Path (Join-Path $ProjectRoot '.git'))) {
+    Write-Status '!!' 'This installation is not a Git clone. Cannot update automatically.' 'Red'
+    Write-Host '  To update standalone builds, download the latest development release from GitHub.' -ForegroundColor Yellow
+    return
+  }
+
+  Write-Status '>>' 'Pulling latest development updates from GitHub (git pull origin main)...' 'Cyan'
+  Push-Location $ProjectRoot
+  try {
+    & git pull origin main
+    if ($LASTEXITCODE -ne 0) {
+      throw 'git pull failed.'
+    }
+    Write-Status 'ok' 'Git repository updated successfully.' 'Green'
+
+    Ensure-NodeInstalled
+    Write-Status '>>' 'Rebuilding application...' 'Cyan'
+    & npm run build
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Build failed.'
+    }
+    Write-Status 'ok' 'Update complete! You can now launch with .\cmm.ps1 start' 'Green'
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 function Start-App {
   Ensure-NodeInstalled
+  # Check for Git development updates
+  Check-GitUpdates
+
   # Check if already running or if ports 5173/5174 are in use
   $existing = Get-RunningProcs
   if ($existing.Count -gt 0) {
@@ -500,6 +566,9 @@ switch ($Action) {
   }
   'status' {
     Show-Status
+  }
+  'update' {
+    Update-App
   }
   'package' {
     Invoke-AppPackage

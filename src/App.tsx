@@ -33,6 +33,7 @@ import { AboutTab } from './components/AboutTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ScanStatusBar } from './components/ScanStatusBar';
 import { DownloadFolderPromptModal } from './components/DownloadFolderPromptModal';
+import { DevelopmentUpdateBanner } from './components/DevelopmentUpdateBanner';
 import { ScanProvider, useScan } from './context/ScanContext';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
 
@@ -251,6 +252,9 @@ function AppContent() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#07090e] text-slate-100 overflow-hidden select-none">
+      {/* Development Update Notice Banner */}
+      <DevelopmentUpdateBanner />
+
       {/* Sticky Top Navigation Bar */}
       <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 backdrop-blur-xl px-6 py-3 shadow-2xl flex items-center justify-between gap-6 w-full flex-shrink-0">
         {/* Left: Brand Logo & Title */}

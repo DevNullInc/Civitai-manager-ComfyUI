@@ -22,13 +22,15 @@ import { libraryScanner } from '../services/libraryScanner';
 import { versionManager } from '../services/versionManager';
 import { backupService } from '../services/backupService';
 import { imageCacheService } from '../services/imageCacheService';
+import axios from 'axios';
 import { webhookService } from '../services/webhookService';
 import { huggingfaceClient } from '../services/huggingfaceClient';
 import { workflowScanner } from '../services/workflowScanner';
 import { nodeResolverService } from '../services/nodeResolverService';
 import { encryptKey, decryptKey } from '../utils/secureStorage';
 import { logger } from '../utils/logger';
-import { AppConfig } from '../types/app';
+import { AppConfig, AppUpdateCheckResult } from '../types/app';
+import { BUILD_CONFIG } from '../version';
 
 app.setName('civitai-model-manager');
 
@@ -634,6 +636,96 @@ async function pullMissingModel(modelData: any, targetRoot?: string) {
   });
 
   return { success: true, task, message: `Download queued for ${modelName}` };
+}
+
+async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
+  const repoOwner = 'DevNullInc';
+  const repoName = 'Civitai-manager-ComfyUI';
+  const githubUrl = `https://github.com/${repoOwner}/${repoName}`;
+
+  let isPackaged = false;
+  try {
+    isPackaged = Boolean(app && app.isPackaged);
+  } catch {
+    isPackaged = false;
+  }
+
+  // If built/configured for formal production release, bypass development commit checks entirely
+  if (!BUILD_CONFIG.IS_DEV_BUILD || process.env.CMM_RELEASE_BUILD === 'true') {
+    logger.info('Release build mode active: Development update commit checking and banners are disabled.');
+    return {
+      isUpdateAvailable: false,
+      isDevelopmentVersion: false,
+      githubUrl,
+      isPackaged,
+    };
+  }
+
+  let currentCommit = '';
+
+  // 1. Determine local commit SHA
+  try {
+    const cwdPath = (app && typeof app.getAppPath === 'function') ? app.getAppPath() : process.cwd();
+    const gitHead = child_process.execSync('git rev-parse HEAD', {
+      cwd: cwdPath,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      timeout: 2500,
+    }).trim();
+    if (gitHead && /^[0-9a-f]{40}$/i.test(gitHead)) {
+      currentCommit = gitHead;
+    }
+  } catch {
+    currentCommit = process.env.GIT_COMMIT || '';
+  }
+
+  // 2. Fetch latest commit from GitHub main branch
+  try {
+    const res = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}/commits/main`, {
+      timeout: 4500,
+      headers: {
+        'User-Agent': 'CivitAI-Model-Manager-ComfyUI',
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    });
+
+    const remoteData = res.data;
+    const remoteSha: string = remoteData.sha || '';
+    const remoteMsg: string = (remoteData.commit?.message || '').split('\n')[0];
+    const remoteDate: string = remoteData.commit?.author?.date || '';
+    const remoteAuthor: string = remoteData.commit?.author?.name || '';
+    const commitUrl: string = remoteData.html_url || `${githubUrl}/commit/${remoteSha}`;
+
+    const shortRemote = remoteSha ? remoteSha.substring(0, 7) : '';
+    const shortLocal = currentCommit ? currentCommit.substring(0, 7) : '';
+
+    // Update is available if remote commit exists and differs from local commit
+    const isUpdateAvailable = Boolean(
+      remoteSha && (!shortLocal || shortLocal.toLowerCase() !== shortRemote.toLowerCase())
+    );
+
+    return {
+      isUpdateAvailable,
+      isDevelopmentVersion: true,
+      currentCommit: shortLocal || undefined,
+      remoteCommit: shortRemote || undefined,
+      remoteCommitMessage: remoteMsg,
+      remoteCommitDate: remoteDate,
+      remoteCommitAuthor: remoteAuthor,
+      githubUrl: commitUrl,
+      isPackaged,
+    };
+  } catch (err: any) {
+    logger.warn('Failed to check for remote development updates on GitHub:', err?.message || err);
+    return {
+      isUpdateAvailable: false,
+      isDevelopmentVersion: true,
+      currentCommit: currentCommit ? currentCommit.substring(0, 7) : undefined,
+      githubUrl,
+      isPackaged,
+      error: err?.message || 'Failed to check GitHub',
+    };
+  }
 }
 
 function startHttpBridgeServer() {
@@ -1272,6 +1364,10 @@ function startHttpBridgeServer() {
         const result = await huggingfaceClient.getCliWhoami();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
+      } else if (url === '/api/app-update' && req.method === 'GET') {
+        const result = await checkDevelopmentGitUpdate();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
       } else if (url === '/api/restart-app' && req.method === 'POST') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
@@ -1835,6 +1931,10 @@ function registerIpcHandlers() {
       return true;
     }
     return false;
+  });
+
+  ipcMain.handle('check-app-update', async () => {
+    return await checkDevelopmentGitUpdate();
   });
 
   ipcMain.handle('get-system-info', () => {

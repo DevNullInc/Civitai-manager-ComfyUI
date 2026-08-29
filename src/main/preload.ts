@@ -97,6 +97,7 @@ const api = {
   // External Link & System Info
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   getSystemInfo: () => ipcRenderer.invoke('get-system-info'),
+  checkAppUpdate: () => ipcRenderer.invoke('check-app-update'),
   onAppLog: (callback: (log: { level: string; message: string }) => void) => {
     ipcRenderer.on('app-log', (_event: unknown, log: any) => callback(log));
   },

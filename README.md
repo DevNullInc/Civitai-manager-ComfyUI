@@ -81,6 +81,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 ### ⚙️ System Backup & Diagnostics
 
 - **Complete System Backup & Restore (.ZIP)**: Create and restore comprehensive `.zip` archives containing your raw SQLite database, model catalog, download records, folder settings, and ignore sets (with live missing file counts upon restore)
+- **Development Build Update Checker**: Top notification banner and startup script Git checks notifying users when newer development commits are pushed to GitHub (with 1-click `./cmm.sh update` / `.\cmm.ps1 update` support and dismiss buttons)
 - **Quick Config Sharing**: Direct clipboard copy and paste for quick pattern rule and settings sharing
 - **Console Feedback & Diagnostics**: Built-in system log capture and one-click diagnostic report generation for bug reports
 - **Single-Instance Management**: Automatically detects and focuses existing application windows
