@@ -8,8 +8,7 @@ dist-app/
 .DS_Store
 scratch/
 .cmm.pid
-tests/folderRouter.test.js
-tests/rateLimiter.test.js
+tests/
 civitai_manager.sqlite-wal
 release/
 civitai_manager.sqlite-shm
@@ -21,5 +20,4 @@ Civitai-manager-ComfyUI.code-workspace
 update-version.ps1
 scripts/update-version.js
 k7q2w9x4.md
-tests/workflowScanner.test.ts
 cmm-dev.*
