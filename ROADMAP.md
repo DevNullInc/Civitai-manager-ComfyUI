@@ -26,8 +26,13 @@ graph LR
   - ~~Drag-and-drop any ComfyUI `.json` workflow or generated image `.png` directly into CMM with dual `tEXt`/`iTXt` chunk parsing.~~
   - ~~Interactive Visual Node Map preserving spatial canvas coordinates with zoom/pan and node readiness status color coding.~~
   - ~~Visual dependency matrix displaying which Checkpoints, LoRAs, VAEs, ControlNets, UNETs, and Upscalers are **Installed** vs. **Missing**.~~
+  - ~~Deep ComfyUI JSON format normalization supporting UI canvas exports, API prompts, array nodes, and stringified metadata wrappers (`extra_pnginfo.workflow`, `extra.prompt`) with strict validity verification.~~
+  - ~~Persistent DOM mounting across navigation tabs and workflow card dismissal `(X)` controls.~~
 - [x] ~~**"Download All Missing Models" & Model Search Jump Action**:~~
   - ~~1-click search & download transitions with real-time inline progress bars and speed metrics.~~
+- [x] ~~**Process Safety & Health Monitoring**:~~
+  - ~~Strict process blacklist protections in `cmm.sh`, `cmm.ps1`, and `src/main/index.ts` to prevent closing external web browsers (Firefox, Chrome, Opera, Brave, etc.) and foreign processes during shutdown or restart.~~
+  - ~~Real-time backend heartbeat monitoring (`/api/health`) and dynamic red **"Offline"** status badge.~~
 - [ ] **Decoupled ComfyUI Custom Node Extension Package**:
   - Maintained as an independent companion repository/package with ComfyUI's custom node folder structure (`custom_nodes/comfyui-civitai-manager-node`).
   - Seamlessly communicates with CMM via the native HTTP Bridge on `127.0.0.1:5174`.
