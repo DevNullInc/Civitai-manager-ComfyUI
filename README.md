@@ -116,6 +116,20 @@ chmod +x CivitAI-Model-Manager-<version>.AppImage
 ./CivitAI-Model-Manager-<version>.AppImage
 ```
 
+### macOS (Community & Self-Build)
+
+> [!NOTE]
+> **Maintainer Hardware Notice**: The development and primary CI/CD environments are Linux and Windows. Because maintainers do not currently possess active Mac hardware, macOS builds are community-tested and provided on a best-effort basis.
+
+```bash
+# 1. Mount downloaded disk image (.dmg) or extract .zip
+# Drag "CivitAI Model Manager.app" to /Applications
+
+# 2. If macOS Gatekeeper blocks the unsigned application, clear the quarantine attribute:
+xattr -cr "/Applications/CivitAI Model Manager.app"
+# Or: Right-click the app icon in Finder → click "Open" → select "Open" in the prompt
+```
+
 ### Build & Run from Source
 
 ```bash
@@ -126,10 +140,11 @@ cd Civitai-manager-ComfyUI
 npm install
 ```
 
-#### 🚀 Recommended: Launch with `cmm.ps1` (PowerShell)
+#### 🚀 Recommended: Launch with `cmm.ps1` (Windows / PowerShell) or `cmm.sh` (Linux / macOS)
 
-The included `cmm.ps1` script is the primary launcher and controller for starting, stopping, restarting, and managing background processes.
+The included `cmm.ps1` (PowerShell) and `cmm.sh` (Bash) scripts are the primary launchers for starting, stopping, restarting, and managing background processes.
 
+**Windows (PowerShell):**
 ```powershell
 # 1. Start Electron desktop application + Web UI (port 5173)
 .\cmm.ps1 start
@@ -146,15 +161,72 @@ The included `cmm.ps1` script is the primary launcher and controller for startin
 
 # 5. Build standalone executables and release bundles in ./release/
 .\cmm.ps1 package
-# (alias: .\cmm.ps1 publish)
 
 # 6. Stop all running application instances cleanly
 .\cmm.ps1 stop
 ```
 
+**Linux / macOS (Bash):**
+```bash
+# 1. Start application with local Electron window & HTTP bridge
+./cmm.sh start
+
+# 2. Start on custom port or headless mode
+./cmm.sh start --port 8080 --headless
+
+# 3. Check status / Stop / Restart
+./cmm.sh status
+./cmm.sh restart
+./cmm.sh stop
+```
+
+#### 🍏 Building & Packaging on macOS
+
+To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directly on a Mac:
+
+1. **Install Prerequisites**:
+   Ensure you have [Node.js](https://nodejs.org/) (v18+ or v20+), Git, and the Xcode Command Line Tools installed:
+   ```bash
+   xcode-select --install
+   ```
+2. **Clone & Install Dependencies**:
+   ```bash
+   git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
+   cd Civitai-manager-ComfyUI
+   npm install
+   ```
+3. **Run in Development**:
+   ```bash
+   # Run Vite + Electron desktop application in live development mode:
+   npm run electron:dev
+
+   # Or run Vite browser interface only (headless):
+   npm run dev
+   ```
+4. **Compile Standalone macOS Application (`.dmg` & `.zip`)**:
+   ```bash
+   # Build universal / native architecture packages for macOS:
+   npm run dist:mac
+   ```
+   Compiled binaries are written to the `release/` directory:
+   - `CivitAI Model Manager-<version>-arm64.dmg` (Apple Silicon M1/M2/M3/M4)
+   - `CivitAI Model Manager-<version>-x64.dmg` (Intel x86_64)
+   - `CivitAI Model Manager-<version>-mac.zip`
+
+#### ⚠️ macOS Platform Caveats & Limitations
+
+Please keep the following platform differences and limitations in mind when running or building on macOS:
+
+- **No Official Mac Test Device**: Primary development occurs on Linux and Windows. macOS support relies on standard cross-platform Electron APIs and community bug reports.
+- **Unsigned Binaries & Gatekeeper**: Self-built or unsigned macOS applications will be flagged by Apple Gatekeeper as from an "Unidentified Developer". You must right-click $\rightarrow$ Open or execute `xattr -cr "/Applications/CivitAI Model Manager.app"` to bypass the quarantine check.
+- **Native C++ Node Module Compilation**: Packages utilizing native C++ bindings (`sqlite3` and `keytar`) must compile locally for your target architecture (`arm64` vs `x64`). Run `npm run postinstall` (or `npx electron-builder install-app-deps`) if architecture mismatches occur.
+- **Python Environment Resolution**: Automatic detection of Windows-specific embedded Python environments (`ComfyUI_windows_portable\python_embeded\python.exe`) is bypassed on macOS; CMM will look for virtualenvs (`venv/bin/python`, `.venv/bin/python`), Conda environments (`conda`/`miniconda`), or your active system Python interpreter when running companion node dependency installers.
+- **Window Activation Tools**: Linux-specific window focus utilities (`wmctrl` / `xdotool`) in `cmm.sh` are skipped on macOS.
+- **Hardware Acceleration**: CPU-level SHA256 file hashing leverages ARM NEON and Apple Crypto engines on Apple Silicon Macs, while x86_64 uses Intel/AMD AVX-512 and SHA-NI extensions.
+
 #### Packaging Standalone Binaries & Cross-Platform Releases
 
-You can compile standalone binaries using `cmm.ps1`, the dedicated release builder script `build-release.ps1`, or npm scripts:
+You can compile standalone binaries using `cmm.ps1`, `cmm.sh`, the dedicated release builder script `build-release.ps1`, or npm scripts:
 
 ```powershell
 # Build Windows portable standalone .exe and NSIS setup installer
@@ -163,20 +235,22 @@ You can compile standalone binaries using `cmm.ps1`, the dedicated release build
 # Build Linux standalone release bundle (.tar.gz)
 .\build-release.ps1 -Target linux
 
-# Build all cross-platform targets (Windows + Linux)
+# Build all cross-platform targets (Windows + Linux + macOS)
 .\build-release.ps1 -Target all
 
 # Or via npm scripts:
 npm run dist:portable    # Single standalone .exe (runs directly without installation)
 npm run dist:installer   # Standard Windows Setup installer (.exe)
 npm run dist:linux       # Standalone Linux archive (.tar.gz)
-npm run dist:all         # All release targets
+npm run dist:mac         # Standalone macOS DMG and ZIP (.dmg / .zip)
+npm run dist:all         # All release targets (Windows + Linux + macOS)
 ```
 
 Outputs will be saved in the `release/` directory:
 - `CivitAI Model Manager-Standalone-v<version>.exe` (Windows Portable binary)
 - `CivitAI Model Manager Setup <version>.exe` (Windows Installer binary)
 - `civitai-model-manager-<version>.tar.gz` (Linux Standalone distribution)
+- `CivitAI Model Manager-<version>-arm64.dmg` / `CivitAI Model Manager-<version>-x64.dmg` (macOS DMG disk image)
 
 #### Script Parameters & Flags Reference
 

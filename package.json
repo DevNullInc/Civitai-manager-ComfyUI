@@ -19,8 +19,10 @@
     "dist": "npm run build && electron-builder --win",
     "dist:portable": "npm run build && electron-builder --win portable",
     "dist:installer": "npm run build && electron-builder --win nsis",
+    "dist:linux": "npm run build && electron-builder --linux tar.gz zip",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip",
     "dist:dir": "npm run build && electron-builder --dir",
-    "dist:all": "npm run build && electron-builder -wl",
+    "dist:all": "npm run build && electron-builder -wlm",
     "cmm:start": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 start",
     "cmm:stop": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 stop",
     "cmm:restart": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 restart",
@@ -145,6 +147,41 @@
         }
       ],
       "category": "Graphics"
+    },
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     }
   },
   "allowScripts": {
