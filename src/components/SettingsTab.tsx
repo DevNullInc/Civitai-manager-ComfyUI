@@ -224,12 +224,16 @@ export const SettingsTab: React.FC = () => {
         setTimeout(() => setImportFeedback(null), 8000);
         await checkInstallDir(config.comfyui_install_dir);
       } else {
-        setImportError(`Failed to clone ComfyUI-Model-Manager: ${res?.error || 'Unknown error'}`);
-        setTimeout(() => setImportError(null), 8000);
+        setImportError(
+          `Failed to clone ComfyUI-Model-Manager: ${res?.error || 'Unknown error'}. 1-Click install is currently untested—please submit a bug report at https://github.com/DevNullInc/ComfyUI-Model-Manager/issues or git clone manually into custom_nodes/.`
+        );
+        setTimeout(() => setImportError(null), 10000);
       }
     } catch (err: any) {
-      setImportError(`Error cloning companion node: ${err.message || 'Clone failed'}`);
-      setTimeout(() => setImportError(null), 8000);
+      setImportError(
+        `Error cloning companion node: ${err.message || 'Clone failed'}. 1-Click install is currently untested—please submit a bug report at https://github.com/DevNullInc/ComfyUI-Model-Manager/issues or git clone manually.`
+      );
+      setTimeout(() => setImportError(null), 10000);
     } finally {
       setIsCloningCmmNode(false);
     }
@@ -656,7 +660,7 @@ export const SettingsTab: React.FC = () => {
                   onClick={handleInstallCmmNode}
                   disabled={isCloningCmmNode}
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-purple-600/30 to-cyan-600/30 hover:from-purple-600/50 hover:to-cyan-600/50 text-cyan-200 border border-cyan-500/40 shadow-md hover:shadow-cyan-500/20 transition-all cursor-pointer group disabled:opacity-50 active:scale-95"
-                  title="Click to automatically Git clone ComfyUI-Model-Manager into your custom_nodes/ folder"
+                  title="Click to automatically Git clone ComfyUI-Model-Manager into your custom_nodes/ folder. (Currently Untested — please submit a bug report on GitHub if you encounter any issues!)"
                 >
                   {isCloningCmmNode ? (
                     <>
@@ -666,7 +670,7 @@ export const SettingsTab: React.FC = () => {
                   ) : (
                     <>
                       <Download size={13} className="text-cyan-400 group-hover:translate-y-0.5 transition-transform" />
-                      <span>CMM Node: Not Installed (Click to 1-Click Install)</span>
+                      <span>CMM Node: 1-Click Install <span className="text-[10px] text-amber-300 font-normal">(Untested)</span></span>
                     </>
                   )}
                 </button>
@@ -676,10 +680,10 @@ export const SettingsTab: React.FC = () => {
                 type="button"
                 onClick={handleInstallCmmNode}
                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-800/90 hover:bg-slate-800 text-amber-300/90 hover:text-amber-200 border border-amber-500/30 hover:border-amber-500/60 shadow-sm transition-all cursor-pointer"
-                title="ComfyUI installation directory must be configured before installing companion node"
+                title="ComfyUI installation directory must be configured before installing companion node. (Currently Untested — report issues on GitHub)"
               >
                 <AlertCircle size={13} className="text-amber-400" />
-                <span>CMM Node: Directory Not Set</span>
+                <span>CMM Node: Directory Not Set <span className="text-[10px] text-amber-300/70 font-normal">(Untested)</span></span>
               </button>
             )}
 
@@ -740,7 +744,7 @@ export const SettingsTab: React.FC = () => {
                 onClick={handleInstallCmmNode}
                 disabled={isCloningCmmNode}
                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 border border-cyan-500/40 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-cyan-950/40 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
-                title="Git clone https://github.com/DevNullInc/ComfyUI-Model-Manager into custom_nodes/"
+                title="Git clone https://github.com/DevNullInc/ComfyUI-Model-Manager into custom_nodes/ (Currently Untested — please submit a bug report on GitHub if you encounter any issues!)"
               >
                 {isCloningCmmNode ? (
                   <>
@@ -750,7 +754,7 @@ export const SettingsTab: React.FC = () => {
                 ) : (
                   <>
                     <GitBranch size={15} />
-                    <span>Clone CMM Node</span>
+                    <span>Clone CMM Node <span className="text-[10px] text-amber-300 font-normal">(Untested)</span></span>
                   </>
                 )}
               </button>
@@ -926,52 +930,89 @@ export const SettingsTab: React.FC = () => {
 
               {/* CMM Companion Custom Node Highlight Box */}
               {installInfo.cmmNodeInstalled ? (
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-600/40 text-xs text-emerald-200">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-600/40 text-xs text-emerald-200 gap-2">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
                     <span>
                       <strong className="text-emerald-300">CMM Companion Node:</strong> Installed in <code className="font-mono text-emerald-100 bg-slate-900/80 px-1.5 py-0.5 rounded border border-emerald-800/60">{installInfo.cmmNodeFolderName || 'ComfyUI-Model-Manager'}</code>
                     </span>
                   </div>
-                  <a
-                    href="https://github.com/DevNullInc/ComfyUI-Model-Manager"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-2 ml-2 shrink-0"
-                  >
-                    <span>GitHub</span>
-                    <ExternalLink size={12} />
-                  </a>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <a
+                      href="https://github.com/DevNullInc/ComfyUI-Model-Manager"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-2"
+                    >
+                      <span>GitHub</span>
+                      <ExternalLink size={12} />
+                    </a>
+                    <a
+                      href="https://github.com/DevNullInc/ComfyUI-Model-Manager/issues"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 font-semibold underline underline-offset-2"
+                      title="Node is currently untested in live ComfyUI graphs. Click to report any bugs or feedback."
+                    >
+                      <span>Report Node Bug</span>
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-xl bg-cyan-950/40 border border-cyan-700/50 text-xs text-cyan-200 gap-3">
                   <div className="flex items-start sm:items-center gap-2">
                     <Sparkles size={16} className="text-cyan-400 shrink-0 mt-0.5 sm:mt-0" />
                     <div>
-                      <span className="font-bold text-cyan-100">Official Companion Custom Node Missing</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-cyan-100">Official Companion Custom Node</span>
+                        <a
+                          href="https://github.com/DevNullInc/ComfyUI-Model-Manager/issues"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 hover:text-amber-200 hover:bg-amber-500/30 font-bold border border-amber-500/40 transition-all cursor-pointer shadow-sm"
+                          title="The companion node is completed but currently untested in live ComfyUI. Click to report bugs or track issues on GitHub."
+                        >
+                          <span>Currently Untested</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        Clone <code className="text-cyan-300 font-mono text-[10px]">ComfyUI-Model-Manager</code> into your custom_nodes to enable in-graph model downloading, workflow inspection, and live API bridge features.
+                        Clone <code className="text-cyan-300 font-mono text-[10px]">ComfyUI-Model-Manager</code> into your <code className="text-cyan-200 font-mono text-[10px]">custom_nodes/</code> to enable in-graph model downloading, workflow inspection, and live API bridge features. The node is currently untested in live ComfyUI graphs—please{' '}
+                        <a
+                          href="https://github.com/DevNullInc/ComfyUI-Model-Manager/issues"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-amber-300 hover:text-amber-200 underline font-semibold inline-flex items-center gap-0.5"
+                        >
+                          report bugs on GitHub
+                          <ExternalLink size={10} />
+                        </a>{' '}
+                        if you encounter any issues.
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleInstallCmmNode}
-                    disabled={isCloningCmmNode}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-950/50 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
-                  >
-                    {isCloningCmmNode ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        <span>Cloning Node...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Download size={14} />
-                        <span>1-Click Install Node</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleInstallCmmNode}
+                      disabled={isCloningCmmNode}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-950/50 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+                      title="1-Click Git clone into custom_nodes/. (Currently Untested — please report issues on GitHub if you encounter problems!)"
+                    >
+                      {isCloningCmmNode ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Cloning Node...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download size={14} />
+                          <span>1-Click Install Node (Untested)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
 
