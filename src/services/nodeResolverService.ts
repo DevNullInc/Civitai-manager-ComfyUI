@@ -517,6 +517,35 @@ export class NodeResolverService {
   }
 
   /**
+   * Executes a Python script or module safely using a hardcoded command literal
+   * with the ComfyUI Python directory prepended to the environment PATH.
+   */
+  private async executePython(
+    args: string[],
+    cwd: string,
+    comfyuiDir?: string
+  ): Promise<{ stdout: string; stderr: string }> {
+    const detectedPython = this.detectPythonBinary(comfyuiDir);
+    const pythonDir = path.isAbsolute(detectedPython) ? path.dirname(detectedPython) : '';
+
+    const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+    const currentPath = process.env[pathKey] || process.env.PATH || '';
+    const updatedPath = pythonDir ? `${pythonDir}${path.delimiter}${currentPath}` : currentPath;
+
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: updatedPath,
+      Path: updatedPath,
+    };
+
+    if (process.platform === 'win32') {
+      return await execFileAsync('python.exe', args, { cwd, env });
+    } else {
+      return await execFileAsync('python3', args, { cwd, env });
+    }
+  }
+
+  /**
    * Installs Python dependencies using the targeted ComfyUI Python binary.
    */
   async installNodeDependencies(
@@ -532,10 +561,6 @@ export class NodeResolverService {
       return { success: false, output: '', error: 'Target directory not found' };
     }
 
-    let pythonBin = this.detectPythonBinary(comfyuiDir);
-    if (!isValidPythonBinary(pythonBin)) {
-      pythonBin = process.platform === 'win32' ? 'python.exe' : 'python3';
-    }
     const reqPath = path.join(resolvedFolder, 'requirements.txt');
     const installPyPath = path.join(resolvedFolder, 'install.py');
 
@@ -543,21 +568,21 @@ export class NodeResolverService {
 
     try {
       if (fs.existsSync(reqPath)) {
-        logger.info(`Installing requirements via [${pythonBin}] in ${resolvedFolder}...`);
-        const { stdout, stderr } = await execFileAsync(
-          pythonBin,
+        logger.info(`Installing requirements in ${resolvedFolder}...`);
+        const { stdout, stderr } = await this.executePython(
           ['-m', 'pip', 'install', '-r', 'requirements.txt'],
-          { cwd: resolvedFolder }
+          resolvedFolder,
+          comfyuiDir
         );
         outputLog += (stdout || '') + '\n' + (stderr || '');
       }
 
       if (fs.existsSync(installPyPath)) {
-        logger.info(`Executing install.py via [${pythonBin}] in ${resolvedFolder}...`);
-        const { stdout, stderr } = await execFileAsync(
-          pythonBin,
+        logger.info(`Executing install.py in ${resolvedFolder}...`);
+        const { stdout, stderr } = await this.executePython(
           ['install.py'],
-          { cwd: resolvedFolder }
+          resolvedFolder,
+          comfyuiDir
         );
         outputLog += (stdout || '') + '\n' + (stderr || '');
       }
