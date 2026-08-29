@@ -318,13 +318,15 @@ function startHttpBridgeServer() {
       });
 
     try {
-      if ((url === '/api/status' || url === '/api/health') && req.method === 'GET') {
+      if ((url === '/api/status' || url === '/api/health' || url === '/health') && req.method === 'GET') {
         const isApiEnabled = currentConfig.local_api_enabled !== false;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
             status: isApiEnabled ? 'online' : 'disabled',
             enabled: isApiEnabled,
+            uptime: process.uptime(),
+            pid: process.pid,
             name: 'CivitAI Model Manager',
             version: '1.3.0',
             port: apiPort,
@@ -501,14 +503,17 @@ function startHttpBridgeServer() {
         const result = inspectComfyUIInstall(body.installPath || body.path);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
-      } else if ((url === '/api/nodes/resolve' || url.startsWith('/api/nodes/resolve?')) && (req.method === 'GET' || req.method === 'POST')) {
+      } else if (
+        (url === '/api/nodes/resolve' || url.startsWith('/api/nodes/resolve?') || url === '/api/resolve-node' || url.startsWith('/api/resolve-node?')) &&
+        (req.method === 'GET' || req.method === 'POST')
+      ) {
         let nodeType = '';
         if (req.method === 'GET') {
           const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
-          nodeType = parsedUrl.searchParams.get('nodeType') || parsedUrl.searchParams.get('type') || '';
+          nodeType = parsedUrl.searchParams.get('nodeType') || parsedUrl.searchParams.get('node_type') || parsedUrl.searchParams.get('type') || parsedUrl.searchParams.get('name') || '';
         } else {
           const body = await getBody();
-          nodeType = body.nodeType || body.type || body.name || '';
+          nodeType = body.nodeType || body.node_type || body.type || body.name || '';
         }
         const targetNodesDir =
           currentConfig.comfyui_custom_nodes_dir ||
@@ -624,34 +629,54 @@ function startHttpBridgeServer() {
         }));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(models));
-      } else if (url === '/api/search-models' && req.method === 'POST') {
+      } else if ((url === '/api/search-models' || url === '/api/search-civitai' || url === '/api/civitai/search') && req.method === 'POST') {
         const body = await getBody();
-        const result = await civitaiClient.fetchModels(body);
+        const params = {
+          query: body.query || body.q || body.search || '',
+          types: body.types || (body.type ? [body.type] : undefined),
+          baseModels: body.baseModels || body.base_models || (body.baseModel ? [body.baseModel] : undefined),
+          limit: body.limit || body.pageSize || 20,
+          page: body.page || 1,
+          nsfw: body.nsfw,
+          sort: body.sort,
+        };
+        const result = await civitaiClient.fetchModels(params);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } else if (url === '/api/enums' && req.method === 'GET') {
         const enums = await civitaiClient.fetchEnums();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(enums));
-      } else if (url === '/api/add-download' && req.method === 'POST') {
+      } else if ((url === '/api/add-download' || url === '/api/download-model') && req.method === 'POST') {
         const body = await getBody();
-        let downloadUrl = body.downloadUrl;
-        if (body.modelVersionId) {
-          downloadUrl = civitaiClient.getDownloadUrl(body.modelVersionId);
+        const fileName = body.fileName || body.file_name || body.modelName || body.model_name || 'model.safetensors';
+        const modelType = body.modelType || body.model_type || 'Checkpoint';
+        const baseModel = body.baseModel || body.base_model || 'SDXL 1.0';
+        const creator = body.creator || body.creator_name || body.author || '';
+        const modelVersionId = body.modelVersionId || body.model_version_id || body.versionId || body.version_id;
+
+        let downloadUrl = body.downloadUrl || body.download_url;
+        if (modelVersionId) {
+          downloadUrl = civitaiClient.getDownloadUrl(modelVersionId);
         } else if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
           const sep = downloadUrl.includes('?') ? '&' : '?';
           downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
         }
-        const effectiveRoot = body.targetRoot || currentConfig.default_download_folder || currentConfig.comfyui_root || (currentConfig.comfyui_folders && currentConfig.comfyui_folders[0]);
+        const effectiveRoot = body.targetRoot || body.target_root || currentConfig.default_download_folder || currentConfig.comfyui_root || (currentConfig.comfyui_folders && currentConfig.comfyui_folders[0]);
         const computed = folderRouter.computePath({
-          fileName: body.fileName,
-          modelType: body.modelType,
-          baseModel: body.baseModel,
-          creator: body.creator,
+          fileName,
+          modelType,
+          baseModel,
+          creator,
           targetRoot: effectiveRoot,
         });
         const task = downloadManager.addTask({
           ...body,
+          fileName,
+          modelType,
+          baseModel,
+          creator,
+          modelVersionId,
           downloadUrl,
           targetFolder: computed.folderName,
           targetRoot: effectiveRoot,
@@ -812,7 +837,7 @@ function startHttpBridgeServer() {
         imageCacheService.clearPermanentLibraryCache();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
-      } else if ((url === '/api/workflows' || url === '/api/workflow/parse' || url === '/api/parse-workflow') && req.method === 'POST') {
+      } else if ((url === '/api/workflows' || url === '/api/workflow/parse' || url === '/api/parse-workflow' || url === '/api/inspect-workflow') && req.method === 'POST') {
         const body = await getBody();
 
         // 1. Direct raw JSON workflow payload in POST body
@@ -820,11 +845,12 @@ function startHttpBridgeServer() {
           body.workflow !== undefined ||
           body.prompt !== undefined ||
           body.nodes !== undefined ||
+          body.graph !== undefined ||
           (typeof body === 'object' && !body.folderPaths && !body.folderPath && !body.path && Object.keys(body).length > 0 && !Array.isArray(body));
 
         if (isDirectWorkflow && !body.folderPaths && !body.folderPath && !body.path) {
-          const rawData = body.workflow !== undefined ? body.workflow : (body.prompt !== undefined ? body.prompt : body);
-          const workflowName = body.name || body.fileName || 'direct_workflow.json';
+          const rawData = body.workflow !== undefined ? body.workflow : (body.prompt !== undefined ? body.prompt : (body.graph !== undefined ? body.graph : body));
+          const workflowName = body.name || body.fileName || body.file_name || 'direct_workflow.json';
           const result = await workflowScanner.parseWorkflow(rawData, workflowName);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(result));
@@ -841,9 +867,10 @@ function startHttpBridgeServer() {
         const result = await webhookService.testWebhook(body.url, body.event);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
-      } else if (url === '/api/hf/check' && req.method === 'POST') {
+      } else if ((url === '/api/hf/check' || url === '/api/check-huggingface' || url === '/api/huggingface/check') && req.method === 'POST') {
         const body = await getBody();
-        const result = await huggingfaceClient.checkModelRepo(body.repoId);
+        const repoId = body.repoId || body.repo_id || body.repository || body.repo || '';
+        const result = await huggingfaceClient.checkModelRepo(repoId);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } else if (url === '/api/hf/validate-token' && req.method === 'POST') {

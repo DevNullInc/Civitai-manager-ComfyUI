@@ -517,3 +517,56 @@ Dispatches a test event (`ping`, `on_download_complete`, `on_update_available`) 
   "event": "ping"
 }
 ```
+
+---
+
+## 🧩 Recommended ComfyUI Custom Node Class Architecture
+
+For clarity and consistent UX across ComfyUI workflows, use the action-oriented verb-noun naming convention:
+
+| Node Class Name | Display Title | Category | Function / Purpose |
+|---|---|---|---|
+| `CMMStatus` | **CMM: Status & Heartbeat** | `CivitAI/Manager` | Verifies connection, API port, and database uptime |
+| `CMMInspectWorkflow` | **CMM: Inspect Workflow** | `CivitAI/Manager` | Scans in-memory graph for missing models and custom nodes |
+| `CMMResolveNode` | **CMM: Resolve Node** | `CivitAI/Manager` | 4-tier query to find install repos for missing node types |
+| `CMMDownloadModel` | **CMM: Download Model** | `CivitAI/Manager` | Enqueues model download into auto-sorted folders |
+| `CMMSearchCivitAI` | **CMM: Search CivitAI** | `CivitAI/Manager` | Queries CivitAI catalog by query, type, and base model |
+| `CMMCheckHuggingFace` | **CMM: Check Hugging Face** | `CivitAI/Manager` | Queries Hugging Face model repository files & metadata |
+| `CMMRawRequest` | **CMM: Raw API Request** | `CivitAI/Manager` | Low-level generic HTTP caller for advanced scripting |
+
+### Standard `__init__.py` Registration Template
+
+```python
+from .nodes import (
+    CMMStatus,
+    CMMInspectWorkflow,
+    CMMResolveNode,
+    CMMDownloadModel,
+    CMMSearchCivitAI,
+    CMMCheckHuggingFace,
+    CMMRawRequest,
+)
+
+NODE_CLASS_MAPPINGS = {
+    "CMMStatus": CMMStatus,
+    "CMMInspectWorkflow": CMMInspectWorkflow,
+    "CMMResolveNode": CMMResolveNode,
+    "CMMDownloadModel": CMMDownloadModel,
+    "CMMSearchCivitAI": CMMSearchCivitAI,
+    "CMMCheckHuggingFace": CMMCheckHuggingFace,
+    "CMMRawRequest": CMMRawRequest,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "CMMStatus": "CMM: Status & Heartbeat",
+    "CMMInspectWorkflow": "CMM: Inspect Workflow",
+    "CMMResolveNode": "CMM: Resolve Node",
+    "CMMDownloadModel": "CMM: Download Model",
+    "CMMSearchCivitAI": "CMM: Search CivitAI",
+    "CMMCheckHuggingFace": "CMM: Check Hugging Face",
+    "CMMRawRequest": "CMM: Raw API Request",
+}
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+```
+

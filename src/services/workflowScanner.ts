@@ -15,17 +15,17 @@ import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
 
 const MODEL_NODE_KEYS: Record<string, string[]> = {
-  ckpt_name: ['CheckpointLoaderSimple', 'CheckpointLoader', 'Efficient Loader', 'ImpactCheckpointLoader'],
-  unet_name: ['UNETLoader', 'DiffusionModelLoader'],
-  lora_name: ['LoraLoader', 'LoraLoaderModelOnly', 'LoraLoader|pysssss', 'ImpactLoraLoader'],
-  vae_name: ['VAELoader', 'ImpactVAELoader'],
-  control_net_name: ['ControlNetLoader', 'ControlNetLoaderAdvanced'],
+  ckpt_name: ['CheckpointLoaderSimple', 'CheckpointLoader', 'Efficient Loader', 'ImpactCheckpointLoader', 'CMMDownloadModel'],
+  unet_name: ['UNETLoader', 'DiffusionModelLoader', 'CMMDownloadModel'],
+  lora_name: ['LoraLoader', 'LoraLoaderModelOnly', 'LoraLoader|pysssss', 'ImpactLoraLoader', 'CMMDownloadModel'],
+  vae_name: ['VAELoader', 'ImpactVAELoader', 'CMMDownloadModel'],
+  control_net_name: ['ControlNetLoader', 'ControlNetLoaderAdvanced', 'CMMDownloadModel'],
   clip_name: ['CLIPVisionLoader', 'CLIPLoader'],
   clip_name1: ['DualCLIPLoader'],
   clip_name2: ['DualCLIPLoader', 'TripleCLIPLoader'],
   clip_name3: ['TripleCLIPLoader'],
-  model_name: ['UpscaleModelLoader'],
-  ipadapter_file: ['IPAdapterModelLoader', 'IPAdapterUnifiedLoader'],
+  model_name: ['UpscaleModelLoader', 'CMMDownloadModel', 'CMMCheckHuggingFace'],
+  ipadapter_file: ['IPAdapterModelLoader', 'IPAdapterUnifiedLoader', 'CMMDownloadModel'],
   photomaker_model_name: ['PhotoMakerLoader'],
   gligen_name: ['GLIGENLoader'],
 };
