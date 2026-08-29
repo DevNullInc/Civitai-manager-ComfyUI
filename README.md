@@ -16,12 +16,12 @@
   <sub><i>Click any screenshot to expand and view full resolution.</i></sub>
 </p>
 
-| **Discover & Browse Catalog** | **Local Model Library & Deduplication** |
-| :---: | :---: |
+|                                                  **Discover & Browse Catalog**                                                   |                                               **Local Model Library & Deduplication**                                               |
+| :------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------: |
 | <a href="docs/screenshots/browse-tab.png"><img src="docs/screenshots/browse-tab.png" alt="Discover AI Models" width="460" /></a> | <a href="docs/screenshots/library-tab.png"><img src="docs/screenshots/library-tab.png" alt="Local Model Library" width="460" /></a> |
 
-| **Concurrent Downloads & Auto-Sorting** | **Multi-Folder Settings & Backup** |
-| :---: | :---: |
+|                                                **Concurrent Downloads & Auto-Sorting**                                                |                                                 **Multi-Folder Settings & Backup**                                                  |
+| :-----------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------: |
 | <a href="docs/screenshots/downloads-tab.png"><img src="docs/screenshots/downloads-tab.png" alt="Downloads Manager" width="460" /></a> | <a href="docs/screenshots/settings-tab.png"><img src="docs/screenshots/settings-tab.png" alt="Settings & Backup" width="460" /></a> |
 
 ---
@@ -34,7 +34,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **Persistent Background Scanning** - scan thousands of models in the background across tabs with a live, real-time footer widget and instant cancellation (after final SHA256 on the last scanned file)
 - **Multi-Criteria Library Sorting** - sort local models by Name, Model Type, File Size, or Date Modified (Ascending / Descending)
 - **Browse Tab Update Badging & Selective Update Ignoring** - see instant `Installed` or `Update Available` flags on browse cards; ignore specific updates that target different base models
-- **Safe Version Updating with Old File Removal** - optionally delete superseded previous versions safely *only after* the update download completes 100% and passes SHA256 verification
+- **Safe Version Updating with Old File Removal** - optionally delete superseded previous versions safely _only after_ the update download completes 100% and passes SHA256 verification
 - **Intentionally Duplicated Sets** - ignore duplicate sets required across specific custom node paths with automatic re-alerting if a new copy is detected
 - **Dual Delete Modes** - choose to remove models from library catalog only or permanently delete from disk & library
 - **LLM & HuggingFace Hub Cache Support** - parses human-readable folder names from `/blobs/<hash>` cache structures with responsive UI layout protection
@@ -49,6 +49,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 ## ✨ Features
 
 ### 🔍 Discovery & Search
+
 - Search across CivitAI's entire model database
 - **Installed & Update Indicators**: Model cards feature instant emerald **`Installed`** or amber **`Update Available`** badges
 - Filter by **Base Model**: SD 1.5, SDXL 1.0, Illustrious, Flux.1 D, Pony, Qwen, Wan Video, and more
@@ -57,6 +58,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - Sort by: Most Downloaded, Highest Rated, Newest, Trending
 
 ### 📥 Download Management & Version Updating
+
 - **Intelligent auto-sorting**: Downloads route to the correct ComfyUI folder automatically
 - **Multi-Path Destination Prompt**: Choose target directory when multiple folder roots are configured, with "Always use this folder" toggle
 - **Safe Previous Version Cleanup**: Option to delete previous versions only after the update file finishes downloading 100% and passes SHA256 verification
@@ -66,6 +68,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **API key support**: Higher rate limits and access to gated content
 
 ### 📁 Library Management & Persistent Scanner
+
 - **Persistent Background Scanning**: Folder indexing continues seamlessly across tab switches
 - **Multi-Criteria Sorting**: Sort by Name (A-Z), Model Type, File Size, or Date Modified (Asc / Desc) with saved preferences
 - **Dual Delete Modes**: Separate "Remove from Library Only" and "Delete from Disk & Library" dialog options
@@ -75,12 +78,14 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **Selective Update Ignoring**: Mark version updates as ignored so LoRAs or Checkpoints uploaded for different base models don't trigger unwanted update badges
 
 ### ⚙️ System Backup & Diagnostics
+
 - **Complete System Backup & Restore (.ZIP)**: Create and restore comprehensive `.zip` archives containing your raw SQLite database, model catalog, download records, folder settings, and ignore sets
 - **Quick Config Sharing**: Direct clipboard copy and paste for quick pattern rule and settings sharing
 - **Console Feedback & Diagnostics**: Built-in system log capture and one-click diagnostic report generation for bug reports
 - **Single-Instance Management**: Automatically detects and focuses existing application windows
 
 ### 🔧 ComfyUI Integration & Companion Custom Node
+
 - **Official Companion Custom Node**: 1-click install the official [`ComfyUI-Model-Manager`](https://github.com/DevNullInc/ComfyUI-Model-Manager) node directly into `custom_nodes/` from Settings with live install detection and health status badges
 - **Base Directory Structure Diagnostics**: Inspects your ComfyUI root against the core program structure (`main.py`, `custom_nodes/`, `models/`, `input/`, `output/`, `extra_model_paths.yaml`) with real-time confidence scores and diagnostic pills
 - **Automatic Models Folder Synchronization**: Entering or auto-detecting your ComfyUI installation directory (e.g. `C:\AI\comfyui`) automatically links and populates your primary `models/` path (`C:\AI\comfyui\models`)
@@ -94,6 +99,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 ## 📦 Installation
 
 ### Windows
+
 ```bash
 # Download the latest release from GitHub (Assets)
 CivitAI-Model-Manager-Setup-<version>.exe
@@ -105,6 +111,7 @@ winget install CivitAI.ModelManager
 ```
 
 ### Linux
+
 ```bash
 # Extract standalone Linux release bundle
 tar -xzf civitai-model-manager-<version>.tar.gz
@@ -145,6 +152,7 @@ npm install
 The included `cmm.ps1` (PowerShell) and `cmm.sh` (Bash) scripts are the primary launchers for starting, stopping, restarting, and managing background processes.
 
 **Windows (PowerShell):**
+
 ```powershell
 # 1. Start Electron desktop application + Web UI (port 5173)
 .\cmm.ps1 start
@@ -167,6 +175,7 @@ The included `cmm.ps1` (PowerShell) and `cmm.sh` (Bash) scripts are the primary 
 ```
 
 **Linux / macOS (Bash):**
+
 ```bash
 # 1. Start application with local Electron window & HTTP bridge
 ./cmm.sh start
@@ -196,6 +205,7 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
    npm install
    ```
 3. **Run in Development**:
+
    ```bash
    # Run Vite + Electron desktop application in live development mode:
    npm run electron:dev
@@ -203,6 +213,7 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
    # Or run Vite browser interface only (headless):
    npm run dev
    ```
+
 4. **Compile Standalone macOS Application (`.dmg` & `.zip`)**:
    ```bash
    # Build universal / native architecture packages for macOS:
@@ -247,6 +258,7 @@ npm run dist:all         # All release targets (Windows + Linux + macOS)
 ```
 
 Outputs will be saved in the `release/` directory:
+
 - `CivitAI Model Manager-Standalone-v<version>.exe` (Windows Portable binary)
 - `CivitAI Model Manager Setup <version>.exe` (Windows Installer binary)
 - `civitai-model-manager-<version>.tar.gz` (Linux Standalone distribution)
@@ -254,28 +266,33 @@ Outputs will be saved in the `release/` directory:
 
 #### Script Parameters & Flags Reference
 
-| Parameter / Flag | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `Action` | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, `package`, or `publish`. |
-| `-Port <int>` | `int` | `5173` | Port for the Vite web server & HTTP bridge. |
-| `-Headless` | `switch` | `false` | Runs background server and web UI without launching the Electron desktop window. Ideal for remote servers, Docker, WSL, or browser-only workflows. |
-| `-NoWindow` | `switch` | `false` | Alias for `-Headless`. |
+| Parameter / Flag | Type     | Default | Description                                                                                                                                        |
+| :--------------- | :------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Action`         | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, `package`, or `publish`.                                                               |
+| `-Port <int>`    | `int`    | `5173`  | Port for the Vite web server & HTTP bridge.                                                                                                        |
+| `-Headless`      | `switch` | `false` | Runs background server and web UI without launching the Electron desktop window. Ideal for remote servers, Docker, WSL, or browser-only workflows. |
+| `-NoWindow`      | `switch` | `false` | Alias for `-Headless`.                                                                                                                             |
 
 ---
 
 ## 🚀 Quick Start
 
 ### 1. First Launch Setup
+
 In **Settings**:
+
 - **ComfyUI Installation Directory**: Enter your ComfyUI base path (e.g. `C:\AI\comfyui` or `/home/user/ComfyUI`). CMM will inspect the program structure and automatically configure your `models/` directory path (`C:\AI\comfyui\models`).
 - **1-Click Companion Node (Optional)**: Click **1-Click Install Node** to automatically clone [`ComfyUI-Model-Manager`](https://github.com/DevNullInc/ComfyUI-Model-Manager) into your `custom_nodes/` folder.
 - **CivitAI API Key** (optional but recommended): Get yours at [CivitAI Settings](https://civitai.com/user/account) for higher rate limits and gated models.
 
 ### 2. Scan Existing Library & Resolve Duplicates
+
 ```
 Library → Scan ComfyUI Folders → Start Scan
 ```
+
 CMM will:
+
 - Walk all configured model directories
 - Stream 64MB buffer chunks with CPU SHA-NI / AVX-512 hardware acceleration
 - Match models in bulk against the CivitAI database
@@ -283,9 +300,11 @@ CMM will:
 - **Inline Duplicate Resolution**: Click the **`Duplicate`** badge on any item to view all copies, compare folder paths, open files in Explorer, and choose which file to keep with one-click cleanup!
 
 ### 3. Search and Download
+
 ```
 Browse → Search "realistic vision" → Select model → Download
 ```
+
 The model automatically routes to the correct folder (e.g., `checkpoints/`, `loras/`, `upscale_models/`). Auto-cascades preview images across all version assets if an image URL returns 404 or 401.
 
 ---
@@ -293,6 +312,7 @@ The model automatically routes to the correct folder (e.g., `checkpoints/`, `lor
 ## ⚙️ Configuration
 
 ### Folder Mappings
+
 Edit `config.json` to customize where model types are saved:
 
 ```json
@@ -329,12 +349,13 @@ Edit `config.json` to customize where model types are saved:
 ```
 
 ### API Sources
+
 Add multiple CivitAI sources in Settings:
 
-| Source | URL | API Key Required |
-|--------|-----|------------------|
-| CivitAI | `https://civitai.com` | Optional (recommended) |
-| CivitAI.red | `https://civitai.red` | Optional |
+| Source      | URL                   | API Key Required       |
+| ----------- | --------------------- | ---------------------- |
+| CivitAI     | `https://civitai.com` | Optional (recommended) |
+| CivitAI.red | `https://civitai.red` | Optional               |
 
 ---
 
@@ -343,6 +364,7 @@ Add multiple CivitAI sources in Settings:
 CMM recognizes and manages models in these ComfyUI folders:
 
 ### Core Model Folders
+
 - `checkpoints/` - Main SD checkpoints
 - `loras/` - LoRA, LoCon, DoRA adapters
 - `embeddings/` - Textual Inversions
@@ -352,6 +374,7 @@ CMM recognizes and manages models in these ComfyUI folders:
 - `upscale_models/` - ESRGAN, SwinIR, etc.
 
 ### Specialized Folders
+
 - `clip/` - CLIP models
 - `clip_vision/` - CLIP Vision encoders
 - `text_encoders/` - T5, text encoders
@@ -372,6 +395,7 @@ CMM recognizes and manages models in these ComfyUI folders:
 - `latent_upscale_models/` - Latent upscalers
 
 ### Utility Folders
+
 - `wildcards/` - Wildcard text files
 - `workflows/` - ComfyUI workflows
 - `detection/` - Detection models
@@ -386,6 +410,7 @@ CMM recognizes and manages models in these ComfyUI folders:
 ## 🎮 Usage Guide
 
 ### Searching & Browsing Models
+
 1. Go to **Browse** tab.
 2. Search terms or filter by Base Model, Model Type, and NSFW preferences.
 3. **Instant Installed / Update Badges**:
@@ -394,12 +419,14 @@ CMM recognizes and manages models in these ComfyUI folders:
 4. **Selective Update Ignoring**: Click on a model with an update available to view version details. If the new upload is for a different base model (e.g. SDXL vs SD 1.5), click **Ignore This Update** to prevent it from flagging as an update.
 
 ### Downloading & Safe Version Updating
+
 1. Click on any model card to open the Details modal.
 2. Select your desired version from the version selector dropdown.
 3. **Destination Selection**: If multiple ComfyUI root paths are configured, CMM prompts you to choose the target folder, with an option to remember your choice.
-4. **Safe Old Version Cleanup**: When downloading an update, check **"Delete previous version upon completion"**. The superseded old file will *only* be deleted after the update has completed downloading 100% and verified its SHA256 integrity hash.
+4. **Safe Old Version Cleanup**: When downloading an update, check **"Delete previous version upon completion"**. The superseded old file will _only_ be deleted after the update has completed downloading 100% and verified its SHA256 integrity hash.
 
 ### Managing & Deleting Library Models
+
 - **Library** tab displays all indexed models across all configured ComfyUI directories.
 - **Sorting**: Order models by **Name (A-Z)**, **Model Type**, **File Size**, or **Date Modified**, with instant Ascending/Descending toggle.
 - **Dual Delete Modes**:
@@ -409,17 +436,20 @@ CMM recognizes and manages models in these ComfyUI folders:
 - **Safety Prompt on Clear Library**: The **Clear Library** button requires explicit confirmation to prevent accidental catalog wipes.
 
 ### 👥 Duplicate Resolution & Ignored Duplicate Sets
+
 1. Click the **Duplicates** filter tab in the Library.
 2. Each unique duplicate group is consolidated into a single master card with all copies listed.
 3. **Keep Selected & Delete Others**: Select which copy to keep with the radio button and click the delete button to remove redundant copies from disk.
 4. **Ignore This Duplicate Set**: If a model must exist in multiple paths (e.g., specific custom node requirements), click **Ignore This Duplicate Set**. This records the SHA-256 in the database and suppresses duplicate warnings until a new, unexpected copy is discovered during a future scan.
 
 ### 🔄 Persistent Background Scanning
+
 1. Click **Scan ComfyUI Folders** in the Library tab.
 2. The scanner operates as a global background provider—you can switch between Browse, Downloads, Settings, or About tabs while scanning proceeds uninterrupted.
 3. **Instant Cancellation**: Stop scanning at any time by clicking the red **Stop Scanning** button in the Library tab or the **Stop** icon on the floating HUD.
 
 ### 📦 Complete System Backup & Restore (.ZIP)
+
 1. Go to the **Settings** tab.
 2. In the **Complete System Backup & Restore (.ZIP)** card:
    - **Create Backup (.ZIP)**: Generates and downloads a complete standard `.zip` archive containing your SQLite database (`database.sqlite`), model catalog (`models.json`), download history (`downloads.json`), directory paths and pattern rules (`config.json`), and ignore lists.
@@ -427,6 +457,7 @@ CMM recognizes and manages models in these ComfyUI folders:
    - **Copy Config / Paste Config**: Quickly copy or paste raw JSON settings for fast pattern rule sharing across browsers.
 
 ### ℹ️ About & Diagnostics Reporting
+
 1. Navigate to the **About** tab.
 2. View application version information, author credits (**TheStygianRenegade / /dev/null Inc**), license details (GPL-3.0), and active runtime telemetry.
 3. Under **Diagnostic Log & Console Feedback**:
@@ -438,6 +469,7 @@ CMM recognizes and manages models in these ComfyUI folders:
 ## 🔐 API Key Setup
 
 ### Getting Your CivitAI API Key
+
 1. Log in to [CivitAI](https://civitai.com)
 2. Go to **User Menu** → **Settings** → **Account**
 3. Scroll to **API Keys**
@@ -445,11 +477,13 @@ CMM recognizes and manages models in these ComfyUI folders:
 5. Copy the key (starts with `civitai_...`)
 
 ### Adding to CMM
+
 ```
 Settings → API Sources → CivitAI → Paste Key → Test Connection
 ```
 
 **Benefits of API Key:**
+
 - Higher rate limits (more searches/downloads per minute)
 - Access to early-access models
 - Download gated/private models you have access to
@@ -460,26 +494,31 @@ Settings → API Sources → CivitAI → Paste Key → Test Connection
 ## 🛠️ Troubleshooting
 
 ### Downloads Failing
+
 - **Check API Key**: Unauthenticated users have stricter rate limits
 - **Check Disk Space**: Large checkpoints (6-7GB) require sufficient space
 - **Check Permissions**: Ensure CMM has write access to model folders
 
 ### Models Not Auto-Sorting
+
 - Verify **ComfyUI Root Path** in settings points to your `models/` folder
 - Check **Folder Mappings** in config match your structure
 - Some rare model types may need manual mapping
 
 ### Hash Mismatch After Download
+
 - Delete the `.part` file and retry
 - Check internet connection stability
 - Verify file isn't corrupted on CivitAI (rare)
 
 ### Scan Taking Forever
+
 - First scan computes SHA256 for all files (normal for large libraries)
 - Subsequent scans are incremental
 - You can exclude folders from scanning in settings
 
 ### "Model Not Found on CivitAI"
+
 - Some models are removed or set to private
 - Local files will still work in ComfyUI
 - You can manually add metadata if desired
@@ -489,6 +528,7 @@ Settings → API Sources → CivitAI → Paste Key → Test Connection
 ## 🧪 Advanced Features
 
 ### Command Line Interface
+
 ```bash
 # Scan library
 cmm scan --path /path/to/comfyui
@@ -504,7 +544,9 @@ cmm export --format json --output backup.json
 ```
 
 ### Webhook Integration
+
 Configure webhooks for download completion:
+
 ```json
 {
   "webhooks": {
@@ -515,10 +557,13 @@ Configure webhooks for download completion:
 ```
 
 ### Backup and Restore
+
 ```
 Settings → Backup → Create Backup
 ```
+
 Creates a zip containing:
+
 - Database of all models
 - Configuration files
 - Download history
@@ -532,6 +577,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 By contributing to this project, you agree that your contributions will be licensed under the GPL-3.0 license.
 
 ### Development Setup
+
 ```bash
 git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
 cd Civitai-manager-ComfyUI
@@ -557,15 +603,16 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 
 ### License Summary
 
-| Permission | Condition |
-|------------|-----------|
+| Permission        | Condition                                        |
+| ----------------- | ------------------------------------------------ |
 | ✅ Commercial use | 📋 License and copyright notice must be included |
-| ✅ Modification | 📋 State changes must be disclosed |
-| ✅ Distribution | 📋 Source code must be made available |
-| ✅ Patent use | 📋 Same license applies to derivatives |
-| ✅ Private use | |
+| ✅ Modification   | 📋 State changes must be disclosed               |
+| ✅ Distribution   | 📋 Source code must be made available            |
+| ✅ Patent use     | 📋 Same license applies to derivatives           |
+| ✅ Private use    |                                                  |
 
 **Key Points:**
+
 - You **CAN** use this software commercially
 - You **CAN** modify and distribute it
 - If you distribute modified versions, you **MUST** release the source code under GPL-3.0
@@ -578,7 +625,7 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 
 ## ☕ Buy me a coffee or something please?
 
-If CMM saves you time organizing your ComfyUI models or makes your workflow easier, consider supporting ongoing development!
+Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI models or makes your workflow easier, consider supporting ongoing development!
 
 <p align="center">
   <a href="https://cash.app/$StygianRenegade/1.00">
