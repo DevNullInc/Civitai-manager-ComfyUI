@@ -319,12 +319,17 @@ export class LibraryScanner {
         }
       }
 
-      // 4. Purge stale / phantom records that are not in the current scan or missing from disk
+      // 4. Purge stale / phantom records that were inside the scanned directories but deleted from disk
       const scannedRealPaths = new Set(scannedModels.map((m) => m.filePath.toLowerCase()));
       const allDbRows: any[] = await dbManager.all('SELECT id, file_path FROM local_models');
       for (const row of allDbRows) {
-        if (!scannedRealPaths.has(row.file_path.toLowerCase()) || !fs.existsSync(row.file_path)) {
-          await dbManager.run('DELETE FROM local_models WHERE id = ?', [row.id]);
+        if (!row.file_path) continue;
+        const normalizedRowPath = path.resolve(row.file_path).toLowerCase();
+        const isInsideScannedRoot = existingPaths.some((r) => normalizedRowPath.startsWith(path.resolve(r).toLowerCase()));
+        if (isInsideScannedRoot) {
+          if (!scannedRealPaths.has(row.file_path.toLowerCase()) || !fs.existsSync(row.file_path)) {
+            await dbManager.run('DELETE FROM local_models WHERE id = ?', [row.id]);
+          }
         }
       }
 

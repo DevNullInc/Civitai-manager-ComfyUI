@@ -530,6 +530,112 @@ function autoDetectComfyUIInstall() {
   };
 }
 
+async function pullMissingModel(modelData: any, targetRoot?: string) {
+  let versionId = modelData.civitaiVersionId || modelData.civitai_version_id || modelData.versionId;
+  let modelId = modelData.civitaiModelId || modelData.civitai_model_id || modelData.modelId;
+  let modelName = modelData.civitaiName || modelData.civitai_name || modelData.fileName || 'model';
+  let modelType = modelData.modelType || modelData.model_type || 'Checkpoint';
+  let baseModel = modelData.civitaiBaseModel || modelData.baseModel || 'SD 1.5';
+  let creator = modelData.civitaiCreator || modelData.creator || '';
+  let fileName = modelData.fileName || modelData.file_name || 'model.safetensors';
+  let downloadUrl = modelData.downloadUrl || modelData.updateDownloadUrl;
+  let sha256 = modelData.sha256;
+  let sizeKB = Math.round((modelData.fileSize || 0) / 1024);
+
+  // If no versionId but SHA256 is present, look up CivitAI by hash
+  if (!versionId && sha256) {
+    try {
+      const version = await civitaiClient.lookupByHash(sha256);
+      if (version) {
+        versionId = version.id;
+        modelId = version.modelId;
+        modelName = version.model?.name || version.name || modelName;
+        modelType = (version.model?.type as any) || modelType;
+        baseModel = version.baseModel || baseModel;
+
+        const matchedFile = version.files?.find((f: any) =>
+          f.hashes && Object.values(f.hashes).some((h: any) => String(h).toUpperCase() === String(sha256).toUpperCase())
+        ) || version.files?.[0];
+
+        if (matchedFile) {
+          fileName = matchedFile.name || fileName;
+          downloadUrl = matchedFile.downloadUrl || downloadUrl;
+          if (matchedFile.sizeKB) sizeKB = matchedFile.sizeKB;
+        }
+
+        const previewUrl = version.images?.[0]?.url;
+
+        // Update local_models in SQLite with newly discovered CivitAI metadata
+        if (modelData.id) {
+          await dbManager.run(
+            'UPDATE local_models SET civitai_model_id = ?, civitai_version_id = ?, civitai_name = ?, model_type = COALESCE(?, model_type), preview_url = COALESCE(?, preview_url) WHERE id = ?;',
+            [modelId, versionId, modelName, modelType, previewUrl, modelData.id]
+          );
+        }
+      } else {
+        return {
+          success: false,
+          error: `Model hash (${sha256.substring(0, 12)}...) was not found on CivitAI. It may be private, unindexed, or removed.`,
+        };
+      }
+    } catch (e: any) {
+      return {
+        success: false,
+        error: `Failed to query CivitAI for hash: ${e.message || 'Lookup error'}`,
+      };
+    }
+  }
+
+  if (!versionId && !downloadUrl) {
+    return {
+      success: false,
+      error: 'Cannot pull model: missing CivitAI Version ID and SHA256 hash.',
+    };
+  }
+
+  if (!downloadUrl && versionId) {
+    downloadUrl = civitaiClient.getDownloadUrl(versionId);
+  }
+
+  if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
+    const sep = downloadUrl.includes('?') ? '&' : '?';
+    downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
+  }
+
+  const effectiveRoot =
+    targetRoot ||
+    currentConfig.default_download_folder ||
+    currentConfig.comfyui_root ||
+    (currentConfig.comfyui_folders && currentConfig.comfyui_folders[0]);
+
+  const computed = folderRouter.computePath({
+    fileName,
+    modelType,
+    baseModel,
+    creator,
+    targetRoot: effectiveRoot,
+  });
+
+  const task = downloadManager.addTask({
+    modelVersionId: versionId || 0,
+    modelId: modelId || 0,
+    modelName,
+    versionName: modelData.updateVersionName || 'Restored',
+    modelType,
+    baseModel,
+    creator,
+    fileName,
+    downloadUrl,
+    sizeKB,
+    sha256,
+    targetFolder: computed.folderName,
+    targetRoot: effectiveRoot,
+    computedPath: computed.fullPath,
+  });
+
+  return { success: true, task, message: `Download queued for ${modelName}` };
+}
+
 function startHttpBridgeServer() {
   const apiPort =
     parseInt(process.env.API_PORT || process.env.BRIDGE_PORT || process.env.CMM_PORT || '', 10) || 5174;
@@ -893,13 +999,26 @@ function startHttpBridgeServer() {
           sha256: r.sha256,
           civitaiModelId: r.civitai_model_id,
           civitaiVersionId: r.civitai_version_id,
+          civitaiName: r.civitai_name || undefined,
           previewUrl: r.preview_url,
           modelType: r.model_type,
+          nsfw: !!r.nsfw,
           isMatched: !!r.civitai_version_id,
+          isMissing: !fs.existsSync(r.file_path),
+          hasUpdate: !!r.has_update,
+          updateVersionId: r.update_version_id,
+          updateVersionName: r.update_version_name,
+          updateDownloadUrl: r.update_download_url,
+          ignoredVersionId: r.ignored_version_id,
           isDuplicate: !!r.is_duplicate,
         }));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(models));
+      } else if (url === '/api/pull-missing-model' && req.method === 'POST') {
+        const body = await getBody();
+        const result = await pullMissingModel(body.model || body, body.targetRoot);
+        res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
       } else if ((url === '/api/search-models' || url === '/api/search-civitai' || url === '/api/civitai/search') && req.method === 'POST') {
         const body = await getBody();
         const params = {
@@ -1499,6 +1618,7 @@ function registerIpcHandlers() {
       modelType: r.model_type,
       nsfw: !!r.nsfw,
       isMatched: !!r.civitai_version_id,
+      isMissing: !fs.existsSync(r.file_path),
       hasUpdate: !!r.has_update,
       updateVersionId: r.update_version_id,
       updateVersionName: r.update_version_name,
@@ -1506,6 +1626,10 @@ function registerIpcHandlers() {
       ignoredVersionId: r.ignored_version_id,
       isDuplicate: !!r.is_duplicate,
     }));
+  });
+
+  ipcMain.handle('pull-missing-model', async (_event: unknown, modelData: any, targetRoot?: string) => {
+    return await pullMissingModel(modelData, targetRoot);
   });
 
   // Download Handlers

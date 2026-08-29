@@ -482,10 +482,11 @@ export const SettingsTab: React.FC = () => {
         if (res?.canceled) return;
         if (res?.success) {
           const stats = res.stats || {};
+          const missingNotice = stats.missingModelsCount > 0 ? ` • ${stats.missingModelsCount} missing from disk (available for 1-click download in Library)` : '';
           setImportFeedback(
-            `Successfully restored backup! (${stats.modelsRestored || 0} models, ${stats.downloadsRestored || 0} downloads, ${stats.configKeysRestored || 0} config keys)`
+            `Successfully restored backup! (${stats.modelsRestored || 0} models${missingNotice}, ${stats.downloadsRestored || 0} downloads, ${stats.configKeysRestored || 0} config keys)`
           );
-          setTimeout(() => setImportFeedback(null), 6000);
+          setTimeout(() => setImportFeedback(null), 8000);
           const loaded = await window.civitaiAPI.getConfig();
           if (loaded) setConfig(loaded);
         } else {
@@ -516,10 +517,11 @@ export const SettingsTab: React.FC = () => {
         const res: any = await window.civitaiAPI.importBackup(arrayBuffer);
         if (res?.success) {
           const stats = res.stats || {};
+          const missingNotice = stats.missingModelsCount > 0 ? ` • ${stats.missingModelsCount} missing from disk (available for 1-click download in Library)` : '';
           setImportFeedback(
-            `Successfully restored backup! (${stats.modelsRestored || 0} models, ${stats.downloadsRestored || 0} downloads, ${stats.configKeysRestored || 0} config keys)`
+            `Successfully restored backup! (${stats.modelsRestored || 0} models${missingNotice}, ${stats.downloadsRestored || 0} downloads, ${stats.configKeysRestored || 0} config keys)`
           );
-          setTimeout(() => setImportFeedback(null), 6000);
+          setTimeout(() => setImportFeedback(null), 8000);
           const loaded = await window.civitaiAPI.getConfig();
           if (loaded) setConfig(loaded);
         } else {

@@ -29,6 +29,8 @@ const api = {
   getScanStatus: () => ipcRenderer.invoke('get-scan-status'),
   getLocalModels: () => ipcRenderer.invoke('get-local-models'),
   matchUnidentifiedModels: () => ipcRenderer.invoke('match-unidentified-models'),
+  pullMissingModel: (modelData: any, targetRoot?: string) =>
+    ipcRenderer.invoke('pull-missing-model', modelData, targetRoot),
   clearLibrary: () => ipcRenderer.invoke('clear-library'),
   onScanProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('scan-progress', (_event: unknown, progress: any) => callback(progress));

@@ -69,6 +69,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 
 ### 📁 Library Management & Persistent Scanner
 
+- **Missing Models Detection & 1-Click CivitAI Pulling**: Automatically detects library entries missing from disk (e.g., following a library or backup import onto a fresh machine). Displays a dedicated **"Missing on Disk"** filter with 1-click individual and batch **"Download Model"** / **"Pull from CivitAI (Hash Match)"** actions that resolve files by SHA256 checksum or version ID.
 - **Persistent Background Scanning**: Folder indexing continues seamlessly across tab switches
 - **Multi-Criteria Sorting**: Sort by Name (A-Z), Model Type, File Size, or Date Modified (Asc / Desc) with saved preferences
 - **Dual Delete Modes**: Separate "Remove from Library Only" and "Delete from Disk & Library" dialog options
@@ -79,7 +80,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 
 ### ⚙️ System Backup & Diagnostics
 
-- **Complete System Backup & Restore (.ZIP)**: Create and restore comprehensive `.zip` archives containing your raw SQLite database, model catalog, download records, folder settings, and ignore sets
+- **Complete System Backup & Restore (.ZIP)**: Create and restore comprehensive `.zip` archives containing your raw SQLite database, model catalog, download records, folder settings, and ignore sets (with live missing file counts upon restore)
 - **Quick Config Sharing**: Direct clipboard copy and paste for quick pattern rule and settings sharing
 - **Console Feedback & Diagnostics**: Built-in system log capture and one-click diagnostic report generation for bug reports
 - **Single-Instance Management**: Automatically detects and focuses existing application windows

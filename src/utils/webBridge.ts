@@ -187,6 +187,19 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      pullMissingModel: async (modelData: any, targetRoot?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/pull-missing-model`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modelData, targetRoot }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { success: false, error: e.message || 'Failed to pull missing model' };
+        }
+      },
+
       clearLibrary: async () => {
         try {
           const res = await fetch(`${API_BASE}/clear-library`, {

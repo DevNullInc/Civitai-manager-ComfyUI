@@ -251,6 +251,7 @@ export interface DownloadTask {
   versionName: string;
   modelType: ModelType;
   baseModel: string;
+  creator?: string;
   targetFolder: string;
   targetRoot?: string;
   fileName: string;
@@ -293,6 +294,7 @@ export interface LocalModel {
   updateDownloadUrl?: string;
   ignoredVersionId?: number;
   isDuplicate?: boolean;
+  isMissing?: boolean;
 }
 
 export interface ScanProgress {

@@ -38,6 +38,8 @@ import {
   SearchCheck,
   ExternalLink,
   Flame,
+  Download,
+  Loader2,
 } from 'lucide-react';
 import { FallbackImage } from './FallbackImage';
 import { useScan } from '../context/ScanContext';
@@ -56,6 +58,11 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   const [updateSummary, setUpdateSummary] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
 
+  // Missing Model Pulling State
+  const [pullingModelId, setPullingModelId] = useState<string | null>(null);
+  const [pullingAllMissing, setPullingAllMissing] = useState<boolean>(false);
+  const [pullFeedback, setPullFeedback] = useState<{ id?: string; message: string; isError?: boolean } | null>(null);
+
   // Delete Options Modal State
   const [modelToDelete, setModelToDelete] = useState<LocalModel | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
@@ -68,7 +75,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
   const [ignoredDuplicates, setIgnoredDuplicates] = useState<{ sha256: string; knownCount: number }[]>([]);
 
   // Filters with LocalStorage Persistence
-  const [filter, setFilter] = useState<'all' | 'matched' | 'updates' | 'unidentified' | 'duplicates'>(
+  const [filter, setFilter] = useState<'all' | 'missing' | 'matched' | 'updates' | 'unidentified' | 'duplicates'>(
     () => (localStorage.getItem('civitai_lib_filter') as any) || 'all'
   );
   const [typeFilter, setTypeFilter] = useState<'all' | ModelType>(
@@ -411,6 +418,78 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     }
   };
 
+  const handlePullMissingModel = async (model: LocalModel) => {
+    setPullingModelId(model.id);
+    setPullFeedback(null);
+    try {
+      if (window.civitaiAPI && typeof window.civitaiAPI.pullMissingModel === 'function') {
+        const res: any = await window.civitaiAPI.pullMissingModel(model);
+        if (res?.success) {
+          setPullFeedback({
+            id: model.id,
+            message: `Download queued for ${model.civitaiName || model.fileName}! Check the Downloads tab.`,
+            isError: false,
+          });
+          setTimeout(() => setPullFeedback(null), 8000);
+          loadLocalModels();
+        } else {
+          setPullFeedback({
+            id: model.id,
+            message: res?.error || 'Failed to pull model from CivitAI.',
+            isError: true,
+          });
+          setTimeout(() => setPullFeedback(null), 10000);
+        }
+      } else {
+        alert('Missing model download API is unavailable.');
+      }
+    } catch (e: any) {
+      setPullFeedback({
+        id: model.id,
+        message: `Error pulling model: ${e.message || e}`,
+        isError: true,
+      });
+      setTimeout(() => setPullFeedback(null), 10000);
+    } finally {
+      setPullingModelId(null);
+    }
+  };
+
+  const handlePullAllMissingModels = async () => {
+    const missingEligible = localModels.filter(
+      (m) => m.isMissing && (m.civitaiVersionId || m.sha256)
+    );
+    if (missingEligible.length === 0) {
+      alert('No missing models with CivitAI Version IDs or SHA256 hashes found to pull.');
+      return;
+    }
+
+    if (!confirm(`Queue downloads for ${missingEligible.length} missing model(s) from CivitAI?`)) {
+      return;
+    }
+
+    setPullingAllMissing(true);
+    let queued = 0;
+    let failed = 0;
+
+    for (const model of missingEligible) {
+      try {
+        if (window.civitaiAPI && typeof window.civitaiAPI.pullMissingModel === 'function') {
+          const res: any = await window.civitaiAPI.pullMissingModel(model);
+          if (res?.success) queued++;
+          else failed++;
+        }
+      } catch {
+        failed++;
+      }
+    }
+
+    setPullingAllMissing(false);
+    setUpdateSummary(`Queued ${queued} missing model(s) for download! (${failed} could not be matched on CivitAI).`);
+    setTimeout(() => setUpdateSummary(null), 8000);
+    loadLocalModels();
+  };
+
   const duplicateGroups = React.useMemo(() => {
     const groups = new Map<string, LocalModel[]>();
     localModels.forEach((m) => {
@@ -444,7 +523,9 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         if (nsfwFilter === 'nsfw' && !isNsfw) return false;
 
         // Top-level filter
-        if (filter === 'matched') {
+        if (filter === 'missing') {
+          if (!model.isMissing) return false;
+        } else if (filter === 'matched') {
           if (!model.isMatched) return false;
         } else if (filter === 'updates') {
           if (!model.hasUpdate) return false;
@@ -633,28 +714,76 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
         </div>
       )}
 
+      {/* Missing Models Detected from Library Import Banner */}
+      {localModels.some((m) => m.isMissing) && (
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs font-medium animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle size={20} className="text-rose-400 shrink-0" />
+            <div>
+              <strong className="text-rose-100 font-bold">
+                {localModels.filter((m) => m.isMissing).length} model(s) in your library are missing from disk
+              </strong>{' '}
+              (e.g., from a restored backup). You can pull and redownload matched models directly from CivitAI.
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            <button
+              onClick={() => setFilter('missing')}
+              className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              View Missing ({localModels.filter((m) => m.isMissing).length})
+            </button>
+            <button
+              onClick={handlePullAllMissingModels}
+              disabled={pullingAllMissing || isScanning}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+            >
+              {pullingAllMissing ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span>Downloading...</span>
+                </>
+              ) : (
+                <>
+                  <Download size={13} />
+                  <span>Download All Missing ({localModels.filter((m) => m.isMissing && (m.civitaiVersionId || m.sha256)).length})</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Filter Tabs & Search */}
       <div className="glass-panel p-4 rounded-2xl flex flex-wrap gap-4 items-center justify-between text-sm shadow-xl">
         <div className="flex flex-wrap gap-2">
-          {(['all', 'matched', 'updates', 'unidentified', 'duplicates'] as const).map((t) => {
+          {(['all', 'missing', 'matched', 'updates', 'unidentified', 'duplicates'] as const).map((t) => {
             let count = 0;
-            if (t === 'matched') count = localModels.filter((m) => m.isMatched).length;
+            if (t === 'missing') count = localModels.filter((m) => m.isMissing).length;
+            else if (t === 'matched') count = localModels.filter((m) => m.isMatched).length;
             else if (t === 'updates') count = localModels.filter((m) => m.hasUpdate).length;
             else if (t === 'unidentified') count = localModels.filter((m) => !m.isMatched).length;
             else if (t === 'duplicates') count = duplicateGroups.size;
             else count = localModels.length;
 
+            const isMissingFilter = t === 'missing';
+
             return (
               <button
                 key={t}
                 onClick={() => setFilter(t)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer flex items-center gap-1.5 ${
                   filter === t
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                    ? isMissingFilter
+                      ? 'bg-gradient-to-r from-rose-600 to-amber-600 text-white shadow-md shadow-rose-600/30'
+                      : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                    : isMissingFilter && count > 0
+                    ? 'bg-rose-950/40 text-rose-300 hover:text-rose-200 border border-rose-500/40 animate-pulse'
                     : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
                 }`}
               >
-                {t} ({count})
+                {isMissingFilter && <AlertTriangle size={13} className={count > 0 ? 'text-rose-400' : 'text-slate-500'} />}
+                <span>{isMissingFilter ? 'Missing on Disk' : t} ({count})</span>
               </button>
             );
           })}
@@ -955,6 +1084,42 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                       )}
                     </button>
 
+                    {/* Missing from Disk Indicator & 1-Click Pull Button */}
+                    {model.isMissing && (
+                      <span
+                        className="flex items-center gap-1.5 text-rose-300 bg-rose-500/20 border border-rose-500/40 px-3 py-1.5 rounded-xl font-bold glow-rose animate-pulse"
+                        title="This file does not exist at its configured path on disk."
+                      >
+                        <AlertTriangle size={14} className="text-rose-400" />
+                        <span>Missing on Disk</span>
+                      </span>
+                    )}
+
+                    {model.isMissing && (model.civitaiVersionId || model.sha256) && (
+                      <button
+                        onClick={() => handlePullMissingModel(model)}
+                        disabled={pullingModelId === model.id || isScanning}
+                        className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold px-3.5 py-1.5 rounded-xl hover:shadow-lg hover:shadow-purple-500/30 transition-all cursor-pointer disabled:opacity-50 active:scale-95 text-xs shadow-md shadow-purple-950/40"
+                        title={
+                          model.civitaiVersionId
+                            ? `Download ${model.civitaiName || model.fileName} from CivitAI into your models directory`
+                            : `Lookup CivitAI by SHA256 hash (${model.sha256 ? model.sha256.substring(0, 10) + '...' : ''}) and download model`
+                        }
+                      >
+                        {pullingModelId === model.id ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-purple-200" />
+                            <span>Pulling...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download size={13} className="text-purple-200" />
+                            <span>{model.isMatched ? 'Download Model' : 'Pull (Hash Match)'}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
                     {model.isMatched ? (
                       <span className="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl font-semibold">
                         <CheckCircle size={14} /> Matched
@@ -1014,6 +1179,32 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                     </button>
                   </div>
                 </div>
+
+                {/* Inline Pull / Download Toast on Model Card */}
+                {pullFeedback && pullFeedback.id === model.id && (
+                  <div
+                    className={`w-full p-3 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 border animate-fadeIn ${
+                      pullFeedback.isError
+                        ? 'bg-rose-950/70 border-rose-500/40 text-rose-200 glow-rose'
+                        : 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200 glow-emerald'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {pullFeedback.isError ? (
+                        <AlertTriangle size={15} className="text-rose-400 shrink-0" />
+                      ) : (
+                        <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+                      )}
+                      <span>{pullFeedback.message}</span>
+                    </div>
+                    <button
+                      onClick={() => setPullFeedback(null)}
+                      className="text-slate-400 hover:text-slate-200 text-xs px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
                 {/* Inline Expanded Duplicate Resolution Panel */}
                 {isExpanded && (

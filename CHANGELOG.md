@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### 🌟 Added
+- **Missing Models Detection & 1-Click CivitAI Pulling on Library/Backup Import**:
+  - Automatically identifies restored library models whose physical files are missing from local disk (e.g. after importing a library or system backup zip on a fresh machine).
+  - Prominent **"Missing on Disk"** filter tab and badge styling across the Library catalog.
+  - 1-Click **"Download Model"** / **"Pull from CivitAI (Hash Match)"** on individual model cards, querying CivitAI by SHA256 checksum or version ID and routing downloads into user-configured model directories.
+  - Batch **"Download All Missing Models"** header action queueing downloads for all matched missing models with real-time feedback.
+  - Backup restoration diagnostics reporting the exact count of missing model files with direct navigation to the Library tab.
 - **ComfyUI Base Directory Structure Diagnostic & Health Validation**:
   - Automated structural inspection of local ComfyUI installations against the core program structure (`main.py`, `custom_nodes/`, `models/`, `input/`, `output/`, `extra_model_paths.yaml`).
   - Interactive diagnostic grid rendering real-time confidence scores and pass/fail indicators for all critical ComfyUI directories.

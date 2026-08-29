@@ -31,6 +31,7 @@ export interface RestoreResult {
   message?: string;
   stats?: {
     modelsRestored: number;
+    missingModelsCount?: number;
     downloadsRestored: number;
     configKeysRestored: number;
     ignoredUpdatesRestored: number;
@@ -288,13 +289,17 @@ export class BackupService {
       }
 
       await dbManager.exec('COMMIT;');
-      logger.info(`Backup zip restored successfully: ${modelRows.length} models, ${downloadRows.length} downloads, ${configRows.length} config keys.`);
+      const missingCount = modelRows.filter((lm: any) => lm && lm.file_path && !fs.existsSync(lm.file_path)).length;
+      logger.info(`Backup zip restored successfully: ${modelRows.length} models (${missingCount} missing from disk), ${downloadRows.length} downloads, ${configRows.length} config keys.`);
 
       return {
         success: true,
-        message: 'Backup restored successfully',
+        message: missingCount > 0 
+          ? `Backup restored successfully! ${modelRows.length} model records loaded (${missingCount} missing from local disk).` 
+          : 'Backup restored successfully',
         stats: {
           modelsRestored: modelRows.length,
+          missingModelsCount: missingCount,
           downloadsRestored: downloadRows.length,
           configKeysRestored: configRows.length,
           ignoredUpdatesRestored: ignoredUpdatesRows.length,
@@ -328,6 +333,7 @@ export class BackupService {
       }
     }
 
+    let missingCount = 0;
     if (Array.isArray(data.localModels)) {
       for (const lm of data.localModels) {
         await dbManager.run(
@@ -348,15 +354,21 @@ export class BackupService {
           ]
         );
         modelCount++;
+        if (lm.file_path && !fs.existsSync(lm.file_path)) {
+          missingCount++;
+        }
       }
     }
 
     await dbManager.exec('COMMIT;');
     return {
       success: true,
-      message: 'Legacy JSON backup restored successfully',
+      message: missingCount > 0
+        ? `Legacy JSON backup restored! ${modelCount} models loaded (${missingCount} missing from disk).`
+        : 'Legacy JSON backup restored successfully',
       stats: {
         modelsRestored: modelCount,
+        missingModelsCount: missingCount,
         downloadsRestored: 0,
         configKeysRestored: configCount,
         ignoredUpdatesRestored: 0,
