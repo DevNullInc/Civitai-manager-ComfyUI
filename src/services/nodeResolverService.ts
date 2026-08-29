@@ -32,6 +32,39 @@ const MANAGER_NODE_LIST_URL =
 
 const REGISTRY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
 
+const VALID_PYTHON_BASENAMES = new Set([
+  'python',
+  'python3',
+  'python.exe',
+  'python3.exe',
+  'python3.10',
+  'python3.11',
+  'python3.12',
+  'python3.13',
+  'python3.10.exe',
+  'python3.11.exe',
+  'python3.12.exe',
+  'python3.13.exe',
+]);
+
+/**
+ * Validates that a path points to a legitimate Python binary executable.
+ */
+export function isValidPythonBinary(binPath: string): boolean {
+  if (!binPath || typeof binPath !== 'string') return false;
+  const base = path.basename(binPath).toLowerCase();
+  if (!VALID_PYTHON_BASENAMES.has(base)) return false;
+
+  if (path.isAbsolute(binPath)) {
+    try {
+      return fs.existsSync(binPath) && fs.statSync(binPath).isFile();
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
 export class NodeResolverService {
   private inMemorySearchCache = new Map<string, { timestamp: number; results: GitHubNodeRepo[] }>();
   private requestQueue: Array<() => Promise<void>> = [];
@@ -50,7 +83,7 @@ export class NodeResolverService {
           process.env.VIRTUAL_ENV,
           process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
         );
-        if (fs.existsSync(venvPython)) return venvPython;
+        if (isValidPythonBinary(venvPython)) return venvPython;
       }
       return process.platform === 'win32' ? 'python.exe' : 'python3';
     }
@@ -75,7 +108,7 @@ export class NodeResolverService {
     ];
 
     for (const p of candidates) {
-      if (fs.existsSync(p)) {
+      if (isValidPythonBinary(p)) {
         return p;
       }
     }
@@ -86,7 +119,7 @@ export class NodeResolverService {
         process.env.VIRTUAL_ENV,
         process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
       );
-      if (fs.existsSync(venvPy)) return venvPy;
+      if (isValidPythonBinary(venvPy)) return venvPy;
     }
 
     return process.platform === 'win32' ? 'python.exe' : 'python3';
@@ -388,16 +421,53 @@ export class NodeResolverService {
       };
     }
 
-    if (!fs.existsSync(customNodesDir)) {
-      fs.mkdirSync(customNodesDir, { recursive: true });
+    const resolvedNodesDir = path.resolve(customNodesDir);
+    if (!fs.existsSync(resolvedNodesDir)) {
+      fs.mkdirSync(resolvedNodesDir, { recursive: true });
     }
 
-    let folderName = customFolderName;
+    const trimmedUrl = (gitUrl || '').trim();
+    // Validate gitUrl strictly against allowed Git/HTTPS URL formats
+    const isHttpsGit = /^https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)$/i.test(trimmedUrl);
+    const isSshGit = /^git@[a-zA-Z0-9.-]+:[a-zA-Z0-9._/-]+(\.git)?$/i.test(trimmedUrl);
+
+    if (!isHttpsGit && !isSshGit) {
+      return {
+        success: false,
+        folderName: '',
+        targetPath: '',
+        hasRequirements: false,
+        hasInstallScript: false,
+        error: 'Invalid or unsupported Git URL format',
+      };
+    }
+
+    let folderName = (customFolderName || '').trim();
     if (!folderName) {
-      folderName = path.basename(gitUrl.trim()).replace(/\.git$/i, '');
+      folderName = path.basename(trimmedUrl).replace(/\.git$/i, '');
+    }
+    // Sanitize folder name to prevent path traversal or flag injection
+    folderName = folderName.replace(/[/\\?%*:|"<>]/g, '_').trim();
+    if (folderName.startsWith('-')) {
+      folderName = '_' + folderName.substring(1);
+    }
+    if (!folderName) {
+      folderName = 'custom_node';
     }
 
-    const targetPath = path.join(customNodesDir, folderName);
+    const targetPath = path.resolve(path.join(resolvedNodesDir, folderName));
+
+    // Ensure targetPath stays strictly inside resolvedNodesDir
+    if (!targetPath.startsWith(resolvedNodesDir)) {
+      return {
+        success: false,
+        folderName,
+        targetPath,
+        hasRequirements: false,
+        hasInstallScript: false,
+        error: 'Target path resolves outside custom_nodes directory',
+      };
+    }
 
     if (fs.existsSync(targetPath)) {
       const hasRequirements = fs.existsSync(path.join(targetPath, 'requirements.txt'));
@@ -414,21 +484,10 @@ export class NodeResolverService {
       };
     }
 
-    const trimmedUrl = (gitUrl || '').trim();
-    if (!trimmedUrl || (!trimmedUrl.startsWith('https://') && !trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('git@'))) {
-      return {
-        success: false,
-        folderName,
-        targetPath,
-        hasRequirements: false,
-        hasInstallScript: false,
-        error: 'Invalid or unsupported Git URL provided',
-      };
-    }
-
     try {
       logger.info(`Cloning custom node [${folderName}] from: ${trimmedUrl}`);
-      await execFileAsync('git', ['clone', '--depth', '1', trimmedUrl, targetPath]);
+      // Use '--' positional separator to prevent command argument/flag injection
+      await execFileAsync('git', ['clone', '--depth', '1', '--', trimmedUrl, targetPath]);
 
       const hasRequirements = fs.existsSync(path.join(targetPath, 'requirements.txt'));
       const hasInstallScript = fs.existsSync(path.join(targetPath, 'install.py'));
@@ -445,7 +504,7 @@ export class NodeResolverService {
         detectedPythonPath,
       };
     } catch (err: any) {
-      logger.error(`Failed to clone custom node from ${gitUrl}:`, err);
+      logger.error(`Failed to clone custom node from ${trimmedUrl}:`, err);
       return {
         success: false,
         folderName,
@@ -464,40 +523,48 @@ export class NodeResolverService {
     nodeFolderPath: string,
     comfyuiDir?: string
   ): Promise<{ success: boolean; output: string; error?: string }> {
-    if (!fs.existsSync(nodeFolderPath)) {
+    if (!nodeFolderPath) {
+      return { success: false, output: '', error: 'Target directory not provided' };
+    }
+
+    const resolvedFolder = path.resolve(nodeFolderPath);
+    if (!fs.existsSync(resolvedFolder)) {
       return { success: false, output: '', error: 'Target directory not found' };
     }
 
-    const pythonBin = this.detectPythonBinary(comfyuiDir);
-    const reqPath = path.join(nodeFolderPath, 'requirements.txt');
-    const installPyPath = path.join(nodeFolderPath, 'install.py');
+    let pythonBin = this.detectPythonBinary(comfyuiDir);
+    if (!isValidPythonBinary(pythonBin)) {
+      pythonBin = process.platform === 'win32' ? 'python.exe' : 'python3';
+    }
+    const reqPath = path.join(resolvedFolder, 'requirements.txt');
+    const installPyPath = path.join(resolvedFolder, 'install.py');
 
     let outputLog = '';
 
     try {
       if (fs.existsSync(reqPath)) {
-        logger.info(`Installing requirements via [${pythonBin}] in ${nodeFolderPath}...`);
+        logger.info(`Installing requirements via [${pythonBin}] in ${resolvedFolder}...`);
         const { stdout, stderr } = await execFileAsync(
           pythonBin,
           ['-m', 'pip', 'install', '-r', 'requirements.txt'],
-          { cwd: nodeFolderPath }
+          { cwd: resolvedFolder }
         );
         outputLog += (stdout || '') + '\n' + (stderr || '');
       }
 
       if (fs.existsSync(installPyPath)) {
-        logger.info(`Executing install.py via [${pythonBin}] in ${nodeFolderPath}...`);
+        logger.info(`Executing install.py via [${pythonBin}] in ${resolvedFolder}...`);
         const { stdout, stderr } = await execFileAsync(
           pythonBin,
           ['install.py'],
-          { cwd: nodeFolderPath }
+          { cwd: resolvedFolder }
         );
         outputLog += (stdout || '') + '\n' + (stderr || '');
       }
 
       return { success: true, output: outputLog };
     } catch (err: any) {
-      logger.error(`Error installing dependencies in ${nodeFolderPath}:`, err);
+      logger.error(`Error installing dependencies in ${resolvedFolder}:`, err);
       return { success: false, output: outputLog, error: err?.message || 'Installation failed' };
     }
   }
