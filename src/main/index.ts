@@ -11,6 +11,7 @@ import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import child_process from 'child_process';
 import http from 'http';
 import { dbManager } from '../db/db';
@@ -435,6 +436,100 @@ function inspectComfyUIInstall(installPath?: string) {
   };
 }
 
+function autoDetectComfyUIInstall() {
+  const candidates: string[] = [];
+
+  // 1. From existing config
+  if (currentConfig.comfyui_install_dir) {
+    candidates.push(currentConfig.comfyui_install_dir);
+  }
+
+  // 2. From model folders
+  const allFolders = [currentConfig.comfyui_root, ...(currentConfig.comfyui_folders || [])].filter(Boolean);
+  for (const folder of allFolders) {
+    const parent = path.dirname(folder);
+    candidates.push(parent);
+    const grandparent = path.dirname(parent);
+    candidates.push(grandparent);
+  }
+
+  // 3. From common standard OS locations
+  const homeDir = os.homedir();
+  if (process.platform === 'win32') {
+    const drives = ['C:', 'D:', 'E:', 'F:'];
+    for (const d of drives) {
+      candidates.push(
+        path.join(d, 'ComfyUI'),
+        path.join(d, 'comfyui'),
+        path.join(d, 'ComfyUI_windows_portable'),
+        path.join(d, 'ComfyUI_windows_portable', 'ComfyUI'),
+        path.join(d, 'AI', 'ComfyUI'),
+        path.join(d, 'AI', 'comfyui'),
+        path.join(d, 'AI', 'ComfyUI_windows_portable', 'ComfyUI'),
+        path.join(d, 'stable-diffusion', 'ComfyUI'),
+        path.join(d, 'sd', 'ComfyUI')
+      );
+    }
+    candidates.push(
+      path.join(homeDir, 'ComfyUI'),
+      path.join(homeDir, 'comfyui'),
+      path.join(homeDir, 'Desktop', 'ComfyUI'),
+      path.join(homeDir, 'Desktop', 'ComfyUI_windows_portable', 'ComfyUI'),
+      path.join(homeDir, 'Documents', 'ComfyUI')
+    );
+  } else {
+    // Linux / macOS
+    candidates.push(
+      path.join(homeDir, 'ComfyUI'),
+      path.join(homeDir, 'comfyui'),
+      path.join(homeDir, 'ai', 'ComfyUI'),
+      path.join(homeDir, 'ai', 'comfyui'),
+      path.join(homeDir, 'AI', 'ComfyUI'),
+      path.join(homeDir, 'AI', 'comfyui'),
+      path.join(homeDir, 'Projects', 'ComfyUI'),
+      path.join(homeDir, 'projects', 'comfyui'),
+      path.join(homeDir, 'stable-diffusion', 'ComfyUI'),
+      '/opt/ComfyUI',
+      '/opt/comfyui',
+      '/workspace/ComfyUI',
+      '/workspace/comfyui'
+    );
+  }
+
+  const uniqueCandidates = Array.from(new Set(candidates.map((c) => path.resolve(c))));
+  let bestMatch: { installPath: string; info: any; score: number } | null = null;
+
+  for (const candidate of uniqueCandidates) {
+    try {
+      if (!fs.existsSync(candidate)) continue;
+      const info = inspectComfyUIInstall(candidate);
+      if (info.valid) {
+        const score = info.structure?.confidenceScore || 0;
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { installPath: info.installDir || candidate, info, score };
+          if (score >= 90) break;
+        }
+      }
+    } catch {}
+  }
+
+  if (bestMatch) {
+    return {
+      found: true,
+      path: bestMatch.installPath,
+      info: bestMatch.info,
+      candidatesChecked: uniqueCandidates.length,
+      message: `Detected ComfyUI installation at: ${bestMatch.installPath}`,
+    };
+  }
+
+  return {
+    found: false,
+    candidatesChecked: uniqueCandidates.length,
+    message: 'Could not automatically find a valid ComfyUI directory. Please specify your installation folder manually.',
+  };
+}
+
 function startHttpBridgeServer() {
   const apiPort =
     parseInt(process.env.API_PORT || process.env.BRIDGE_PORT || process.env.CMM_PORT || '', 10) || 5174;
@@ -673,6 +768,10 @@ function startHttpBridgeServer() {
       } else if (url === '/api/check-comfyui-install' && req.method === 'POST') {
         const body = await getBody();
         const result = inspectComfyUIInstall(body.installPath || body.path);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if ((url === '/api/auto-detect-comfyui' || url === '/api/autodetect-comfyui') && (req.method === 'GET' || req.method === 'POST')) {
+        const result = autoDetectComfyUIInstall();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } else if (
@@ -1289,6 +1388,10 @@ function registerIpcHandlers() {
   // ComfyUI Installation & Custom Node Inspection
   ipcMain.handle('inspect-comfyui-install', async (_event: unknown, targetPath?: string) => {
     return inspectComfyUIInstall(targetPath);
+  });
+
+  ipcMain.handle('auto-detect-comfyui', async () => {
+    return autoDetectComfyUIInstall();
   });
 
   // Node Resolution & GitHub Fallback Handlers

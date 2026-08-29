@@ -15,6 +15,7 @@ const api = {
   saveConfig: (config: any) => ipcRenderer.invoke('save-config', config),
   setApiKey: (key: string) => ipcRenderer.invoke('set-api-key', key),
   inspectComfyUIInstall: (customPath?: string) => ipcRenderer.invoke('inspect-comfyui-install', customPath),
+  autoDetectComfyUI: () => ipcRenderer.invoke('auto-detect-comfyui'),
 
   // CivitAI API
   searchModels: (params: any) => ipcRenderer.invoke('search-models', params),

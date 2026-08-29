@@ -99,7 +99,60 @@ export const SettingsTab: React.FC = () => {
   const [installInfo, setInstallInfo] = useState<ComfyUIInstallInfo | null>(null);
   const [inspectingInstall, setInspectingInstall] = useState(false);
   const [isCloningCmmNode, setIsCloningCmmNode] = useState(false);
+  const [isAutoDetecting, setIsAutoDetecting] = useState(false);
+  const [autoDetectFeedback, setAutoDetectFeedback] = useState<{ success: boolean; message: string; path?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAutoDetectComfyUI = async () => {
+    setIsAutoDetecting(true);
+    setAutoDetectFeedback(null);
+
+    try {
+      if (window.civitaiAPI?.autoDetectComfyUI) {
+        const res: any = await window.civitaiAPI.autoDetectComfyUI();
+        if (res?.found && res.path) {
+          handleComfyUIInstallDirChange(res.path);
+          setAutoDetectFeedback({
+            success: true,
+            path: res.path,
+            message: `Successfully detected ComfyUI at: ${res.path} (${res.info?.nodeCount ?? 0} custom node(s) found). Models folder auto-populated.`,
+          });
+          setTimeout(() => setAutoDetectFeedback(null), 8000);
+          return;
+        }
+      }
+
+      // Fallback: Check existing primary folder
+      const primary = config.comfyui_folders[0] || config.comfyui_root || '';
+      if (primary) {
+        const detectedPath = primary.replace(/[\\/]models[\\/]?$/i, '');
+        if (detectedPath && detectedPath !== primary) {
+          handleComfyUIInstallDirChange(detectedPath);
+          setAutoDetectFeedback({
+            success: true,
+            path: detectedPath,
+            message: `Deduced ComfyUI root directory from configured models path: ${detectedPath}`,
+          });
+          setTimeout(() => setAutoDetectFeedback(null), 8000);
+          return;
+        }
+      }
+
+      setAutoDetectFeedback({
+        success: false,
+        message: 'Could not automatically find a valid ComfyUI directory. Please browse or manually type your ComfyUI root directory above.',
+      });
+      setTimeout(() => setAutoDetectFeedback(null), 8000);
+    } catch (err: any) {
+      setAutoDetectFeedback({
+        success: false,
+        message: `Auto-detection encountered an error: ${err.message || 'Detection failed'}`,
+      });
+      setTimeout(() => setAutoDetectFeedback(null), 8000);
+    } finally {
+      setIsAutoDetecting(false);
+    }
+  };
 
   const deriveModelsFolder = (installDir: string): string => {
     if (!installDir) return '';
@@ -724,19 +777,22 @@ export const SettingsTab: React.FC = () => {
             </div>
             <button
               type="button"
-              onClick={async () => {
-                const primary = config.comfyui_folders[0] || config.comfyui_root || '';
-                let detectedPath = '';
-                if (primary) {
-                  detectedPath = primary.replace(/[\\/]models[\\/]?$/i, '');
-                }
-                handleComfyUIInstallDirChange(detectedPath);
-              }}
-              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0"
-              title="Attempt to automatically deduce ComfyUI installation from your model folder path"
+              onClick={handleAutoDetectComfyUI}
+              disabled={isAutoDetecting}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 active:scale-95"
+              title="Automatically search and detect ComfyUI installation on your system"
             >
-              <Sparkles size={15} />
-              <span>Auto-Detect</span>
+              {isAutoDetecting ? (
+                <>
+                  <Loader2 size={15} className="animate-spin text-cyan-300" />
+                  <span>Detecting...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={15} />
+                  <span>Auto-Detect</span>
+                </>
+              )}
             </button>
             {!installInfo?.cmmNodeInstalled && (
               <button
@@ -760,6 +816,33 @@ export const SettingsTab: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Auto-Detect Feedback Toast/Banner */}
+          {autoDetectFeedback && (
+            <div
+              className={`p-3 rounded-2xl text-xs flex items-center justify-between gap-2 border transition-all animate-fadeIn ${
+                autoDetectFeedback.success
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+                  : 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {autoDetectFeedback.success ? (
+                  <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+                ) : (
+                  <AlertCircle size={16} className="shrink-0 text-amber-400" />
+                )}
+                <span>{autoDetectFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoDetectFeedback(null)}
+                className="text-slate-400 hover:text-slate-200 text-xs px-1.5 py-0.5 rounded cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Prompt to configure directory if empty */}
           {!config.comfyui_install_dir && (

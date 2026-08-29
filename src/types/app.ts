@@ -184,6 +184,14 @@ export interface ComfyUIInstallInfo {
   autoModelsDir?: string;
 }
 
+export interface AutoDetectComfyUIResult {
+  found: boolean;
+  path?: string;
+  info?: ComfyUIInstallInfo;
+  message?: string;
+  candidatesChecked?: number;
+}
+
 export interface CanvasNodeInput {
   name: string;
   type: string;

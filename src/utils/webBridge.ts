@@ -86,6 +86,18 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      autoDetectComfyUI: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/auto-detect-comfyui`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          return await res.json();
+        } catch {
+          return { found: false, message: 'Could not communicate with local backend bridge.' };
+        }
+      },
+
       searchModels: async (params: any) => {
         const res = await fetch(`${API_BASE}/search-models`, {
           method: 'POST',
