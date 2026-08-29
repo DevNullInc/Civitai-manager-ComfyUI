@@ -3,9 +3,11 @@
 **The missing model manager for ComfyUI.** A unified desktop application for discovering, downloading, organizing, and version-managing generative AI models across multiple CivitAI sources with intelligent auto-sorting into ComfyUI's folder structure.
 
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
+[![Features](https://img.shields.io/badge/Features-Quick%20Crib--Notes-00D632.svg)](FEATURES.md)
 [![Roadmap](https://img.shields.io/badge/Roadmap-View%20Upcoming%20Milestones-8a2be2.svg)](ROADMAP.md)
 
+> ⚡ **Want the quick summary without the long read? Check out the [Feature Crib-Notes (FEATURES.md)](FEATURES.md).**  
 > 🗺️ **Looking for upcoming features and releases? Check out the [Product Roadmap](ROADMAP.md).**
 
 ---
