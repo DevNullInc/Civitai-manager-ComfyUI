@@ -25,7 +25,18 @@ export class ImageCacheService {
   private browseSessionCache: Map<string, CachedImageEntry> = new Map();
   private maxBrowseEntries: number = 500;
   private inflightRequests: Map<string, Promise<{ buffer: Buffer; contentType: string } | null>> = new Map();
-  private readonly allowedImageHosts: string[] = ['civitai.com', 'image.civitai.com'];
+  private readonly allowedImageHosts: string[] = [
+    'civitai.com',
+    'image.civitai.com',
+    'images.civitai.com',
+    'cdn.civitai.com',
+    'huggingface.co',
+    'cdn-lfs.huggingface.co',
+    'githubusercontent.com',
+    'raw.githubusercontent.com',
+    'user-images.githubusercontent.com',
+    'github.com',
+  ];
 
   constructor() {
     let baseDir = process.cwd();
@@ -90,17 +101,21 @@ export class ImageCacheService {
     return host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd');
   }
 
+  private isHostWhitelisted(hostname: string): boolean {
+    const host = hostname.toLowerCase().trim();
+    if (this.isPrivateOrLocalHost(host)) return false;
+    return this.allowedImageHosts.some(
+      (allowed) => host === allowed || host.endsWith(`.${allowed}`)
+    );
+  }
+
   private isAllowedImageUrl(rawUrl: string): URL | null {
     try {
+      if (!rawUrl || typeof rawUrl !== 'string') return null;
       const parsed = new URL(rawUrl.trim());
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
       const hostname = parsed.hostname.toLowerCase();
-      if (this.isPrivateOrLocalHost(hostname)) return null;
-
-      const isAllowedHost = this.allowedImageHosts.some(
-        (allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`)
-      );
-      if (!isAllowedHost) return null;
+      if (!this.isHostWhitelisted(hostname)) return null;
 
       return parsed;
     } catch {
@@ -162,6 +177,14 @@ export class ImageCacheService {
         const response = await axios.get(cleanUrl, {
           responseType: 'arraybuffer',
           timeout: 15000,
+          maxRedirects: 5,
+          maxContentLength: 30 * 1024 * 1024,
+          beforeRedirect: (options: any) => {
+            const redirectHost = (options.hostname || options.host || '').toLowerCase();
+            if (!this.isHostWhitelisted(redirectHost)) {
+              throw new Error(`SSRF Prevention: Blocked redirect to unapproved host [${redirectHost}]`);
+            }
+          },
           headers: {
             'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
             Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
