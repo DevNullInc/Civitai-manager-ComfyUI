@@ -43,6 +43,15 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = $PSScriptRoot
 $PidFile = Join-Path $ProjectRoot '.cmm.pid'
 
+if ($Port -lt 1024 -or $Port -gt 65535) {
+  Write-Status '!!' "Invalid Port ($Port). Must be between 1024 and 65535." 'Red'
+  exit 1
+}
+if ($ApiPort -lt 1024 -or $ApiPort -gt 65535) {
+  Write-Status '!!' "Invalid ApiPort ($ApiPort). Must be between 1024 and 65535." 'Red'
+  exit 1
+}
+
 # -- Window Helper for Bringing Existing Window to Foreground -------------
 Add-Type -TypeDefinition @"
 using System;
@@ -87,13 +96,14 @@ function Set-ProcessWindowFocus {
 
 $ProtectedBrowsers = @(
   'firefox', 'firefox-bin', 'chrome', 'googlechrome', 'chromium',
-  'brave', 'opera', 'msedge', 'safari', 'vivaldi', 'zen',
-  'explorer', 'powershell', 'pwsh', 'cmd', 'conhost', 'windowsterminal'
+  'brave', 'opera', 'msedge', 'safari', 'vivaldi', 'zen', 'librewolf',
+  'waterfox', 'tor', 'explorer', 'powershell', 'pwsh', 'cmd', 'conhost',
+  'windowsterminal', 'system', 'svchost', 'taskmgr', 'csrss', 'lsass'
 )
 
 function Test-IsSafeToKill([System.Diagnostics.Process]$Proc) {
   if (-not $Proc -or $Proc.HasExited) { return $false }
-  if ($Proc.Id -eq $PID) { return $false }
+  if ($Proc.Id -le 4 -or $Proc.Id -eq $PID) { return $false }
 
   $name = $Proc.ProcessName.ToLower()
   foreach ($prot in $ProtectedBrowsers) {
@@ -109,6 +119,16 @@ function Test-IsSafeToKill([System.Diagnostics.Process]$Proc) {
 
   # Must be node or electron
   if ($name -eq 'electron' -or $name -eq 'node' -or $name -like '*civitai*') {
+    # Check if CommandLine or arguments contain protected browser names
+    try {
+      $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($Proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+      if ($cmd) {
+        $cmdLower = $cmd.ToLower()
+        foreach ($prot in $ProtectedBrowsers) {
+          if ($cmdLower -like "*$prot*") { return $false }
+        }
+      }
+    } catch { }
     return $true
   }
 
@@ -123,7 +143,7 @@ function Get-RunningProcs {
   if (Test-Path $PidFile) {
     $storedPids = Get-Content $PidFile -ErrorAction SilentlyContinue | ForEach-Object { [int]$_ }
     foreach ($procId in $storedPids) {
-      if ($procId -gt 0 -and $seenPids.Add($procId)) {
+      if ($procId -gt 4 -and $seenPids.Add($procId)) {
         $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($proc -and (Test-IsSafeToKill $proc)) {
           $running += $proc
@@ -132,11 +152,11 @@ function Get-RunningProcs {
     }
   }
 
-  # 2. Check network ports 5173 ($Port) and 5174 in LISTEN state only
-  $portHolders = Get-NetTCPConnection -LocalPort $Port, 5174 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+  # 2. Check network ports 5173 ($Port) and 5174 ($ApiPort) in LISTEN state only
+  $portHolders = Get-NetTCPConnection -LocalPort $Port, $ApiPort -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
   if ($portHolders) {
     foreach ($ph in $portHolders) {
-      if ($ph -gt 0 -and $seenPids.Add($ph)) {
+      if ($ph -gt 4 -and $seenPids.Add($ph)) {
         $proc = Get-Process -Id $ph -ErrorAction SilentlyContinue
         if ($proc -and (Test-IsSafeToKill $proc)) {
           $running += $proc
@@ -343,8 +363,9 @@ function Start-App {
   $env:PORT = "$Port"
   $env:API_PORT = "$ApiPort"
   $env:VITE_DEV_SERVER_URL = "http://localhost:$Port"
+  $viteArgs = @('vite', '--port', "$Port", '--host', '127.0.0.1')
   $viteProc = Start-Process -FilePath 'npx.cmd' `
-    -ArgumentList "vite --port $Port --host 127.0.0.1" `
+    -ArgumentList $viteArgs `
     -WorkingDirectory $ProjectRoot `
     -PassThru -WindowStyle Hidden
 
@@ -354,9 +375,9 @@ function Start-App {
   $localElectron = Join-Path $ProjectRoot "node_modules\electron\dist\electron.exe"
   $electronExe = if (Test-Path $localElectron) { $localElectron } else { 'npx.cmd' }
   $electronArgs = if (Test-Path $localElectron) {
-    if ($Headless -or $NoWindow) { ". --headless" } else { "." }
+    if ($Headless -or $NoWindow) { @('.', '--headless') } else { @('.') }
   } else {
-    if ($Headless -or $NoWindow) { "electron . --headless" } else { "electron ." }
+    if ($Headless -or $NoWindow) { @('electron', '.', '--headless') } else { @('electron', '.') }
   }
 
   if ($Headless -or $NoWindow) {
@@ -371,7 +392,7 @@ function Start-App {
     $env:HEADLESS = "false"
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $electronExe
-    $startInfo.Arguments = $electronArgs
+    $startInfo.Arguments = ($electronArgs -join ' ')
     $startInfo.WorkingDirectory = $ProjectRoot
     $startInfo.UseShellExecute = $true
     $electronProc = [System.Diagnostics.Process]::Start($startInfo)

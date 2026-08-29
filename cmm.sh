@@ -77,6 +77,16 @@ else
   CLI_ARGS=()
 fi
 
+# Port Bounds & Injection Validation
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1024 ] || [ "$PORT" -gt 65535 ]; then
+  write_status "!!" "Invalid Port ($PORT). Must be between 1024 and 65535." "$C_RED"
+  exit 1
+fi
+if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || [ "$API_PORT" -lt 1024 ] || [ "$API_PORT" -gt 65535 ]; then
+  write_status "!!" "Invalid ApiPort ($API_PORT). Must be between 1024 and 65535." "$C_RED"
+  exit 1
+fi
+
 ensure_node_installed() {
   if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
     write_status "!" "Node.js runtime was not detected on this system." "$C_YELLOW"
@@ -110,18 +120,27 @@ is_safe_to_kill() {
   comm=$(ps -p "$target_pid" -o comm= 2>/dev/null | tr '[:upper:]' '[:lower:]' | xargs)
   cmdline=$(ps -p "$target_pid" -o args= 2>/dev/null | tr '[:upper:]' '[:lower:]')
 
-  # 1. Protected Process Blacklist (Never kill web browsers, user shells, or desktop systems)
+  # 1. Protected Process Blacklist (Never kill web browsers, user shells, terminal emulators, or desktop systems)
   case "$comm" in
-    *firefox*|*chrome*|*chromium*|*brave*|*opera*|*edge*|*safari*|*vivaldi*|*zen*|*tor*|*waterfox*|*librewolf*|*epiphany*)
+    *firefox*|*chrome*|*chromium*|*brave*|*opera*|*edge*|*msedge*|*safari*|*vivaldi*|*zen*|*tor*|*waterfox*|*librewolf*|*epiphany*|*midori*|*qutebrowser*)
       return 1
       ;;
-    *bash*|*zsh*|*sh*|*gnome*|*kde*|*systemd*|*init*|*xorg*|*wayland*|*dbus*|*pipewire*)
+    *bash*|*zsh*|*sh*|*fish*|*csh*|*tcsh*|*gnome*|*kde*|*systemd*|*init*|*xorg*|*wayland*|*dbus*|*pipewire*|*pulseaudio*|*tmux*|*screen*|*alacritty*|*kitty*|*wezterm*|*konsole*)
       return 1
       ;;
   esac
 
-  if echo "$cmdline" | grep -qE "(firefox|chrome|chromium|brave|opera|msedge|zen-browser|vivaldi)"; then
+  if echo "$cmdline" | grep -qE "(firefox|chrome|chromium|brave|opera|msedge|zen-browser|vivaldi|waterfox|librewolf|tor-browser)"; then
     return 1
+  fi
+
+  # Check /proc/$pid/exe link if available on Linux
+  if [ -L "/proc/$target_pid/exe" ]; then
+    local exe_path=""
+    exe_path=$(readlink -f "/proc/$target_pid/exe" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+    if echo "$exe_path" | grep -qE "(firefox|chrome|chromium|brave|opera|msedge|zen|vivaldi|librewolf|waterfox|tor)"; then
+      return 1
+    fi
   fi
 
   # 2. Must be an Electron or Node/Vite process associated with this project
@@ -270,21 +289,23 @@ start_app() {
   sleep 2
 
   # 3. Launch Electron app
-  local ELECTRON_BIN="$SCRIPT_DIR/node_modules/electron/dist/electron"
-  if [ ! -f "$ELECTRON_BIN" ]; then
-    ELECTRON_BIN="npx electron"
+  local ELECTRON_CMD=()
+  if [ -f "$SCRIPT_DIR/node_modules/electron/dist/electron" ]; then
+    ELECTRON_CMD=("$SCRIPT_DIR/node_modules/electron/dist/electron")
+  else
+    ELECTRON_CMD=("npx" "electron")
   fi
 
   local ELECTRON_PID=""
   if [ "$HEADLESS" = true ]; then
     write_status ">>" "Starting Electron in headless background mode..." "$C_MAGENTA"
     export HEADLESS="true"
-    $ELECTRON_BIN . --headless >/dev/null 2>&1 &
+    "${ELECTRON_CMD[@]}" . --headless >/dev/null 2>&1 &
     ELECTRON_PID=$!
   else
     write_status ">>" "Launching Electron desktop app window..." "$C_MAGENTA"
     export HEADLESS="false"
-    $ELECTRON_BIN . >/dev/null 2>&1 &
+    "${ELECTRON_CMD[@]}" . >/dev/null 2>&1 &
     ELECTRON_PID=$!
   fi
 
