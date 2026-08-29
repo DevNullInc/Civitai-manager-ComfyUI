@@ -200,6 +200,25 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      scaffoldModelFolders: async (targetDir?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/scaffold-model-folders`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetDir }),
+          });
+          if (!res.ok) {
+            const errTxt = await res.text();
+            throw new Error(errTxt || `Server error: ${res.status}`);
+          }
+          const data = await res.json();
+          return data.results || [];
+        } catch (e: any) {
+          console.error('scaffoldModelFolders failed:', e);
+          return [];
+        }
+      },
+
       clearLibrary: async () => {
         try {
           const res = await fetch(`${API_BASE}/clear-library`, {

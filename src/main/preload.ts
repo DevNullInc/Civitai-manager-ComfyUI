@@ -31,6 +31,8 @@ const api = {
   matchUnidentifiedModels: () => ipcRenderer.invoke('match-unidentified-models'),
   pullMissingModel: (modelData: any, targetRoot?: string) =>
     ipcRenderer.invoke('pull-missing-model', modelData, targetRoot),
+  scaffoldModelFolders: (targetDir?: string) =>
+    ipcRenderer.invoke('scaffold-model-folders', targetDir),
   clearLibrary: () => ipcRenderer.invoke('clear-library'),
   onScanProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('scan-progress', (_event: unknown, progress: any) => callback(progress));

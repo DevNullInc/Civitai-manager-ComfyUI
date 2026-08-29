@@ -10,7 +10,13 @@
 import path from 'path';
 import fs from 'fs';
 import { ModelType, FileType } from '../types/civitai';
-import { FolderConfig, FilenamePatternRule, DEFAULT_FOLDER_MAP, DEFAULT_FILENAME_PATTERNS } from '../types/app';
+import {
+  FolderConfig,
+  FilenamePatternRule,
+  DEFAULT_FOLDER_MAP,
+  DEFAULT_FILENAME_PATTERNS,
+  COMFYUI_STANDARD_MODEL_SUBFOLDERS,
+} from '../types/app';
 import { sanitizeFileName } from '../utils/pathUtils';
 import { logger } from '../utils/logger';
 
@@ -115,6 +121,43 @@ export class FolderRouter {
       fs.mkdirSync(dir, { recursive: true });
       logger.info(`Created destination folder: ${dir}`);
     }
+  }
+
+  /**
+   * Scaffolds and verifies standard ComfyUI model subdirectories in a directory.
+   * Workflows directory is explicitly excluded as workflows live in workflow folders.
+   */
+  scaffoldModelSubfolders(targetDir: string): { targetDir: string; created: string[]; existing: string[] } {
+    if (!targetDir) return { targetDir: '', created: [], existing: [] };
+
+    const created: string[] = [];
+    const existing: string[] = [];
+
+    try {
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+        logger.info(`Created base model directory: ${targetDir}`);
+      }
+
+      for (const sub of COMFYUI_STANDARD_MODEL_SUBFOLDERS) {
+        const subPath = path.join(targetDir, sub);
+        if (!fs.existsSync(subPath)) {
+          try {
+            fs.mkdirSync(subPath, { recursive: true });
+            created.push(sub);
+            logger.info(`Scaffolded missing ComfyUI model subfolder: ${subPath}`);
+          } catch (e: any) {
+            logger.warn(`Failed to create model subfolder ${subPath}:`, e.message);
+          }
+        } else {
+          existing.push(sub);
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`Error scaffolding model subfolders in ${targetDir}:`, err.message);
+    }
+
+    return { targetDir, created, existing };
   }
 }
 

@@ -37,6 +37,40 @@ export const DEFAULT_FOLDER_MAP: Record<string, string> = {
   Other: 'checkpoints',
 };
 
+/**
+ * ComfyUI official standard model subdirectories under `models/`.
+ * (Note: Workflows directory is excluded as workflows are stored separately).
+ */
+export const COMFYUI_STANDARD_MODEL_SUBFOLDERS: string[] = [
+  'checkpoints',
+  'loras',
+  'vae',
+  'embeddings',
+  'controlnet',
+  'upscale_models',
+  'clip',
+  'clip_vision',
+  'text_encoders',
+  'unet',
+  'diffusion_models',
+  'hypernetworks',
+  'gligen',
+  'style_models',
+  'model_patches',
+  'configs',
+  'vae_approx',
+  'ipadapter',
+  'insightface',
+  'photomaker',
+  'pulid',
+  'reactor',
+  'gguf',
+  'wildcards',
+  'ultralytics',
+  'yolo',
+  'sams',
+];
+
 export const DEFAULT_FILENAME_PATTERNS: FilenamePatternRule[] = [
   { pattern: 'ip-adapter', folder: 'ipadapter', case_sensitive: false },
   { pattern: 'photomaker', folder: 'photomaker', case_sensitive: false },

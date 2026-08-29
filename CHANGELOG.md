@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🌟 Added
 
+- **Automatic ComfyUI Model Subfolder Scaffolding & Verification**:
+  - Automatically creates and verifies the full standard ComfyUI model subfolder tree (`checkpoints/`, `loras/`, `vae/`, `controlnet/`, `diffusion_models/`, `upscale_models/`, `clip/`, `clip_vision/`, `text_encoders/`, `unet/`, `hypernetworks/`, `gligen/`, `style_models/`, `model_patches/`, `configs/`, `vae_approx/`, `ipadapter/`, `insightface/`, `photomaker/`, `pulid/`, `reactor/`, `gguf/`, `wildcards/`, `ultralytics/`, `yolo/`, `sams/`) inside configured model directories if any subdirectories are missing.
+  - Workflows directory is explicitly omitted from model folders since workflows are managed separately (`workflows/`, `user/default/workflows/`).
+  - Added 1-click **"Build Missing Subfolders"** action in Settings with live scaffolding diagnostics and toasts.
+  - Auto-triggers scaffolding on startup, configuration save, new folder additions, and library scans.
 - **Saved ComfyUI Workflows Dropdown Selector**:
   - Integrated a dedicated workflow selector dropdown situated directly above the drag-and-drop zone in the Workflows tab.
   - Automatically scans and indexes all existing `.json` workflows and workflow-embedded `.png` images across the user's ComfyUI directory (`workflows/`, `user/default/workflows/`, etc.).

@@ -178,9 +178,48 @@ async function loadConfigFromDb() {
       separateByCreator: currentConfig.organize_by.creator,
       advancedMappings: currentConfig.advanced_mappings,
     });
+
+    // Auto-build missing standard ComfyUI model subdirectories in configured model roots
+    scaffoldConfiguredModelFolders(currentConfig);
   } catch (err) {
     logger.error('Error loading config from SQLite:', err);
   }
+}
+
+function scaffoldConfiguredModelFolders(config: AppConfig, specificDir?: string): { targetDir: string; created: string[]; existing: string[] }[] {
+  const results: { targetDir: string; created: string[]; existing: string[] }[] = [];
+  const targets = new Set<string>();
+
+  if (specificDir && typeof specificDir === 'string' && specificDir.trim()) {
+    targets.add(specificDir.trim());
+  } else {
+    if (config.comfyui_folders && Array.isArray(config.comfyui_folders)) {
+      for (const f of config.comfyui_folders) {
+        if (f && typeof f === 'string' && f.trim()) targets.add(f.trim());
+      }
+    }
+    if (config.comfyui_root && typeof config.comfyui_root === 'string' && config.comfyui_root.trim()) {
+      const modelsSub = path.join(config.comfyui_root.trim(), 'models');
+      if (fs.existsSync(modelsSub)) {
+        targets.add(modelsSub);
+      } else {
+        targets.add(config.comfyui_root.trim());
+      }
+    }
+  }
+
+  for (const dir of targets) {
+    if (dir && typeof dir === 'string' && dir.trim()) {
+      try {
+        const res = folderRouter.scaffoldModelSubfolders(dir.trim());
+        results.push(res);
+      } catch (err: any) {
+        logger.warn(`Failed to scaffold model subfolders for ${dir}:`, err?.message || err);
+      }
+    }
+  }
+
+  return results;
 }
 
 function getSubdirectories(dirPath: string): string[] {
@@ -1010,8 +1049,16 @@ function startHttpBridgeServer() {
           advancedMappings: currentConfig.advanced_mappings,
         });
 
+        // Auto-build missing standard ComfyUI model subdirectories in configured model roots
+        scaffoldConfiguredModelFolders(currentConfig);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(currentConfig));
+      } else if (url === '/api/scaffold-model-folders' && req.method === 'POST') {
+        const body = await getBody();
+        const results = scaffoldConfiguredModelFolders(currentConfig, body?.targetDir || body?.targetPath);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, results }));
       } else if (url === '/api/comfyui-install' && req.method === 'GET') {
         const result = inspectComfyUIInstall();
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1624,7 +1671,14 @@ function registerIpcHandlers() {
       advancedMappings: currentConfig.advanced_mappings,
     });
 
+    // Auto-build missing standard ComfyUI model subdirectories in configured model roots
+    scaffoldConfiguredModelFolders(currentConfig);
+
     return currentConfig;
+  });
+
+  ipcMain.handle('scaffold-model-folders', async (_event: unknown, targetDir?: string) => {
+    return scaffoldConfiguredModelFolders(currentConfig, targetDir);
   });
 
   // CivitAI API Handlers

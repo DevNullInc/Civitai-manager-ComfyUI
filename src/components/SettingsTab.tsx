@@ -101,6 +101,8 @@ export const SettingsTab: React.FC = () => {
   const [isCloningCmmNode, setIsCloningCmmNode] = useState(false);
   const [isAutoDetecting, setIsAutoDetecting] = useState(false);
   const [autoDetectFeedback, setAutoDetectFeedback] = useState<{ success: boolean; message: string; path?: string } | null>(null);
+  const [scaffoldFeedback, setScaffoldFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [isScaffolding, setIsScaffolding] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAutoDetectComfyUI = async () => {
@@ -404,6 +406,43 @@ export const SettingsTab: React.FC = () => {
     }
   };
 
+  const handleScaffoldFolders = async (targetDir?: string) => {
+    if (!window.civitaiAPI?.scaffoldModelFolders) return;
+    setIsScaffolding(true);
+    setScaffoldFeedback(null);
+
+    try {
+      const results = await window.civitaiAPI.scaffoldModelFolders(targetDir);
+      let createdTotal = 0;
+      if (Array.isArray(results)) {
+        for (const r of results) {
+          createdTotal += r.created?.length || 0;
+        }
+      }
+
+      if (createdTotal > 0) {
+        setScaffoldFeedback({
+          success: true,
+          message: `Successfully scaffolded ${createdTotal} missing ComfyUI model subfolder${createdTotal !== 1 ? 's' : ''} (checkpoints, loras, vae, controlnet, etc.)!`,
+        });
+      } else {
+        setScaffoldFeedback({
+          success: true,
+          message: 'All standard ComfyUI model subfolders already exist in your configured directories.',
+        });
+      }
+      setTimeout(() => setScaffoldFeedback(null), 7000);
+    } catch (err: any) {
+      setScaffoldFeedback({
+        success: false,
+        message: `Error scaffolding model subfolders: ${err?.message || 'Failed'}`,
+      });
+      setTimeout(() => setScaffoldFeedback(null), 7000);
+    } finally {
+      setIsScaffolding(false);
+    }
+  };
+
   const addFolder = () => {
     const trimmed = normalizeFolderPath(newFolderInput);
     if (!trimmed) return;
@@ -416,6 +455,23 @@ export const SettingsTab: React.FC = () => {
       comfyui_root: updatedFolders[0] || '',
     });
     setNewFolderInput('');
+
+    // Auto-build missing standard ComfyUI model subdirectories in newly added folder
+    if (window.civitaiAPI?.scaffoldModelFolders) {
+      window.civitaiAPI.scaffoldModelFolders(trimmed).then((results: any) => {
+        let count = 0;
+        if (Array.isArray(results)) {
+          for (const r of results) count += r.created?.length || 0;
+        }
+        if (count > 0) {
+          setScaffoldFeedback({
+            success: true,
+            message: `Created ${count} missing ComfyUI model subfolder${count !== 1 ? 's' : ''} in ${trimmed}`,
+          });
+          setTimeout(() => setScaffoldFeedback(null), 7000);
+        }
+      }).catch(() => {});
+    }
   };
 
   const removeFolder = (index: number) => {
@@ -1142,19 +1198,62 @@ export const SettingsTab: React.FC = () => {
 
       {/* 2. ComfyUI Model Folders (Auto-Linked to Base Installation) */}
       <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 text-slate-100 font-bold text-base">
             <Folder className="text-purple-400" size={20} />
             <h2>ComfyUI Model Folders</h2>
           </div>
-          <span className="text-xs text-slate-400">
-            {config.comfyui_folders.length} folder{config.comfyui_folders.length !== 1 ? 's' : ''} configured
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleScaffoldFolders()}
+              disabled={isScaffolding || config.comfyui_folders.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-purple-900/30 border border-slate-700 hover:border-purple-500/50 text-purple-300 hover:text-purple-200 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-40 active:scale-95"
+              title="Automatically build any missing standard ComfyUI model subfolders (checkpoints, loras, vae, controlnet, etc.) in your configured model directories"
+            >
+              {isScaffolding ? (
+                <Loader2 size={13} className="animate-spin text-purple-400" />
+              ) : (
+                <Sparkles size={13} className="text-purple-400" />
+              )}
+              <span>Build Missing Subfolders</span>
+            </button>
+            <span className="text-xs text-slate-400">
+              {config.comfyui_folders.length} folder{config.comfyui_folders.length !== 1 ? 's' : ''} configured
+            </span>
+          </div>
         </div>
 
         <p className="text-xs text-slate-400 leading-relaxed">
-          Primary model directory is automatically populated from your ComfyUI base path above (<code className="text-purple-300 font-mono text-[11px]">/models</code>). You can also add secondary model directories (e.g. external SSDs, shared drives, or extra symlinked folders).
+          Primary model directory is automatically populated from your ComfyUI base path above (<code className="text-purple-300 font-mono text-[11px]">/models</code>). You can also add secondary model directories (e.g. external SSDs, shared drives, or extra symlinked folders). If any standard model subfolders are missing, CMM automatically builds them based on ComfyUI's model directory layout.
         </p>
+
+        {/* Scaffolding Feedback Toast */}
+        {scaffoldFeedback && (
+          <div
+            className={`p-3 rounded-2xl text-xs flex items-center justify-between gap-2 border transition-all animate-fadeIn ${
+              scaffoldFeedback.success
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+                : 'bg-rose-500/15 border-rose-500/40 text-rose-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {scaffoldFeedback.success ? (
+                <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+              ) : (
+                <AlertCircle size={16} className="shrink-0 text-rose-400" />
+              )}
+              <span>{scaffoldFeedback.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setScaffoldFeedback(null)}
+              className="text-slate-400 hover:text-slate-200 text-xs px-1.5 py-0.5 rounded cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Add Folder Input */}
         <div className="flex gap-2">
