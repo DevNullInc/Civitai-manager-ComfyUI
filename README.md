@@ -627,7 +627,7 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 
 ## ☕ Buy me a coffee or something please?
 
-Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI models or makes your workflow easier, consider supporting ongoing development!
+Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI models or makes your workflow easier, consider supporting ongoing development!!
 
 <p align="center">
   <a href="https://cash.app/$StygianRenegade/1.00">
