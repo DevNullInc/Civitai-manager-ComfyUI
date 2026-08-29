@@ -79,8 +79,8 @@ const api = {
     ipcRenderer.invoke('resolve-missing-node', nodeType, customNodesDir),
   searchGitHubNodes: (query: string, limit?: number) =>
     ipcRenderer.invoke('search-github-nodes', query, limit),
-  cloneCustomNode: (gitUrl: string, customFolderName?: string) =>
-    ipcRenderer.invoke('clone-custom-node', gitUrl, customFolderName),
+  cloneCustomNode: (gitUrl: string, customFolderName?: string, customNodesDir?: string) =>
+    ipcRenderer.invoke('clone-custom-node', gitUrl, customFolderName, customNodesDir),
   installNodeDependencies: (nodeFolderPath: string) =>
     ipcRenderer.invoke('install-node-dependencies', nodeFolderPath),
   getInstalledCustomNodes: () =>

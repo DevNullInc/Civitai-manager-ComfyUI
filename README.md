@@ -80,11 +80,14 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **Console Feedback & Diagnostics**: Built-in system log capture and one-click diagnostic report generation for bug reports
 - **Single-Instance Management**: Automatically detects and focuses existing application windows
 
-### 🔧 ComfyUI Integration
+### 🔧 ComfyUI Integration & Companion Custom Node
+- **Official Companion Custom Node**: 1-click install the official [`ComfyUI-Model-Manager`](https://github.com/DevNullInc/ComfyUI-Model-Manager) node directly into `custom_nodes/` from Settings with live install detection and health status badges
+- **Base Directory Structure Diagnostics**: Inspects your ComfyUI root against the core program structure (`main.py`, `custom_nodes/`, `models/`, `input/`, `output/`, `extra_model_paths.yaml`) with real-time confidence scores and diagnostic pills
+- **Automatic Models Folder Synchronization**: Entering or auto-detecting your ComfyUI installation directory (e.g. `C:\AI\comfyui`) automatically links and populates your primary `models/` path (`C:\AI\comfyui\models`)
 - Recognizes **50+ specialized folders** (ipadapter, photomaker, pulid, reactor, sam3, ultralytics, etc.)
 - **Filename pattern matching**: Routes `ip-adapter_*.safetensors` to `ipadapter/`, `*.gguf` to `gguf/`, etc.
 - **Custom folder mappings**: Override defaults to match your workflow
-- **Workflow detection**: Scans `workflows/` folder for embedded model references
+- **Visual Workflow Canvas & Missing Node Resolver**: Scans `.png` and `.json` workflows for embedded models and missing custom node extensions with 4-tier dependency resolution (Local $\rightarrow$ Node List $\rightarrow$ GitHub Search $\rightarrow$ Pip Runner)
 
 ---
 
@@ -189,9 +192,10 @@ Outputs will be saved in the `release/` directory:
 ## 🚀 Quick Start
 
 ### 1. First Launch Setup
-On first run, CMM will ask for:
-- **ComfyUI Root Path**: The folder containing your `models/` directory (e.g., `D:\ComfyUI\models`)
-- **CivitAI API Key** (optional but recommended): Get yours at [CivitAI Settings](https://civitai.com/user/account)
+In **Settings**:
+- **ComfyUI Installation Directory**: Enter your ComfyUI base path (e.g. `C:\AI\comfyui` or `/home/user/ComfyUI`). CMM will inspect the program structure and automatically configure your `models/` directory path (`C:\AI\comfyui\models`).
+- **1-Click Companion Node (Optional)**: Click **1-Click Install Node** to automatically clone [`ComfyUI-Model-Manager`](https://github.com/DevNullInc/ComfyUI-Model-Manager) into your `custom_nodes/` folder.
+- **CivitAI API Key** (optional but recommended): Get yours at [CivitAI Settings](https://civitai.com/user/account) for higher rate limits and gated models.
 
 ### 2. Scan Existing Library & Resolve Duplicates
 ```

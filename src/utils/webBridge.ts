@@ -82,7 +82,7 @@ export function setupWebBridgeIfNeeded() {
           });
           return await res.json();
         } catch {
-          return { valid: false, customNodesExist: false, installedNodes: [], nodeCount: 0 };
+          return { valid: false, customNodesExist: false, installedNodes: [], nodeCount: 0, cmmNodeInstalled: false };
         }
       },
 
@@ -486,12 +486,12 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
-      cloneCustomNode: async (gitUrl: string, customFolderName?: string) => {
+      cloneCustomNode: async (gitUrl: string, customFolderName?: string, customNodesDir?: string) => {
         try {
           const res = await fetch(`${API_BASE}/nodes/clone`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gitUrl, folderName: customFolderName }),
+            body: JSON.stringify({ gitUrl, folderName: customFolderName, customNodesDir }),
           });
           return await res.json();
         } catch (e: any) {

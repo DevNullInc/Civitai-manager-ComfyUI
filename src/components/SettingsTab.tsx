@@ -18,6 +18,8 @@ import {
   DownloadCloud,
   UploadCloud,
   CheckCircle,
+  CheckCircle2,
+  XCircle,
   AlertCircle,
   ShieldCheck,
   FolderPlus,
@@ -37,8 +39,19 @@ import {
   Terminal,
   Layers,
   Sparkles,
+  GitBranch,
+  Loader2,
+  ExternalLink,
+  Package,
 } from 'lucide-react';
-import { AppConfig, ConflictStrategy, FilenamePatternRule, DEFAULT_FOLDER_MAP, DEFAULT_FILENAME_PATTERNS } from '../types/app';
+import {
+  AppConfig,
+  ConflictStrategy,
+  FilenamePatternRule,
+  ComfyUIInstallInfo,
+  DEFAULT_FOLDER_MAP,
+  DEFAULT_FILENAME_PATTERNS,
+} from '../types/app';
 
 export const SettingsTab: React.FC = () => {
   const [config, setConfig] = useState<AppConfig>({
@@ -83,17 +96,57 @@ export const SettingsTab: React.FC = () => {
   const [hfStatus, setHfStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [testingWebhook, setTestingWebhook] = useState<'dl' | 'up' | null>(null);
   const [webhookStatus, setWebhookStatus] = useState<{ type: string; success?: boolean; message?: string } | null>(null);
-  const [installInfo, setInstallInfo] = useState<{
-    valid?: boolean;
-    inferred?: boolean;
-    installDir?: string;
-    customNodesDir?: string;
-    customNodesExist?: boolean;
-    installedNodes?: string[];
-    nodeCount?: number;
-  } | null>(null);
+  const [installInfo, setInstallInfo] = useState<ComfyUIInstallInfo | null>(null);
   const [inspectingInstall, setInspectingInstall] = useState(false);
+  const [isCloningCmmNode, setIsCloningCmmNode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const deriveModelsFolder = (installDir: string): string => {
+    if (!installDir) return '';
+    const trimmed = installDir.trim();
+    const sep = trimmed.includes('\\') ? '\\' : '/';
+    const clean = trimmed.replace(/[\\/]+$/, '');
+    return `${clean}${sep}models`;
+  };
+
+  const handleComfyUIInstallDirChange = (val: string) => {
+    const trimmed = val.trim();
+    let updatedFolders = [...config.comfyui_folders];
+    let newRoot = config.comfyui_root;
+
+    if (trimmed) {
+      const derivedModels = deriveModelsFolder(trimmed);
+      if (updatedFolders.length === 0) {
+        updatedFolders = [derivedModels];
+        newRoot = derivedModels;
+      } else {
+        const first = updatedFolders[0];
+        const isDefaultModelsPath =
+          !first ||
+          first.endsWith('/models') ||
+          first.endsWith('\\models') ||
+          first.endsWith('/models/') ||
+          first.endsWith('\\models\\');
+
+        if (isDefaultModelsPath && updatedFolders.length === 1) {
+          updatedFolders = [derivedModels];
+          newRoot = derivedModels;
+        } else if (!updatedFolders.includes(derivedModels)) {
+          updatedFolders = [derivedModels, ...updatedFolders.filter((f) => f !== derivedModels)];
+          newRoot = derivedModels;
+        }
+      }
+    }
+
+    setConfig((prev) => ({
+      ...prev,
+      comfyui_install_dir: val,
+      comfyui_folders: updatedFolders,
+      comfyui_root: newRoot,
+    }));
+
+    checkInstallDir(val);
+  };
 
   const checkInstallDir = async (customPath?: string) => {
     if (window.civitaiAPI?.inspectComfyUIInstall) {
@@ -101,11 +154,84 @@ export const SettingsTab: React.FC = () => {
       try {
         const res = await window.civitaiAPI.inspectComfyUIInstall(customPath);
         setInstallInfo(res);
+        if (res?.autoModelsDir && (!config.comfyui_folders || config.comfyui_folders.length === 0)) {
+          setConfig((prev) => ({
+            ...prev,
+            comfyui_folders: [res.autoModelsDir!],
+            comfyui_root: res.autoModelsDir!,
+          }));
+        }
       } catch {
         setInstallInfo(null);
       } finally {
         setInspectingInstall(false);
       }
+    }
+  };
+
+  const handleInstallCmmNode = async () => {
+    // 1. Check if ComfyUI install directory is configured
+    if (!config.comfyui_install_dir?.trim() && !installInfo?.customNodesDir) {
+      setImportError(
+        'ComfyUI installation directory is not set! Please specify and set your ComfyUI root directory above before installing the companion node.'
+      );
+      setTimeout(() => setImportError(null), 8000);
+      return;
+    }
+
+    // 2. Check if custom_nodes exists
+    if (!installInfo?.customNodesExist) {
+      setImportError(
+        'No valid custom_nodes/ directory found in the specified ComfyUI path. Please ensure your ComfyUI directory is set correctly first.'
+      );
+      setTimeout(() => setImportError(null), 8000);
+      return;
+    }
+
+    if (!window.civitaiAPI?.cloneCustomNode) {
+      setImportError('Custom node cloning is not supported in this environment.');
+      setTimeout(() => setImportError(null), 8000);
+      return;
+    }
+
+    const targetCustomNodesDir =
+      installInfo?.customNodesDir ||
+      (config.comfyui_install_dir ? `${config.comfyui_install_dir}/custom_nodes` : '');
+
+    setIsCloningCmmNode(true);
+    setImportFeedback(null);
+    setImportError(null);
+
+    try {
+      const gitUrl = 'https://github.com/DevNullInc/ComfyUI-Model-Manager.git';
+      const res: any = await window.civitaiAPI.cloneCustomNode(
+        gitUrl,
+        'ComfyUI-Model-Manager',
+        targetCustomNodesDir
+      );
+
+      if (res?.success) {
+        if (res.hasRequirements && window.civitaiAPI.installNodeDependencies && res.targetPath) {
+          try {
+            await window.civitaiAPI.installNodeDependencies(res.targetPath);
+          } catch (depErr) {
+            console.warn('Dependency installation warning:', depErr);
+          }
+        }
+        setImportFeedback(
+          'ComfyUI-Model-Manager companion node successfully cloned into custom_nodes! Please restart ComfyUI to load the node.'
+        );
+        setTimeout(() => setImportFeedback(null), 8000);
+        await checkInstallDir(config.comfyui_install_dir);
+      } else {
+        setImportError(`Failed to clone ComfyUI-Model-Manager: ${res?.error || 'Unknown error'}`);
+        setTimeout(() => setImportError(null), 8000);
+      }
+    } catch (err: any) {
+      setImportError(`Error cloning companion node: ${err.message || 'Clone failed'}`);
+      setTimeout(() => setImportError(null), 8000);
+    } finally {
+      setIsCloningCmmNode(false);
     }
   };
 
@@ -506,7 +632,503 @@ export const SettingsTab: React.FC = () => {
         </div>
       )}
 
-      {/* Complete System Backup & Restore (.ZIP) Card */}
+      {/* 1. ComfyUI Installation & Core Program Structure */}
+      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-slate-100 font-bold text-base">
+            <Layers className="text-cyan-400" size={20} />
+            <h2>ComfyUI Local Installation & Core Structure</h2>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* CMM Companion Custom Node Status Badge */}
+            {installInfo?.customNodesExist ? (
+              installInfo.cmmNodeInstalled ? (
+                <span
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                  title={`ComfyUI-Model-Manager node is installed in custom_nodes/${installInfo.cmmNodeFolderName || 'ComfyUI-Model-Manager'}`}
+                >
+                  <CheckCircle2 size={13} className="text-emerald-400" />
+                  <span>CMM Node Installed</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleInstallCmmNode}
+                  disabled={isCloningCmmNode}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-purple-600/30 to-cyan-600/30 hover:from-purple-600/50 hover:to-cyan-600/50 text-cyan-200 border border-cyan-500/40 shadow-md hover:shadow-cyan-500/20 transition-all cursor-pointer group disabled:opacity-50 active:scale-95"
+                  title="Click to automatically Git clone ComfyUI-Model-Manager into your custom_nodes/ folder"
+                >
+                  {isCloningCmmNode ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin text-cyan-300" />
+                      <span>Installing Node...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={13} className="text-cyan-400 group-hover:translate-y-0.5 transition-transform" />
+                      <span>CMM Node: Not Installed (Click to 1-Click Install)</span>
+                    </>
+                  )}
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={handleInstallCmmNode}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-800/90 hover:bg-slate-800 text-amber-300/90 hover:text-amber-200 border border-amber-500/30 hover:border-amber-500/60 shadow-sm transition-all cursor-pointer"
+                title="ComfyUI installation directory must be configured before installing companion node"
+              >
+                <AlertCircle size={13} className="text-amber-400" />
+                <span>CMM Node: Directory Not Set</span>
+              </button>
+            )}
+
+            {installInfo && (
+              <span
+                className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
+                  installInfo.valid && installInfo.customNodesExist
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : installInfo.valid
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                }`}
+              >
+                {installInfo.valid && installInfo.customNodesExist
+                  ? `${installInfo.nodeCount} Custom Node${installInfo.nodeCount !== 1 ? 's' : ''} Found`
+                  : installInfo.valid
+                  ? 'Directory Detected'
+                  : 'Not Set'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Specify the root directory of your local ComfyUI installation (where <code className="text-cyan-300 font-mono text-[11px]">main.py</code> and the <code className="text-cyan-300 font-mono text-[11px]">custom_nodes/</code> directory reside). Setting this will automatically configure your primary <code className="text-purple-300 font-mono text-[11px]">models/</code> storage path below and enable companion node features.
+        </p>
+
+        <div className="space-y-3 pt-1">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="e.g. C:\AI\comfyui or /home/user/ComfyUI or D:\ComfyUI_windows_portable\ComfyUI"
+                value={config.comfyui_install_dir || ''}
+                onChange={(e) => handleComfyUIInstallDirChange(e.target.value)}
+                className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const primary = config.comfyui_folders[0] || config.comfyui_root || '';
+                let detectedPath = '';
+                if (primary) {
+                  detectedPath = primary.replace(/[\\/]models[\\/]?$/i, '');
+                }
+                handleComfyUIInstallDirChange(detectedPath);
+              }}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0"
+              title="Attempt to automatically deduce ComfyUI installation from your model folder path"
+            >
+              <Sparkles size={15} />
+              <span>Auto-Detect</span>
+            </button>
+            {!installInfo?.cmmNodeInstalled && (
+              <button
+                type="button"
+                onClick={handleInstallCmmNode}
+                disabled={isCloningCmmNode}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 border border-cyan-500/40 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-cyan-950/40 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+                title="Git clone https://github.com/DevNullInc/ComfyUI-Model-Manager into custom_nodes/"
+              >
+                {isCloningCmmNode ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    <span>Cloning...</span>
+                  </>
+                ) : (
+                  <>
+                    <GitBranch size={15} />
+                    <span>Clone CMM Node</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Prompt to configure directory if empty */}
+          {!config.comfyui_install_dir && (
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+              <AlertCircle size={16} className="shrink-0 text-amber-400" />
+              <span>
+                <strong>ComfyUI directory not set:</strong> Please enter your ComfyUI root path above (or click <strong>Auto-Detect</strong>). CMM will automatically configure your <code className="font-mono text-cyan-200">models/</code> directory and check your installation structure.
+              </span>
+            </div>
+          )}
+
+          {/* ComfyUI Structure Validation Breakdown */}
+          {config.comfyui_install_dir && installInfo && (
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-200">ComfyUI Core Program Structure:</span>
+                  <span
+                    className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                      installInfo.valid
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                    }`}
+                  >
+                    {installInfo.valid
+                      ? `Valid ComfyUI Installation (${installInfo.structure?.confidenceScore || 100}% Structure Match)`
+                      : 'Incomplete ComfyUI Structure'}
+                  </span>
+                </div>
+                {installInfo.inferred && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">
+                    Resolved Subdirectory
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                {/* 1. custom_nodes/ */}
+                <div className={`p-2.5 rounded-xl border flex items-start gap-2 ${
+                  installInfo.structure?.hasCustomNodes
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+                }`}>
+                  {installInfo.structure?.hasCustomNodes ? (
+                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle size={15} className="text-rose-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-[11px] truncate">custom_nodes/</div>
+                    <div className="text-[10px] text-slate-400">
+                      {installInfo.structure?.hasCustomNodes
+                        ? `${installInfo.nodeCount} extension${installInfo.nodeCount !== 1 ? 's' : ''}`
+                        : 'Directory missing'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. models/ */}
+                <div className={`p-2.5 rounded-xl border flex items-start gap-2 ${
+                  installInfo.structure?.hasModelsDir
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+                }`}>
+                  {installInfo.structure?.hasModelsDir ? (
+                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle size={15} className="text-rose-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-[11px] truncate">models/</div>
+                    <div className="text-[10px] text-slate-400">
+                      {installInfo.structure?.hasModelsDir
+                        ? `${installInfo.structure.detectedModelSubdirs?.length || 0} subfolders detected`
+                        : 'Directory missing'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. main.py */}
+                <div className={`p-2.5 rounded-xl border flex items-start gap-2 ${
+                  installInfo.structure?.hasMainPy
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-amber-950/20 border-amber-500/30 text-amber-300'
+                }`}>
+                  {installInfo.structure?.hasMainPy ? (
+                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-[11px] truncate">main.py</div>
+                    <div className="text-[10px] text-slate-400">
+                      {installInfo.structure?.hasMainPy ? 'Core entrypoint found' : 'Entrypoint missing'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. input/ */}
+                <div className={`p-2.5 rounded-xl border flex items-start gap-2 ${
+                  installInfo.structure?.hasInputDir
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                }`}>
+                  {installInfo.structure?.hasInputDir ? (
+                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <div className="w-3.5 h-3.5 rounded-full border border-slate-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-[11px] truncate">input/</div>
+                    <div className="text-[10px] text-slate-400">
+                      {installInfo.structure?.hasInputDir ? 'Workflow uploads' : 'Not created yet'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. output/ */}
+                <div className={`p-2.5 rounded-xl border flex items-start gap-2 ${
+                  installInfo.structure?.hasOutputDir
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                }`}>
+                  {installInfo.structure?.hasOutputDir ? (
+                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <div className="w-3.5 h-3.5 rounded-full border border-slate-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-[11px] truncate">output/</div>
+                    <div className="text-[10px] text-slate-400">
+                      {installInfo.structure?.hasOutputDir ? 'Generations folder' : 'Not created yet'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6. extra_model_paths.yaml */}
+                <div className={`p-2.5 rounded-xl border flex items-start gap-2 ${
+                  installInfo.structure?.hasExtraModelPaths
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                }`}>
+                  {installInfo.structure?.hasExtraModelPaths ? (
+                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <div className="w-3.5 h-3.5 rounded-full border border-slate-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-mono font-bold text-[11px] truncate">extra_model_paths</div>
+                    <div className="text-[10px] text-slate-400">
+                      {installInfo.structure?.hasExtraModelPaths ? 'External paths active' : 'Optional config'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Real-time Custom Nodes Detection Feedback */}
+          {installInfo && installInfo.customNodesExist && (
+            <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-800/40 text-xs text-cyan-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold flex items-center gap-1.5 text-cyan-300">
+                  <CheckCircle size={15} className="text-emerald-400" />
+                  <span>Detected custom_nodes directory: <code className="font-mono text-[11px] text-cyan-100">{installInfo.customNodesDir}</code></span>
+                </span>
+              </div>
+
+              {/* CMM Companion Custom Node Highlight Box */}
+              {installInfo.cmmNodeInstalled ? (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-600/40 text-xs text-emerald-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                    <span>
+                      <strong className="text-emerald-300">CMM Companion Node:</strong> Installed in <code className="font-mono text-emerald-100 bg-slate-900/80 px-1.5 py-0.5 rounded border border-emerald-800/60">{installInfo.cmmNodeFolderName || 'ComfyUI-Model-Manager'}</code>
+                    </span>
+                  </div>
+                  <a
+                    href="https://github.com/DevNullInc/ComfyUI-Model-Manager"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-2 ml-2 shrink-0"
+                  >
+                    <span>GitHub</span>
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-xl bg-cyan-950/40 border border-cyan-700/50 text-xs text-cyan-200 gap-3">
+                  <div className="flex items-start sm:items-center gap-2">
+                    <Sparkles size={16} className="text-cyan-400 shrink-0 mt-0.5 sm:mt-0" />
+                    <div>
+                      <span className="font-bold text-cyan-100">Official Companion Custom Node Missing</span>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Clone <code className="text-cyan-300 font-mono text-[10px]">ComfyUI-Model-Manager</code> into your custom_nodes to enable in-graph model downloading, workflow inspection, and live API bridge features.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleInstallCmmNode}
+                    disabled={isCloningCmmNode}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-950/50 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+                  >
+                    {isCloningCmmNode ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Cloning Node...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={14} />
+                        <span>1-Click Install Node</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {installInfo.installedNodes && installInfo.installedNodes.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <div className="text-[11px] text-slate-400 font-medium">Installed Custom Nodes ({installInfo.installedNodes.length}):</div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1 pr-1 custom-scrollbar">
+                    {installInfo.installedNodes.map((nodeName, nIdx) => {
+                      const isCmm =
+                        nodeName.toLowerCase() === 'comfyui-model-manager' ||
+                        nodeName.toLowerCase() === 'comfyui_model_manager' ||
+                        nodeName.toLowerCase() === 'comfyui-civitai-manager' ||
+                        nodeName.toLowerCase() === 'comfyui-civitai-manager-node' ||
+                        nodeName === installInfo.cmmNodeFolderName;
+                      return (
+                        <span
+                          key={nIdx}
+                          className={`px-2 py-0.5 rounded-lg border text-[11px] font-mono ${
+                            isCmm
+                              ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-300 font-bold shadow-sm'
+                              : 'bg-slate-900/90 border-slate-700/80 text-slate-300'
+                          }`}
+                        >
+                          {nodeName}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {installInfo && !installInfo.customNodesExist && config.comfyui_install_dir && (
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>No <code className="font-mono">custom_nodes/</code> folder found in the specified path. Ensure this points to the root directory containing ComfyUI's <code className="font-mono">main.py</code>.</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 2. ComfyUI Model Folders (Auto-Linked to Base Installation) */}
+      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-slate-100 font-bold text-base">
+            <Folder className="text-purple-400" size={20} />
+            <h2>ComfyUI Model Folders</h2>
+          </div>
+          <span className="text-xs text-slate-400">
+            {config.comfyui_folders.length} folder{config.comfyui_folders.length !== 1 ? 's' : ''} configured
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Primary model directory is automatically populated from your ComfyUI base path above (<code className="text-purple-300 font-mono text-[11px]">/models</code>). You can also add secondary model directories (e.g. external SSDs, shared drives, or extra symlinked folders).
+        </p>
+
+        {/* Add Folder Input */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="e.g. D:\ComfyUI\models or /home/user/ComfyUI/models or E:\ExtraModels"
+            value={newFolderInput}
+            onChange={(e) => setNewFolderInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addFolder(); }}
+            className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
+          />
+          <button
+            onClick={addFolder}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+          >
+            <FolderPlus size={16} />
+            <span>Add Folder</span>
+          </button>
+        </div>
+
+        {/* Folder List */}
+        <div className="space-y-2 pt-1">
+          {config.comfyui_folders.length === 0 ? (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+              <AlertCircle size={16} />
+              <span>No model folders configured! Please set your ComfyUI directory above or add a folder path.</span>
+            </div>
+          ) : (
+            config.comfyui_folders.map((folderPath, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800 text-xs font-mono text-slate-200"
+              >
+                <div className="flex items-center gap-2.5 truncate flex-1 mr-3">
+                  {idx === 0 ? (
+                    <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[10px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1">
+                      <span>Primary</span>
+                      {config.comfyui_install_dir && folderPath.toLowerCase().startsWith(config.comfyui_install_dir.toLowerCase()) && (
+                        <span className="text-[9px] text-purple-200/80 font-normal">(Auto-Linked)</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-wider shrink-0">
+                      Secondary
+                    </span>
+                  )}
+                  <span className="truncate">{folderPath}</span>
+                </div>
+                <button
+                  onClick={() => removeFolder(idx)}
+                  className="text-slate-500 hover:text-red-400 p-1.5 transition-colors cursor-pointer rounded-lg hover:bg-slate-800"
+                  title="Remove folder"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Default Download Destination (if multiple folders) */}
+        {config.comfyui_folders.length > 1 && (
+          <div className="pt-4 border-t border-slate-800/80 space-y-2 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <HardDrive size={14} className="text-purple-400" />
+                <span>Default Download Destination</span>
+              </label>
+              {config.default_download_folder && (
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, default_download_folder: '' })}
+                  className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 hover:underline cursor-pointer"
+                >
+                  Reset (Always Ask)
+                </button>
+              )}
+            </div>
+            <select
+              value={config.default_download_folder || ''}
+              onChange={(e) => setConfig({ ...config, default_download_folder: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono cursor-pointer"
+            >
+              <option value="">Always ask when downloading (Prompt if multiple folders)</option>
+              {config.comfyui_folders.map((folderPath, i) => (
+                <option key={folderPath} value={folderPath}>
+                  Folder #{i + 1} ({i === 0 ? 'Primary' : 'Secondary'}): {folderPath}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500">
+              {config.default_download_folder
+                ? `Downloads will automatically route into this folder without prompting.`
+                : `A prompt will allow you to choose which ComfyUI folder to save models into whenever you start a download.`}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Complete System Backup & Restore (.ZIP) Card */}
       <div className="glass-panel p-6 rounded-3xl border border-purple-500/40 space-y-4 shadow-xl glow-purple relative overflow-hidden bg-slate-950/70">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
           <div className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0">
@@ -568,215 +1190,6 @@ export const SettingsTab: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
-
-      {/* ComfyUI Installation & Custom Nodes Directory */}
-      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 text-slate-100 font-bold text-base">
-            <Layers className="text-cyan-400" size={20} />
-            <h2>ComfyUI Local Installation & Custom Nodes</h2>
-          </div>
-          {installInfo && (
-            <span
-              className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
-                installInfo.customNodesExist
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : installInfo.valid
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  : 'bg-slate-800 text-slate-400 border border-slate-700'
-              }`}
-            >
-              {installInfo.customNodesExist
-                ? `${installInfo.nodeCount} Custom Node${installInfo.nodeCount !== 1 ? 's' : ''} Found`
-                : installInfo.valid
-                ? 'Directory Detected'
-                : 'Not Set'}
-            </span>
-          )}
-        </div>
-
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Specify the root directory of your local ComfyUI installation (where <code className="text-cyan-300 font-mono text-[11px]">main.py</code> and the <code className="text-cyan-300 font-mono text-[11px]">custom_nodes/</code> directory reside). This enables CMM to inspect installed custom nodes and check for missing node dependencies when parsing workflows.
-        </p>
-
-        <div className="space-y-3 pt-1">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="e.g. D:\ComfyUI or /home/user/ComfyUI or D:\ComfyUI_windows_portable\ComfyUI"
-              value={config.comfyui_install_dir || ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                setConfig({ ...config, comfyui_install_dir: val });
-                checkInstallDir(val);
-              }}
-              className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
-            />
-            <button
-              type="button"
-              onClick={async () => {
-                const primary = config.comfyui_folders[0] || config.comfyui_root || '';
-                let detectedPath = '';
-                if (primary) {
-                  detectedPath = primary.replace(/[\\/]models[\\/]?$/i, '');
-                }
-                setConfig({ ...config, comfyui_install_dir: detectedPath });
-                checkInstallDir(detectedPath);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0"
-              title="Attempt to automatically deduce ComfyUI installation from your model folder path"
-            >
-              <Sparkles size={15} />
-              <span>Auto-Detect</span>
-            </button>
-          </div>
-
-          {/* Real-time Custom Nodes Detection Feedback */}
-          {installInfo && installInfo.customNodesExist && (
-            <div className="p-3.5 rounded-2xl bg-cyan-950/20 border border-cyan-800/40 text-xs text-cyan-200 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold flex items-center gap-1.5 text-cyan-300">
-                  <CheckCircle size={15} className="text-emerald-400" />
-                  <span>Detected custom_nodes directory: <code className="font-mono text-[11px] text-cyan-100">{installInfo.customNodesDir}</code></span>
-                </span>
-                {installInfo.inferred && (
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">Inferred from Models Path</span>
-                )}
-              </div>
-              {installInfo.installedNodes && installInfo.installedNodes.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1 pr-1 custom-scrollbar">
-                  {installInfo.installedNodes.map((nodeName, nIdx) => (
-                    <span
-                      key={nIdx}
-                      className="px-2 py-0.5 rounded-lg bg-slate-900/90 border border-slate-700/80 text-[11px] font-mono text-slate-300"
-                    >
-                      {nodeName}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {installInfo && !installInfo.customNodesExist && config.comfyui_install_dir && (
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
-              <AlertCircle size={16} className="shrink-0" />
-              <span>No <code className="font-mono">custom_nodes/</code> folder found in the specified path. Ensure this points to the root directory containing ComfyUI's <code className="font-mono">main.py</code>.</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ComfyUI Model Folders Manager */}
-      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-100 font-bold text-base">
-            <Folder className="text-purple-400" size={20} />
-            <h2>ComfyUI Model Folders</h2>
-          </div>
-          <span className="text-xs text-slate-400">
-            {config.comfyui_folders.length} folder{config.comfyui_folders.length !== 1 ? 's' : ''} configured
-          </span>
-        </div>
-
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Specify all root directories where your ComfyUI models are stored. The scanner will traverse all subdirectories across every folder listed below.
-        </p>
-
-        {/* Add Folder Input */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="e.g. D:\ComfyUI\models or /home/user/ComfyUI/models"
-            value={newFolderInput}
-            onChange={(e) => setNewFolderInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') addFolder(); }}
-            className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
-          />
-          <button
-            onClick={addFolder}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
-          >
-            <FolderPlus size={16} />
-            <span>Add Folder</span>
-          </button>
-        </div>
-
-        {/* Folder List */}
-        <div className="space-y-2 pt-1">
-          {config.comfyui_folders.length === 0 ? (
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
-              <AlertCircle size={16} />
-              <span>No model folders configured! Please add at least one folder path above.</span>
-            </div>
-          ) : (
-            config.comfyui_folders.map((folderPath, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800 text-xs font-mono text-slate-200"
-              >
-                <div className="flex items-center gap-2.5 truncate flex-1 mr-3">
-                  {idx === 0 ? (
-                    <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[10px] font-bold uppercase tracking-wider shrink-0">
-                      Primary
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-wider shrink-0">
-                      Secondary
-                    </span>
-                  )}
-                  <span className="truncate">{folderPath}</span>
-                </div>
-                <button
-                  onClick={() => removeFolder(idx)}
-                  className="text-slate-500 hover:text-red-400 p-1.5 transition-colors cursor-pointer rounded-lg hover:bg-slate-800"
-                  title="Remove folder"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Default Download Destination (if multiple folders) */}
-        {config.comfyui_folders.length > 1 && (
-          <div className="pt-4 border-t border-slate-800/80 space-y-2 animate-fadeIn">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <HardDrive size={14} className="text-purple-400" />
-                <span>Default Download Destination</span>
-              </label>
-              {config.default_download_folder && (
-                <button
-                  type="button"
-                  onClick={() => setConfig({ ...config, default_download_folder: '' })}
-                  className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 hover:underline cursor-pointer"
-                >
-                  Reset (Always Ask)
-                </button>
-              )}
-            </div>
-            <select
-              value={config.default_download_folder || ''}
-              onChange={(e) => setConfig({ ...config, default_download_folder: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono cursor-pointer"
-            >
-              <option value="">Always ask when downloading (Prompt if multiple folders)</option>
-              {config.comfyui_folders.map((folderPath, i) => (
-                <option key={folderPath} value={folderPath}>
-                  Folder #{i + 1} ({i === 0 ? 'Primary' : 'Secondary'}): {folderPath}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-slate-500">
-              {config.default_download_folder
-                ? `Downloads will automatically route into this folder without prompting.`
-                : `A prompt will allow you to choose which ComfyUI folder to save models into whenever you start a download.`}
-            </p>
-          </div>
-        )}
       </div>
 
       {/* CivitAI API & Credentials */}

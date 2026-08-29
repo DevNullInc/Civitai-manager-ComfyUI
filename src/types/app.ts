@@ -156,6 +156,34 @@ export interface CustomNodePackage {
   gitRemoteUrl?: string;
 }
 
+export interface ComfyUIStructureInfo {
+  hasMainPy: boolean;
+  hasCustomNodes: boolean;
+  hasModelsDir: boolean;
+  hasInputDir: boolean;
+  hasOutputDir: boolean;
+  hasComfyCore: boolean;
+  hasExtraModelPaths: boolean;
+  detectedModelsDir: string;
+  modelsDirExists: boolean;
+  detectedModelSubdirs: string[];
+  confidenceScore: number;
+}
+
+export interface ComfyUIInstallInfo {
+  valid: boolean;
+  inferred?: boolean;
+  installDir?: string;
+  customNodesDir?: string;
+  customNodesExist?: boolean;
+  installedNodes?: string[];
+  nodeCount?: number;
+  cmmNodeInstalled?: boolean;
+  cmmNodeFolderName?: string;
+  structure?: ComfyUIStructureInfo;
+  autoModelsDir?: string;
+}
+
 export interface CanvasNodeInput {
   name: string;
   type: string;
