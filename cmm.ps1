@@ -85,30 +85,60 @@ function Set-ProcessWindowFocus {
   return $false
 }
 
+$ProtectedBrowsers = @(
+  'firefox', 'firefox-bin', 'chrome', 'googlechrome', 'chromium',
+  'brave', 'opera', 'msedge', 'safari', 'vivaldi', 'zen',
+  'explorer', 'powershell', 'pwsh', 'cmd', 'conhost', 'windowsterminal'
+)
+
+function Test-IsSafeToKill([System.Diagnostics.Process]$Proc) {
+  if (-not $Proc -or $Proc.HasExited) { return $false }
+  if ($Proc.Id -eq $PID) { return $false }
+
+  $name = $Proc.ProcessName.ToLower()
+  foreach ($prot in $ProtectedBrowsers) {
+    if ($name -like "*$prot*") { return $false }
+  }
+
+  try {
+    $procPath = $Proc.MainModule.FileName.ToLower()
+    foreach ($prot in $ProtectedBrowsers) {
+      if ($procPath -like "*$prot*") { return $false }
+    }
+  } catch { }
+
+  # Must be node or electron
+  if ($name -eq 'electron' -or $name -eq 'node' -or $name -like '*civitai*') {
+    return $true
+  }
+
+  return $false
+}
+
 function Get-RunningProcs {
   $running = @()
   $seenPids = [System.Collections.Generic.HashSet[int]]::new()
 
-  # 1. Check stored PID file
+  # 1. Check stored PID file with strict verification
   if (Test-Path $PidFile) {
     $storedPids = Get-Content $PidFile -ErrorAction SilentlyContinue | ForEach-Object { [int]$_ }
     foreach ($procId in $storedPids) {
       if ($procId -gt 0 -and $seenPids.Add($procId)) {
         $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
-        if ($proc -and -not $proc.HasExited) {
+        if ($proc -and (Test-IsSafeToKill $proc)) {
           $running += $proc
         }
       }
     }
   }
 
-  # 2. Check network ports 5173 ($Port) and 5174
-  $portHolders = Get-NetTCPConnection -LocalPort $Port, 5174 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+  # 2. Check network ports 5173 ($Port) and 5174 in LISTEN state only
+  $portHolders = Get-NetTCPConnection -LocalPort $Port, 5174 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
   if ($portHolders) {
     foreach ($ph in $portHolders) {
       if ($ph -gt 0 -and $seenPids.Add($ph)) {
         $proc = Get-Process -Id $ph -ErrorAction SilentlyContinue
-        if ($proc -and -not $proc.HasExited) {
+        if ($proc -and (Test-IsSafeToKill $proc)) {
           $running += $proc
         }
       }
@@ -120,7 +150,7 @@ function Get-RunningProcs {
   foreach ($ep in $electronProcs) {
     try {
       if ($ep.Path -like "*$ProjectRoot*" -or $ep.Path -like "*node_modules\electron*") {
-        if ($seenPids.Add($ep.Id)) {
+        if ($seenPids.Add($ep.Id) -and (Test-IsSafeToKill $ep)) {
           $running += $ep
         }
       }
@@ -140,8 +170,10 @@ function Stop-App {
   Write-Status 'x' "Stopping $($procs.Count) process(es)..." 'Red'
   foreach ($p in $procs) {
     try {
-      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-      Write-Status 'ok' "Killed PID $($p.Id) ($($p.ProcessName))" 'DarkGray'
+      if (Test-IsSafeToKill $p) {
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        Write-Status 'ok' "Killed PID $($p.Id) ($($p.ProcessName))" 'DarkGray'
+      }
     }
     catch {
       Write-Status '!!' "Failed to kill PID $($p.Id): $_" 'Red'

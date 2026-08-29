@@ -433,6 +433,19 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      parseWorkflow: async (workflowData: any, workflowName = 'direct_workflow.json') => {
+        try {
+          const res = await fetch(`${API_BASE}/workflow/parse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workflow: workflowData, name: workflowName }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          throw new Error(`Failed to parse workflow: ${e.message}`);
+        }
+      },
+
       testWebhook: async (url: string, event: string) => {
         try {
           const res = await fetch(`${API_BASE}/webhooks/test`, {

@@ -10,7 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
-import { WorkflowInfo, WorkflowModelReference } from '../types/app';
+import { WorkflowInfo, WorkflowModelReference, CanvasGraph } from '../types/app';
 import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
 
@@ -79,7 +79,8 @@ export class WorkflowScanner {
 
         const modelRefs = this.extractModelReferences(parsedData, localModelMap);
         const nodeTypes = this.extractNodeTypes(parsedData);
-        if (modelRefs.length > 0 || nodeTypes.length > 0) {
+        const canvasGraph = this.buildCanvasGraph(parsedData);
+        if (modelRefs.length > 0 || nodeTypes.length > 0 || canvasGraph) {
           results.push({
             filePath,
             fileName: path.basename(filePath),
@@ -87,6 +88,8 @@ export class WorkflowScanner {
             modelCount: modelRefs.length,
             models: modelRefs,
             nodeTypes,
+            rawGraph: parsedData,
+            canvasGraph,
           });
         }
       } catch (err: any) {
@@ -98,21 +101,73 @@ export class WorkflowScanner {
   }
 
   /**
-   * Parse a raw JSON workflow or API prompt object/string directly from memory
-   * without reading from disk.
+   * Deep normalizer for ComfyUI workflow JSON formats (Canvas UI, Prompt API, stringified metadata wrappers).
    */
-  async parseWorkflow(workflowData: any, workflowName = 'direct_workflow.json'): Promise<WorkflowInfo> {
-    let parsed: any = workflowData;
-    if (typeof workflowData === 'string') {
+  normalizeWorkflowData(raw: any): any {
+    if (!raw) return null;
+    let data = raw;
+
+    if (typeof data === 'string') {
       try {
-        parsed = JSON.parse(workflowData);
+        data = JSON.parse(data);
       } catch (e: any) {
         throw new Error(`Invalid workflow JSON format: ${e.message}`);
       }
     }
 
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Workflow payload must be a valid JSON object or string');
+    if (!data || typeof data !== 'object') {
+      throw new Error('Workflow payload must be a valid JSON object');
+    }
+
+    // Check if root is an array of nodes
+    if (Array.isArray(data)) {
+      return { nodes: data, links: [] };
+    }
+
+    // Unpack stringified subfields
+    if (typeof data.workflow === 'string') {
+      try {
+        data.workflow = JSON.parse(data.workflow);
+      } catch {}
+    }
+    if (typeof data.prompt === 'string') {
+      try {
+        data.prompt = JSON.parse(data.prompt);
+      } catch {}
+    }
+
+    // Unpack CivitAI / extra_pnginfo metadata wrappers
+    if (data.extra_pnginfo?.workflow) {
+      const nested =
+        typeof data.extra_pnginfo.workflow === 'string'
+          ? JSON.parse(data.extra_pnginfo.workflow)
+          : data.extra_pnginfo.workflow;
+      data = { ...data, ...nested, workflow: nested };
+    }
+    if (data.extra?.prompt) {
+      const nested =
+        typeof data.extra.prompt === 'string'
+          ? JSON.parse(data.extra.prompt)
+          : data.extra.prompt;
+      data = { ...data, prompt: nested };
+    }
+
+    // If data.workflow is an object containing nodes, promote nodes to top level
+    if (data.workflow && typeof data.workflow === 'object' && Array.isArray(data.workflow.nodes)) {
+      data = { ...data.workflow, ...data, nodes: data.workflow.nodes, links: data.workflow.links || [] };
+    }
+
+    return data;
+  }
+
+  /**
+   * Parse a raw JSON workflow or API prompt object/string directly from memory
+   * with strict validation.
+   */
+  async parseWorkflow(workflowData: any, workflowName = 'direct_workflow.json'): Promise<WorkflowInfo> {
+    const normalized = this.normalizeWorkflowData(workflowData);
+    if (!normalized) {
+      throw new Error(`Invalid workflow JSON format in "${workflowName}": Unable to parse JSON object.`);
     }
 
     // Load known local models from SQLite for instant matching
@@ -132,8 +187,17 @@ export class WorkflowScanner {
       }
     } catch {}
 
-    const modelRefs = this.extractModelReferences(parsed, localModelMap);
-    const nodeTypes = this.extractNodeTypes(parsed);
+    const modelRefs = this.extractModelReferences(normalized, localModelMap);
+    const nodeTypes = this.extractNodeTypes(normalized);
+    const canvasGraph = this.buildCanvasGraph(normalized);
+
+    const hasNodes = (canvasGraph?.nodes && canvasGraph.nodes.length > 0) || nodeTypes.length > 0;
+    if (!hasNodes && modelRefs.length === 0) {
+      throw new Error(
+        `Invalid ComfyUI workflow JSON: No recognizable ComfyUI nodes or prompt execution graph found in "${workflowName}". Please ensure this is an exported ComfyUI workflow (.json) or ComfyUI API prompt.`
+      );
+    }
+
     return {
       filePath: '',
       fileName: workflowName,
@@ -141,19 +205,92 @@ export class WorkflowScanner {
       modelCount: modelRefs.length,
       models: modelRefs,
       nodeTypes,
+      rawGraph: normalized,
+      canvasGraph,
     };
+  }
+
+  buildCanvasGraph(data: any): CanvasGraph | undefined {
+    if (!data || typeof data !== 'object') return undefined;
+    const normalized = this.normalizeWorkflowData(data) || data;
+
+    // 1. Full UI Canvas Workflow format (nodes with positions & link definitions)
+    const uiWorkflow = normalized.workflow ? normalized.workflow : (normalized.nodes ? normalized : null);
+    if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
+      return {
+        nodes: uiWorkflow.nodes.map((n: any) => ({
+          id: n.id,
+          type: n.type || n.class_type || 'Node',
+          pos: Array.isArray(n.pos) ? [n.pos[0], n.pos[1]] : [100, 100],
+          size: n.size || [220, 120],
+          inputs: Array.isArray(n.inputs) ? n.inputs : [],
+          outputs: Array.isArray(n.outputs) ? n.outputs : [],
+          widgets_values: Array.isArray(n.widgets_values) ? n.widgets_values : [],
+          title: n.title,
+          color: n.color,
+          bgcolor: n.bgcolor,
+        })),
+        links: Array.isArray(uiWorkflow.links) ? uiWorkflow.links : [],
+        groups: Array.isArray(uiWorkflow.groups) ? uiWorkflow.groups : [],
+      };
+    }
+
+    // 2. Fallback: Synthesize spatial layout from prompt execution dictionary
+    const promptNodes = normalized.prompt ? normalized.prompt : normalized;
+    if (promptNodes && typeof promptNodes === 'object' && !Array.isArray(promptNodes)) {
+      const nodeEntries = Object.entries<any>(promptNodes).filter(([_, v]) => v && typeof v === 'object' && (v.class_type || v.type || v.inputs));
+      if (nodeEntries.length > 0) {
+        const nodes: any[] = [];
+        const links: any[] = [];
+        let linkIdCounter = 1;
+
+        nodeEntries.forEach(([id, nodeObj], index) => {
+          const col = index % 4;
+          const row = Math.floor(index / 4);
+          const classType = nodeObj.class_type || nodeObj.type || 'Node';
+          const inputs = nodeObj.inputs || {};
+
+          const nodeInputs: any[] = [];
+          for (const [inKey, inVal] of Object.entries(inputs)) {
+            if (Array.isArray(inVal) && inVal.length === 2 && typeof inVal[0] === 'string') {
+              const srcNodeId = inVal[0];
+              const srcSlot = inVal[1];
+              const linkId = linkIdCounter++;
+              nodeInputs.push({ name: inKey, type: 'any', link: linkId });
+              links.push([linkId, Number(srcNodeId) || srcNodeId, srcSlot, Number(id) || id, nodeInputs.length - 1, 'any']);
+            } else {
+              nodeInputs.push({ name: inKey, type: typeof inVal, link: null });
+            }
+          }
+
+          nodes.push({
+            id: Number(id) || id,
+            type: classType,
+            pos: [80 + col * 320, 80 + row * 220],
+            size: [240, 140],
+            inputs: nodeInputs,
+            outputs: [{ name: 'OUT', type: 'any' }],
+          });
+        });
+
+        return { nodes, links, groups: [] };
+      }
+    }
+
+    return undefined;
   }
 
   extractNodeTypes(data: any): string[] {
     const types = new Set<string>();
     if (!data || typeof data !== 'object') return [];
+    const normalized = this.normalizeWorkflowData(data) || data;
 
-    // Format 1: API prompt format
-    const rootNodes = data.prompt ? data.prompt : data;
-    if (rootNodes && typeof rootNodes === 'object' && !Array.isArray(rootNodes)) {
-      for (const node of Object.values<any>(rootNodes)) {
+    // Format 1: UI workflow format
+    const uiWorkflow = normalized.workflow ? normalized.workflow : normalized;
+    if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
+      for (const node of uiWorkflow.nodes) {
         if (node && typeof node === 'object') {
-          const t = node.class_type || node.type;
+          const t = node.type || node.class_type;
           if (t && typeof t === 'string' && t.trim()) {
             types.add(t.trim());
           }
@@ -161,12 +298,12 @@ export class WorkflowScanner {
       }
     }
 
-    // Format 2: UI workflow format
-    const uiWorkflow = data.workflow ? data.workflow : data;
-    if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
-      for (const node of uiWorkflow.nodes) {
+    // Format 2: API prompt format
+    const rootNodes = normalized.prompt ? normalized.prompt : (uiWorkflow?.nodes ? null : normalized);
+    if (rootNodes && typeof rootNodes === 'object' && !Array.isArray(rootNodes)) {
+      for (const node of Object.values<any>(rootNodes)) {
         if (node && typeof node === 'object') {
-          const t = node.type || node.class_type;
+          const t = node.class_type || node.type;
           if (t && typeof t === 'string' && t.trim()) {
             types.add(t.trim());
           }
@@ -198,6 +335,15 @@ export class WorkflowScanner {
   extractPngWorkflow(filePath: string): any {
     try {
       const buffer = fs.readFileSync(filePath);
+      return this.extractPngWorkflowFromBuffer(buffer);
+    } catch (e: any) {
+      logger.warn(`Error reading PNG workflow file: ${filePath}`, e);
+      return null;
+    }
+  }
+
+  extractPngWorkflowFromBuffer(buffer: Buffer): any {
+    try {
       // Verify PNG signature: 89 50 4E 47 0D 0A 1A 0A
       if (
         buffer[0] !== 0x89 ||
@@ -212,12 +358,17 @@ export class WorkflowScanner {
         return null;
       }
 
+      let workflowData: any = null;
+      let promptData: any = null;
+
       let offset = 8;
       while (offset < buffer.length) {
+        if (offset + 8 > buffer.length) break;
         const length = buffer.readUInt32BE(offset);
         const type = buffer.toString('ascii', offset + 4, offset + 8);
         const dataStart = offset + 8;
         const dataEnd = dataStart + length;
+        if (dataEnd > buffer.length) break;
 
         if (type === 'tEXt') {
           const chunkData = buffer.slice(dataStart, dataEnd);
@@ -225,11 +376,13 @@ export class WorkflowScanner {
           if (nullIdx > 0) {
             const key = chunkData.slice(0, nullIdx).toString('latin1');
             const val = chunkData.slice(nullIdx + 1).toString('utf-8');
-            if (key === 'prompt' || key === 'workflow') {
-              try {
-                return JSON.parse(val);
-              } catch {}
-            }
+            try {
+              if (key === 'workflow') {
+                workflowData = JSON.parse(val);
+              } else if (key === 'prompt') {
+                promptData = JSON.parse(val);
+              }
+            } catch {}
           }
         } else if (type === 'iTXt') {
           const chunkData = buffer.slice(dataStart, dataEnd);
@@ -239,10 +392,8 @@ export class WorkflowScanner {
             const compFlag = chunkData[nullIdx + 1];
             // Skip compMethod, langTag, transKey null separators
             let textOffset = nullIdx + 3;
-            // Scan past lang tag null
             while (textOffset < chunkData.length && chunkData[textOffset] !== 0) textOffset++;
             textOffset++;
-            // Scan past trans key null
             while (textOffset < chunkData.length && chunkData[textOffset] !== 0) textOffset++;
             textOffset++;
 
@@ -256,9 +407,13 @@ export class WorkflowScanner {
               uncompressedText = textBuffer.toString('utf-8');
             }
 
-            if ((key === 'prompt' || key === 'workflow') && uncompressedText) {
+            if (uncompressedText) {
               try {
-                return JSON.parse(uncompressedText);
+                if (key === 'workflow') {
+                  workflowData = JSON.parse(uncompressedText);
+                } else if (key === 'prompt') {
+                  promptData = JSON.parse(uncompressedText);
+                }
               } catch {}
             }
           }
@@ -266,8 +421,14 @@ export class WorkflowScanner {
 
         offset = dataEnd + 4; // Skip 4-byte CRC
       }
+
+      if (workflowData && promptData) {
+        return { ...workflowData, workflow: workflowData, prompt: promptData };
+      }
+      if (workflowData) return workflowData;
+      if (promptData) return promptData;
     } catch (e) {
-      logger.warn(`Error parsing PNG chunks for workflow: ${filePath}`, e);
+      logger.warn('Error parsing PNG chunks for workflow buffer', e);
     }
     return null;
   }
@@ -275,11 +436,53 @@ export class WorkflowScanner {
   extractModelReferences(data: any, localModelMap: Map<string, string>): WorkflowModelReference[] {
     const refs: WorkflowModelReference[] = [];
     const seen = new Set<string>();
+    const normalized = this.normalizeWorkflowData(data) || data;
 
-    const checkAndAdd = (nodeId: string, nodeType: string, inputName: string, modelName: string) => {
+    const checkAndAdd = (nodeId: string, nodeType: string, inputName: string, modelName: any) => {
       if (!modelName || typeof modelName !== 'string') return;
       const cleanName = path.basename(modelName.trim());
-      if (!cleanName || cleanName === 'None' || cleanName === 'undefined') return;
+      if (
+        !cleanName ||
+        cleanName === 'None' ||
+        cleanName === 'undefined' ||
+        cleanName === 'null' ||
+        cleanName.startsWith('http://') ||
+        cleanName.startsWith('https://')
+      ) {
+        return;
+      }
+
+      const lowerName = cleanName.toLowerCase();
+      const isKnownModelExt =
+        lowerName.endsWith('.safetensors') ||
+        lowerName.endsWith('.ckpt') ||
+        lowerName.endsWith('.pt') ||
+        lowerName.endsWith('.pth') ||
+        lowerName.endsWith('.gguf') ||
+        lowerName.endsWith('.bin') ||
+        lowerName.endsWith('.onnx');
+
+      const isModelLoader =
+        nodeType.toLowerCase().includes('loader') ||
+        nodeType.toLowerCase().includes('checkpoint') ||
+        nodeType.toLowerCase().includes('lora') ||
+        nodeType.toLowerCase().includes('unet') ||
+        nodeType.toLowerCase().includes('diffusion') ||
+        nodeType.toLowerCase().includes('vae');
+
+      const isModelKey =
+        inputName.toLowerCase().includes('ckpt') ||
+        inputName.toLowerCase().includes('lora') ||
+        inputName.toLowerCase().includes('vae') ||
+        inputName.toLowerCase().includes('unet') ||
+        inputName.toLowerCase().includes('model') ||
+        inputName.toLowerCase().includes('clip') ||
+        inputName.toLowerCase().includes('control_net') ||
+        inputName.toLowerCase().includes('widget');
+
+      if (!isKnownModelExt && !(isModelLoader && isModelKey)) {
+        return;
+      }
 
       const key = `${nodeType}:${inputName}:${cleanName.toLowerCase()}`;
       if (seen.has(key)) return;
@@ -296,9 +499,44 @@ export class WorkflowScanner {
       });
     };
 
-    // Format 1: API prompt format { "1": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "..." } } }
-    const rootNodes = data.prompt ? data.prompt : data;
-    if (rootNodes && typeof rootNodes === 'object') {
+    // 1. UI workflow format { "nodes": [ ... ] }
+    const uiWorkflow = normalized.workflow ? normalized.workflow : normalized;
+    if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
+      for (const node of uiWorkflow.nodes) {
+        if (!node) continue;
+        const nodeId = node.id || 'node';
+        const nodeType = node.type || node.class_type || 'Node';
+        const widgets = node.widgets_values;
+
+        if (Array.isArray(widgets)) {
+          for (let i = 0; i < widgets.length; i++) {
+            const w = widgets[i];
+            if (typeof w === 'string') {
+              checkAndAdd(String(nodeId), nodeType, `widget_${i}`, w);
+            }
+          }
+        } else if (widgets && typeof widgets === 'object') {
+          for (const [k, v] of Object.entries(widgets)) {
+            if (typeof v === 'string') {
+              checkAndAdd(String(nodeId), nodeType, k, v);
+            }
+          }
+        }
+
+        if (node.inputs && typeof node.inputs === 'object') {
+          const inputList = Array.isArray(node.inputs) ? node.inputs : Object.values(node.inputs);
+          for (const inObj of inputList as any[]) {
+            if (inObj && typeof inObj === 'object' && typeof inObj.value === 'string') {
+              checkAndAdd(String(nodeId), nodeType, inObj.name || 'input', inObj.value);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. API prompt format { "1": { "class_type": "...", "inputs": { ... } } }
+    const rootNodes = normalized.prompt ? normalized.prompt : (uiWorkflow?.nodes ? null : normalized);
+    if (rootNodes && typeof rootNodes === 'object' && !Array.isArray(rootNodes)) {
       for (const [nodeId, node] of Object.entries<any>(rootNodes)) {
         if (!node || typeof node !== 'object') continue;
         const classType = node.class_type || node.type || '';
@@ -306,47 +544,7 @@ export class WorkflowScanner {
 
         for (const [inputKey, val] of Object.entries(inputs)) {
           if (typeof val === 'string') {
-            const lowerKey = inputKey.toLowerCase();
-            const lowerClass = classType.toLowerCase();
-            if (
-              lowerKey.includes('ckpt') ||
-              lowerKey.includes('lora') ||
-              lowerKey.includes('vae') ||
-              lowerKey.includes('model') ||
-              lowerKey.includes('clip') ||
-              lowerKey.includes('unet')
-            ) {
-              checkAndAdd(nodeId, classType || 'Loader', inputKey, val);
-            }
-          }
-        }
-      }
-    }
-
-    // Format 2: UI workflow format { "nodes": [ { "id": 1, "type": "CheckpointLoaderSimple", "widgets_values": ["..."] } ] }
-    const uiWorkflow = data.workflow ? data.workflow : data;
-    if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
-      for (const node of uiWorkflow.nodes) {
-        if (!node) continue;
-        const nodeId = node.id || 'node';
-        const nodeType = node.type || 'Node';
-        const widgets = node.widgets_values;
-
-        if (Array.isArray(widgets)) {
-          for (const w of widgets) {
-            if (typeof w === 'string') {
-              const lowerVal = w.toLowerCase();
-              if (
-                lowerVal.endsWith('.safetensors') ||
-                lowerVal.endsWith('.ckpt') ||
-                lowerVal.endsWith('.pt') ||
-                lowerVal.endsWith('.pth') ||
-                lowerVal.endsWith('.gguf') ||
-                lowerVal.endsWith('.bin')
-              ) {
-                checkAndAdd(String(nodeId), nodeType, 'widget_value', w);
-              }
-            }
+            checkAndAdd(nodeId, classType || 'Loader', inputKey, val);
           }
         }
       }

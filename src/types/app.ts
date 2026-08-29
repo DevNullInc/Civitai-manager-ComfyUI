@@ -156,6 +156,46 @@ export interface CustomNodePackage {
   gitRemoteUrl?: string;
 }
 
+export interface CanvasNodeInput {
+  name: string;
+  type: string;
+  link?: number | null;
+}
+
+export interface CanvasNodeOutput {
+  name: string;
+  type: string;
+  links?: number[] | null;
+}
+
+export interface CanvasNode {
+  id: number | string;
+  type: string;
+  pos?: [number, number];
+  size?: [number, number] | { 0: number; 1: number };
+  inputs?: CanvasNodeInput[];
+  outputs?: CanvasNodeOutput[];
+  widgets_values?: any[];
+  title?: string;
+  color?: string;
+  bgcolor?: string;
+}
+
+export interface CanvasLink {
+  id: number;
+  origin_id: number | string;
+  origin_slot: number;
+  target_id: number | string;
+  target_slot: number;
+  type: string;
+}
+
+export interface CanvasGraph {
+  nodes?: CanvasNode[];
+  links?: (number[] | CanvasLink)[];
+  groups?: any[];
+}
+
 export interface WorkflowInfo {
   filePath: string;
   fileName: string;
@@ -163,6 +203,8 @@ export interface WorkflowInfo {
   modelCount: number;
   models: WorkflowModelReference[];
   nodeTypes?: string[];
+  rawGraph?: any;
+  canvasGraph?: CanvasGraph;
 }
 
 export interface DownloadTask {

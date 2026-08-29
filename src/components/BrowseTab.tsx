@@ -102,9 +102,10 @@ interface BrowseTabProps {
     version: CivitAIModelVersion,
     options?: { deleteOldVersionFile?: string; deleteOldModelId?: string }
   ) => void;
+  initialQuery?: string;
 }
 
-export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
+export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQuery }) => {
   const [models, setModels] = useState<CivitAIModel[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +114,12 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload }) => {
   const [localModels, setLocalModels] = useState<LocalModel[]>([]);
   const [ignoredUpdates, setIgnoredUpdates] = useState<{ modelId: number; versionId: number }[]>([]);
   const [deleteOldOnUpdate, setDeleteOldOnUpdate] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (initialQuery !== undefined && initialQuery !== '') {
+      setQuery(initialQuery);
+    }
+  }, [initialQuery]);
 
   // Debug Diagnostics
   const [showDebug, setShowDebug] = useState<boolean>(false);

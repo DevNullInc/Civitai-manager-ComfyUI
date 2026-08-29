@@ -559,6 +559,9 @@ function startHttpBridgeServer() {
         const pkgs = await nodeResolverService.inspectLocalCustomNodes(targetNodesDir);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(pkgs));
+      } else if ((url === '/api/health' || url === '/health') && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), pid: process.pid }));
       } else if (url === '/api/scan-library' && req.method === 'POST') {
         const body = await getBody();
         // Fire-and-forget background scan to prevent HTTP socket headers timeout on large model directories
@@ -1080,6 +1083,10 @@ function registerIpcHandlers() {
     return await workflowScanner.scanWorkflows(paths);
   });
 
+  ipcMain.handle('parse-workflow', async (_event: unknown, workflowData: any, workflowName?: string) => {
+    return await workflowScanner.parseWorkflow(workflowData, workflowName);
+  });
+
   // ComfyUI Installation & Custom Node Inspection
   ipcMain.handle('inspect-comfyui-install', async (_event: unknown, targetPath?: string) => {
     return inspectComfyUIInstall(targetPath);
@@ -1482,24 +1489,28 @@ function performFullShutdown() {
     } catch (e) {}
   }
 
-  // 2. Kill spawned background processes (like Vite dev server)
+  // 2. Kill spawned background processes (like Vite dev server) with safety verification
   if (process.platform === 'win32') {
     for (const pid of pidsToKill) {
       try {
         child_process.execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
       } catch (e) {}
     }
-    // Also clean up any lingering process holding port 5173 or 5174
+    // Clean up only node/electron processes listening on 5173 or 5174, never browsers
     try {
       child_process.execSync(
-        `powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5173,5174 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { if ($_ -and $_ -ne ${process.pid}) { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }"`,
+        `powershell -NoProfile -Command "$prot = @('firefox','chrome','brave','opera','msedge','safari'); Get-NetTCPConnection -LocalPort 5173,5174 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { $p = Get-Process -Id $_ -ErrorAction SilentlyContinue; if ($p -and $p.Id -ne ${process.pid} -and ($p.ProcessName -eq 'node' -or $p.ProcessName -eq 'electron') -and -not ($prot -contains $p.ProcessName.ToLower())) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } }"`,
         { stdio: 'ignore' }
       );
     } catch (e) {}
   } else {
     for (const pid of pidsToKill) {
       try {
-        process.kill(pid, 'SIGKILL');
+        const comm = child_process.execSync(`ps -p ${pid} -o comm= 2>/dev/null`, { encoding: 'utf8' }).trim().toLowerCase();
+        const isBrowser = /firefox|chrome|chromium|brave|opera|edge|safari|zen|tor|waterfox|librewolf/.test(comm);
+        if (!isBrowser && (comm.includes('node') || comm.includes('electron') || comm.includes('vite'))) {
+          process.kill(pid, 'SIGTERM');
+        }
       } catch (e) {}
     }
   }

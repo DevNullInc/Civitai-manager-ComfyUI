@@ -19,11 +19,14 @@ import {
   Activity,
   Info as InfoIcon,
   Github,
+  Workflow,
   ExternalLink,
   Heart,
+  WifiOff,
 } from 'lucide-react';
 import { BrowseTab } from './components/BrowseTab';
 import { LibraryTab } from './components/LibraryTab';
+import { WorkflowsTab } from './components/WorkflowsTab';
 import { DownloadsTab } from './components/DownloadsTab';
 import { SettingsTab } from './components/SettingsTab';
 import { AboutTab } from './components/AboutTab';
@@ -33,7 +36,7 @@ import { DownloadFolderPromptModal } from './components/DownloadFolderPromptModa
 import { ScanProvider, useScan } from './context/ScanContext';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
 
-type Tab = 'browse' | 'library' | 'downloads' | 'settings' | 'about';
+type Tab = 'browse' | 'library' | 'workflows' | 'downloads' | 'settings' | 'about';
 
 export default function App() {
   return (
@@ -60,7 +63,9 @@ function AppContent() {
   });
   const [activeDownloadsCount, setActiveDownloadsCount] = useState<number>(0);
   const [hasFoldersConfigured, setHasFoldersConfigured] = useState<boolean>(true);
+  const [isBackendOnline, setIsBackendOnline] = useState<boolean>(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [browseInitialQuery, setBrowseInitialQuery] = useState<string>('');
   const [pendingDownloadPrompt, setPendingDownloadPrompt] = useState<{
     model: CivitAIModel;
     version: CivitAIModelVersion;
@@ -75,18 +80,45 @@ function AppContent() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (window.civitaiAPI) {
-      window.civitaiAPI
-        .getConfig()
-        .then((cfg) => {
-          const hasFolders = Boolean(
-            (cfg?.comfyui_folders && cfg.comfyui_folders.length > 0 && cfg.comfyui_folders[0]) ||
-              cfg?.comfyui_root
-          );
-          setHasFoldersConfigured(hasFolders);
-        })
-        .catch(() => {});
-    }
+    let isMounted = true;
+
+    const checkHealth = async () => {
+      try {
+        if (window.civitaiAPI?.getConfig) {
+          const cfg = await Promise.race([
+            window.civitaiAPI.getConfig(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500)),
+          ]) as any;
+          if (isMounted) {
+            setIsBackendOnline(true);
+            const hasFolders = Boolean(
+              (cfg?.comfyui_folders && cfg.comfyui_folders.length > 0 && cfg.comfyui_folders[0]) ||
+                cfg?.comfyui_root
+            );
+            setHasFoldersConfigured(hasFolders);
+          }
+        } else {
+          const res = await fetch('http://127.0.0.1:5174/api/health', {
+            method: 'GET',
+            signal: AbortSignal.timeout(2500),
+          });
+          if (isMounted) {
+            setIsBackendOnline(res.ok);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setIsBackendOnline(false);
+        }
+      }
+    };
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [activeTab]);
 
   useEffect(() => {
@@ -252,7 +284,7 @@ function AppContent() {
 
           <button
             onClick={() => setActiveTab('library')}
-            className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
+            className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'library'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -263,8 +295,20 @@ function AppContent() {
           </button>
 
           <button
+            onClick={() => setActiveTab('workflows')}
+            className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
+              activeTab === 'workflows'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
+            }`}
+          >
+            <Workflow size={16} className={activeTab === 'workflows' ? 'text-white' : 'text-cyan-400'} />
+            <span>Workflows</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('downloads')}
-            className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative whitespace-nowrap ${
+            className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative whitespace-nowrap ${
               activeTab === 'downloads'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -305,8 +349,23 @@ function AppContent() {
           </button>
         </nav>
 
-        {/* Right: Dynamic Engine & Activity Status Badge */}
+        {/* Multi-Purpose Dynamic Header Status Badge */}
         {(() => {
+          if (!isBackendOnline) {
+            return (
+              <div
+                className="flex items-center gap-2 shrink-0 bg-rose-500/15 border border-rose-500/40 px-3.5 py-1.5 rounded-xl text-[11px] font-bold text-rose-400 shadow-sm"
+                title="CivitAI Model Manager backend is offline or disconnected. Start the application with ./cmm.sh"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                </span>
+                <WifiOff size={13} className="text-rose-400" />
+                <span>Offline</span>
+              </div>
+            );
+          }
+
           if (isScanning) {
             const pct = scanProgress?.totalFiles
               ? Math.round((scanProgress.scannedFiles / scanProgress.totalFiles) * 100)
@@ -379,11 +438,33 @@ function AppContent() {
 
         <div className="relative z-10 min-h-full pb-8">
           <ErrorBoundary>
-            {activeTab === 'browse' && <BrowseTab onQueueDownload={handleQueueDownload} />}
-            {activeTab === 'library' && <LibraryTab onCheckUpdate={handleCheckUpdate} />}
-            {activeTab === 'downloads' && <DownloadsTab />}
-            {activeTab === 'settings' && <SettingsTab />}
-            {activeTab === 'about' && <AboutTab />}
+            <div style={{ display: activeTab === 'browse' ? 'block' : 'none' }}>
+              <BrowseTab
+                onQueueDownload={handleQueueDownload}
+                initialQuery={browseInitialQuery}
+              />
+            </div>
+            <div style={{ display: activeTab === 'library' ? 'block' : 'none' }}>
+              <LibraryTab onCheckUpdate={handleCheckUpdate} />
+            </div>
+            <div style={{ display: activeTab === 'workflows' ? 'block' : 'none' }}>
+              <WorkflowsTab
+                onSearchModel={(query) => {
+                  setBrowseInitialQuery(query);
+                  setActiveTab('browse');
+                }}
+                onNavigateToDownloads={() => setActiveTab('downloads')}
+              />
+            </div>
+            <div style={{ display: activeTab === 'downloads' ? 'block' : 'none' }}>
+              <DownloadsTab />
+            </div>
+            <div style={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+              <SettingsTab />
+            </div>
+            <div style={{ display: activeTab === 'about' ? 'block' : 'none' }}>
+              <AboutTab />
+            </div>
           </ErrorBoundary>
         </div>
 

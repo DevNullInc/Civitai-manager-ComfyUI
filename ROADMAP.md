@@ -22,11 +22,12 @@ graph LR
 >
 > **Goal**: Turn the Workflow Scanner engine into an interactive visual tab with automatic missing model resolution, and provide a secure Local API bridge for external ComfyUI custom nodes.
 
-- [ ] **Dedicated "Workflows" UI Tab**:
-  - Drag-and-drop any ComfyUI `.json` workflow or generated image `.png` directly into CMM.
-  - Visual dependency matrix displaying which Checkpoints, LoRAs, VAEs, ControlNets, UNETs, and Upscalers are **Installed** vs. **Missing**.
-- [ ] **"Download All Missing Models" 1-Click Action**:
-  - Automatically queries CivitAI & Hugging Face for missing model names and enqueues all downloads with appropriate subfolder routing.
+- [x] ~~**Dedicated "Workflows" UI Tab**:~~
+  - ~~Drag-and-drop any ComfyUI `.json` workflow or generated image `.png` directly into CMM with dual `tEXt`/`iTXt` chunk parsing.~~
+  - ~~Interactive Visual Node Map preserving spatial canvas coordinates with zoom/pan and node readiness status color coding.~~
+  - ~~Visual dependency matrix displaying which Checkpoints, LoRAs, VAEs, ControlNets, UNETs, and Upscalers are **Installed** vs. **Missing**.~~
+- [x] ~~**"Download All Missing Models" & Model Search Jump Action**:~~
+  - ~~1-click search & download transitions with real-time inline progress bars and speed metrics.~~
 - [ ] **Decoupled ComfyUI Custom Node Extension Package**:
   - Maintained as an independent companion repository/package with ComfyUI's custom node folder structure (`custom_nodes/comfyui-civitai-manager-node`).
   - Seamlessly communicates with CMM via the native HTTP Bridge on `127.0.0.1:5174`.

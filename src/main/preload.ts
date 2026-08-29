@@ -70,6 +70,8 @@ const api = {
   openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
   // Workflows & Webhooks
   scanWorkflows: (folderPaths?: string | string[]) => ipcRenderer.invoke('scan-workflows', folderPaths),
+  parseWorkflow: (workflowData: any, workflowName?: string) =>
+    ipcRenderer.invoke('parse-workflow', workflowData, workflowName),
   testWebhook: (url: string, event: string) => ipcRenderer.invoke('test-webhook', url, event),
 
   // Node Resolution & GitHub Fallback

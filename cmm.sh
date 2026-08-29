@@ -94,32 +94,76 @@ ensure_node_installed() {
   fi
 }
 
+is_safe_to_kill() {
+  local target_pid="$1"
+  if [ -z "$target_pid" ] || ! kill -0 "$target_pid" 2>/dev/null; then
+    return 1
+  fi
+
+  # Never kill current process, parent, or system init
+  if [ "$target_pid" -le 1 ] || [ "$target_pid" -eq "$$" ]; then
+    return 1
+  fi
+
+  local comm=""
+  local cmdline=""
+  comm=$(ps -p "$target_pid" -o comm= 2>/dev/null | tr '[:upper:]' '[:lower:]' | xargs)
+  cmdline=$(ps -p "$target_pid" -o args= 2>/dev/null | tr '[:upper:]' '[:lower:]')
+
+  # 1. Protected Process Blacklist (Never kill web browsers, user shells, or desktop systems)
+  case "$comm" in
+    *firefox*|*chrome*|*chromium*|*brave*|*opera*|*edge*|*safari*|*vivaldi*|*zen*|*tor*|*waterfox*|*librewolf*|*epiphany*)
+      return 1
+      ;;
+    *bash*|*zsh*|*sh*|*gnome*|*kde*|*systemd*|*init*|*xorg*|*wayland*|*dbus*|*pipewire*)
+      return 1
+      ;;
+  esac
+
+  if echo "$cmdline" | grep -qE "(firefox|chrome|chromium|brave|opera|msedge|zen-browser|vivaldi)"; then
+    return 1
+  fi
+
+  # 2. Must be an Electron or Node/Vite process associated with this project
+  if echo "$cmdline" | grep -qF "$SCRIPT_DIR" || echo "$cmdline" | grep -qE "electron|vite|civitai-manager"; then
+    case "$comm" in
+      *electron*|*node*|*npm*|*cmm*|*civitai*)
+        return 0
+        ;;
+    esac
+  fi
+
+  return 1
+}
+
 get_running_pids() {
   local pids=()
   local seen=()
 
-  # 1. Read stored PID file
+  # 1. Read stored PID file (with strict safety verification)
   if [ -f "$PID_FILE" ]; then
     while read -r pid; do
-      if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-        pids+=("$pid")
-        seen+=("$pid")
+      if [[ "$pid" =~ ^[0-9]+$ ]] && is_safe_to_kill "$pid"; then
+        if [[ ! " ${seen[*]} " =~ " ${pid} " ]]; then
+          pids+=("$pid")
+          seen+=("$pid")
+        fi
       fi
     done < "$PID_FILE"
   fi
 
-  # 2. Check ports ($PORT and $API_PORT)
+  # 2. Check ports ($PORT and $API_PORT) ONLY in TCP LISTEN state
   for p in "$PORT" "$API_PORT"; do
     if command -v lsof >/dev/null 2>&1; then
-      for port_pid in $(lsof -ti :"$p" 2>/dev/null || true); do
-        if [[ ! " ${seen[*]} " =~ " ${port_pid} " ]] && kill -0 "$port_pid" 2>/dev/null; then
+      for port_pid in $(lsof -sTCP:LISTEN -ti :"$p" 2>/dev/null || true); do
+        if [[ ! " ${seen[*]} " =~ " ${port_pid} " ]] && is_safe_to_kill "$port_pid"; then
           pids+=("$port_pid")
           seen+=("$port_pid")
         fi
       done
-    elif command -v fuser >/dev/null 2>&1; then
-      for port_pid in $(fuser "$p"/tcp 2>/dev/null || true); do
-        if [[ ! " ${seen[*]} " =~ " ${port_pid} " ]] && kill -0 "$port_pid" 2>/dev/null; then
+    elif command -v ss >/dev/null 2>&1; then
+      for port_pid in $(ss -lptn "sport = :$p" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2); do
+        if [[ ! " ${seen[*]} " =~ " ${port_pid} " ]] && is_safe_to_kill "$port_pid"; then
           pids+=("$port_pid")
           seen+=("$port_pid")
         fi
@@ -127,9 +171,15 @@ get_running_pids() {
     fi
   done
 
-  # 3. Check workspace Electron processes
+  # 3. Check workspace Electron & Vite processes
   for proc_pid in $(pgrep -f "electron.*$SCRIPT_DIR" 2>/dev/null || true); do
-    if [[ ! " ${seen[*]} " =~ " ${proc_pid} " ]] && kill -0 "$proc_pid" 2>/dev/null; then
+    if [[ ! " ${seen[*]} " =~ " ${proc_pid} " ]] && is_safe_to_kill "$proc_pid"; then
+      pids+=("$proc_pid")
+      seen+=("$proc_pid")
+    fi
+  done
+  for proc_pid in $(pgrep -f "node.*vite.*$PORT" 2>/dev/null || true); do
+    if [[ ! " ${seen[*]} " =~ " ${proc_pid} " ]] && is_safe_to_kill "$proc_pid"; then
       pids+=("$proc_pid")
       seen+=("$proc_pid")
     fi
@@ -150,10 +200,10 @@ stop_app() {
 
   write_status "x" "Stopping ${#pids[@]} process(es)..." "$C_RED"
   for pid in "${pids[@]}"; do
-    if kill -0 "$pid" 2>/dev/null; then
+    if is_safe_to_kill "$pid"; then
       kill "$pid" 2>/dev/null || true
       sleep 0.5
-      if kill -0 "$pid" 2>/dev/null; then
+      if kill -0 "$pid" 2>/dev/null && is_safe_to_kill "$pid"; then
         kill -9 "$pid" 2>/dev/null || true
       fi
       write_status "ok" "Terminated PID $pid" "$C_GRAY"
