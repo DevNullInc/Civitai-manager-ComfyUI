@@ -8,13 +8,13 @@
  * (at your option) any later version.
  */
 import axios, { AxiosInstance } from 'axios';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../utils/logger';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface HFModelInfo {
   id: string;
@@ -216,7 +216,7 @@ export class HuggingFaceClient {
 
   async isCliAvailable(): Promise<boolean> {
     try {
-      const { stdout } = await execAsync('hf --version');
+      const { stdout } = await execFileAsync('hf', ['--version']);
       return stdout.toLowerCase().includes('huggingface') || stdout.toLowerCase().includes('hf');
     } catch {
       return false;
@@ -225,7 +225,7 @@ export class HuggingFaceClient {
 
   async getCliWhoami(): Promise<{ available: boolean; loggedIn: boolean; output?: string }> {
     try {
-      const { stdout } = await execAsync('hf auth whoami');
+      const { stdout } = await execFileAsync('hf', ['auth', 'whoami']);
       const text = stdout.trim();
       return {
         available: true,

@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 import http from 'http';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
@@ -22,7 +22,7 @@ import {
   CustomNodePackage,
 } from '../types/app';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // URLs for ComfyUI-Manager curated node databases
 const MANAGER_NODE_MAP_URL =
@@ -414,9 +414,21 @@ export class NodeResolverService {
       };
     }
 
+    const trimmedUrl = (gitUrl || '').trim();
+    if (!trimmedUrl || (!trimmedUrl.startsWith('https://') && !trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('git@'))) {
+      return {
+        success: false,
+        folderName,
+        targetPath,
+        hasRequirements: false,
+        hasInstallScript: false,
+        error: 'Invalid or unsupported Git URL provided',
+      };
+    }
+
     try {
-      logger.info(`Cloning custom node [${folderName}] from: ${gitUrl}`);
-      await execAsync(`git clone --depth 1 "${gitUrl}" "${targetPath}"`);
+      logger.info(`Cloning custom node [${folderName}] from: ${trimmedUrl}`);
+      await execFileAsync('git', ['clone', '--depth', '1', trimmedUrl, targetPath]);
 
       const hasRequirements = fs.existsSync(path.join(targetPath, 'requirements.txt'));
       const hasInstallScript = fs.existsSync(path.join(targetPath, 'install.py'));
@@ -465,18 +477,22 @@ export class NodeResolverService {
     try {
       if (fs.existsSync(reqPath)) {
         logger.info(`Installing requirements via [${pythonBin}] in ${nodeFolderPath}...`);
-        const { stdout, stderr } = await execAsync(`"${pythonBin}" -m pip install -r "requirements.txt"`, {
-          cwd: nodeFolderPath,
-        });
-        outputLog += stdout + '\n' + stderr;
+        const { stdout, stderr } = await execFileAsync(
+          pythonBin,
+          ['-m', 'pip', 'install', '-r', 'requirements.txt'],
+          { cwd: nodeFolderPath }
+        );
+        outputLog += (stdout || '') + '\n' + (stderr || '');
       }
 
       if (fs.existsSync(installPyPath)) {
         logger.info(`Executing install.py via [${pythonBin}] in ${nodeFolderPath}...`);
-        const { stdout, stderr } = await execAsync(`"${pythonBin}" "install.py"`, {
-          cwd: nodeFolderPath,
-        });
-        outputLog += stdout + '\n' + stderr;
+        const { stdout, stderr } = await execFileAsync(
+          pythonBin,
+          ['install.py'],
+          { cwd: nodeFolderPath }
+        );
+        outputLog += (stdout || '') + '\n' + (stderr || '');
       }
 
       return { success: true, output: outputLog };
