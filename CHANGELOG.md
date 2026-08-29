@@ -31,11 +31,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Top-right `(X)` close button on each workflow card in the loaded workflows carousel for individual dismissal.
   - Automatic `sessionStorage` backup synchronization for loaded workflows.
 
+- **Open-Source Contribution Guidelines**:
+  - Added [`CONTRIBUTING.md`](CONTRIBUTING.md) with complete developer setup workflows, project architecture maps, and code style standards.
+- **Complete Local REST API Reference**:
+  - Updated [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) with 100% endpoint coverage, request/response schemas, and updated Python helper client (`CMMClient`) for companion custom node integration.
+
 ### 🛡️ Fixed & Improved
 - **Process Shutdown Protection & Sanity Checking**:
   - Added strict blacklist protections in `cmm.sh`, `cmm.ps1`, and `src/main/index.ts` forbidding termination of web browsers (`firefox`, `chrome`, `chromium`, `brave`, `opera`, `msedge`, `safari`, `zen-browser`, `tor`) and system processes during `./cmm.sh stop` or `./cmm.sh restart`.
   - Port inspection filtered to `-sTCP:LISTEN` sockets only, preventing client TCP socket connections from being targeted.
   - Verified process binaries and working directories to ensure only internal CMM Electron and Vite dev server processes are stopped.
+- **Launcher Security & Exploit Hardening (`cmm.sh` & `cmm.ps1`)**:
+  - Enforced strict integer port range validation (`1024`–`65535`) on `--port` and `--api-port` flags to reject malformed arguments and injection attempts.
+  - Expanded protected process blacklist across `cmm.sh`, `cmm.ps1`, and `src/main/index.ts` shielding web browsers (`firefox`, `chrome`, `chromium`, `brave`, `opera`, `msedge`, `safari`, `zen-browser`, `tor`, `waterfox`, `librewolf`, `epiphany`, `midori`, `qutebrowser`), terminal emulators, and user shells.
+  - Hardened process inspection using `/proc/$pid/exe` (Linux) and WMI `Win32_Process` (Windows) to strictly target CMM-owned Node/Electron processes.
+  - Switched background process launching to structured parameter arrays to eliminate word splitting and shell command injection vectors.
 - **Deep ComfyUI JSON Format Normalization**:
   - Robust parser supporting direct UI canvas exports, nested `{ workflow: { nodes } }`, API execution prompts `{ "3": { class_type } }`, array node lists, and stringified metadata wrappers (`extra_pnginfo.workflow`, `extra.prompt`).
   - Strict JSON validity verification: immediately alerts user on non-ComfyUI JSON payloads or corrupted files without adding empty 0/0 cards to the queue.
