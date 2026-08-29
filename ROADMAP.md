@@ -33,9 +33,9 @@ graph LR
 - [x] ~~**Process Safety & Health Monitoring**:~~
   - ~~Strict process blacklist protections in `cmm.sh`, `cmm.ps1`, and `src/main/index.ts` to prevent closing external web browsers (Firefox, Chrome, Opera, Brave, etc.) and foreign processes during shutdown or restart.~~
   - ~~Real-time backend heartbeat monitoring (`/api/health`) and dynamic red **"Offline"** status badge.~~
-- [ ] **Decoupled ComfyUI Custom Node Extension Package**:
-  - Maintained as an independent companion repository/package with ComfyUI's custom node folder structure (`custom_nodes/comfyui-civitai-manager-node`).
-  - Seamlessly communicates with CMM via the native HTTP Bridge on `127.0.0.1:5174`.
+- [x] ~~**Decoupled ComfyUI Custom Node Extension Package**~~ *(Completed but currently Untested)*:
+  - ~~Maintained as an independent companion repository/package with ComfyUI's custom node folder structure (`custom_nodes/comfyui-civitai-manager-node`).~~
+  - ~~Seamlessly communicates with CMM via the native HTTP Bridge on `127.0.0.1:5174`.~~
 - [x] ~~**Localhost-Only Security Hardening**:~~
   - ~~Strict `127.0.0.1` binding with remote IP filtering, Origin verification, and in-app Settings toggle to guarantee zero remote/LAN access to local filesystem operations.~~
 - [x] ~~**Custom Node Developer Documentation**:~~
