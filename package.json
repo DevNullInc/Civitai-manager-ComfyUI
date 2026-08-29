@@ -26,6 +26,11 @@
     "cmm:restart": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 restart",
     "cmm:status": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 status",
     "cmm:package": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 package",
+    "cmm:start:linux": "./cmm.sh start",
+    "cmm:stop:linux": "./cmm.sh stop",
+    "cmm:restart:linux": "./cmm.sh restart",
+    "cmm:status:linux": "./cmm.sh status",
+    "cmm:package:linux": "./cmm.sh package",
     "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
@@ -61,7 +66,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-window": "^1.8.11",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^6.0.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -71,7 +76,7 @@
     "@types/react-dom": "^18.3.5",
     "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^39.8.10",
+    "electron": "^44.0.0",
     "electron-builder": "^26.15.3",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3",
@@ -143,7 +148,7 @@
     }
   },
   "allowScripts": {
-    "electron@39.8.10": true,
+    "electron@44.0.0": true,
     "electron-winstaller@5.4.0": true,
     "esbuild@0.25.12": true,
     "keytar@7.9.0": true,

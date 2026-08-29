@@ -93,6 +93,8 @@ export interface AppConfig {
   strict_hash_verification?: boolean;
   max_concurrent_downloads?: number;
   default_download_folder?: string;
+  local_api_enabled?: boolean;
+  local_api_port?: number;
 }
 
 export interface WorkflowModelReference {

@@ -47,6 +47,8 @@ let currentConfig: AppConfig = {
   conflict_strategy: 'rename',
   nsfw_max_visible_level: 5,
   nsfw_blur_enabled: true,
+  local_api_enabled: true,
+  local_api_port: 5174,
 };
 
 async function createWindow() {
@@ -153,6 +155,12 @@ async function loadConfigFromDb() {
     if (cfgObj.default_download_folder !== undefined) {
       currentConfig.default_download_folder = cfgObj.default_download_folder;
     }
+    if (cfgObj.local_api_enabled !== undefined) {
+      currentConfig.local_api_enabled = cfgObj.local_api_enabled;
+    }
+    if (cfgObj.local_api_port !== undefined) {
+      currentConfig.local_api_port = cfgObj.local_api_port;
+    }
 
     folderRouter.updateConfig({
       rootPath: currentConfig.comfyui_root || currentConfig.comfyui_folders[0] || '',
@@ -168,10 +176,37 @@ async function loadConfigFromDb() {
 }
 
 function startHttpBridgeServer() {
+  const apiPort =
+    parseInt(process.env.API_PORT || process.env.BRIDGE_PORT || process.env.CMM_PORT || '', 10) || 5174;
+
   const server = http.createServer(async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Enforce strict localhost only (127.0.0.1 / ::1 / ::ffff:127.0.0.1)
+    const remoteIp = req.socket.remoteAddress || '';
+    const isLocal =
+      remoteIp === '127.0.0.1' ||
+      remoteIp === '::1' ||
+      remoteIp === '::ffff:127.0.0.1' ||
+      remoteIp.endsWith('127.0.0.1');
+
+    if (!isLocal) {
+      logger.warn(`Security: Blocked non-localhost HTTP bridge connection attempt from ${remoteIp}`);
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Access forbidden: Localhost (127.0.0.1) connections only' }));
+      return;
+    }
+
+    // Origin header verification to guard against DNS rebinding & browser CSRF
+    const origin = req.headers.origin;
+    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1') && !origin.startsWith('app://') && !origin.startsWith('file://')) {
+      logger.warn(`Security: Blocked untrusted Origin header in HTTP bridge: ${origin}`);
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Access forbidden: Untrusted Origin' }));
+      return;
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -195,6 +230,32 @@ function startHttpBridgeServer() {
       });
 
     try {
+      if ((url === '/api/status' || url === '/api/health') && req.method === 'GET') {
+        const isApiEnabled = currentConfig.local_api_enabled !== false;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            status: isApiEnabled ? 'online' : 'disabled',
+            enabled: isApiEnabled,
+            name: 'CivitAI Model Manager',
+            version: '1.3.0',
+            port: apiPort,
+            host: '127.0.0.1',
+            localhostOnly: true,
+          })
+        );
+        return;
+      }
+
+      // If Local API Bridge is disabled in settings, reject external API endpoints
+      const pathname = url.split('?')[0];
+      const isConfigEndpoint = pathname === '/api/config' || pathname === '/api/save-config';
+      if (currentConfig.local_api_enabled === false && !isConfigEndpoint) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Local API Bridge is disabled in Settings.' }));
+        return;
+      }
+
       if (url === '/api/config' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(currentConfig));
@@ -303,6 +364,20 @@ function startHttpBridgeServer() {
           await dbManager.run(
             'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
             ['default_download_folder', JSON.stringify(body.default_download_folder)]
+          );
+        }
+
+        if (body.local_api_enabled !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['local_api_enabled', JSON.stringify(body.local_api_enabled)]
+          );
+        }
+
+        if (body.local_api_port !== undefined) {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['local_api_port', JSON.stringify(body.local_api_port)]
           );
         }
 
@@ -567,9 +642,27 @@ function startHttpBridgeServer() {
         imageCacheService.clearPermanentLibraryCache();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
-      } else if (url === '/api/workflows' && req.method === 'POST') {
+      } else if ((url === '/api/workflows' || url === '/api/workflow/parse' || url === '/api/parse-workflow') && req.method === 'POST') {
         const body = await getBody();
-        const folderPaths = body.folderPaths || currentConfig.comfyui_folders || [currentConfig.comfyui_root];
+
+        // 1. Direct raw JSON workflow payload in POST body
+        const isDirectWorkflow =
+          body.workflow !== undefined ||
+          body.prompt !== undefined ||
+          body.nodes !== undefined ||
+          (typeof body === 'object' && !body.folderPaths && !body.folderPath && !body.path && Object.keys(body).length > 0 && !Array.isArray(body));
+
+        if (isDirectWorkflow && !body.folderPaths && !body.folderPath && !body.path) {
+          const rawData = body.workflow !== undefined ? body.workflow : (body.prompt !== undefined ? body.prompt : body);
+          const workflowName = body.name || body.fileName || 'direct_workflow.json';
+          const result = await workflowScanner.parseWorkflow(rawData, workflowName);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+          return;
+        }
+
+        // 2. Folder paths fallback for disk scanning
+        const folderPaths = body.folderPaths || body.folderPath || body.path || currentConfig.comfyui_folders || [currentConfig.comfyui_root];
         const workflows = await workflowScanner.scanWorkflows(folderPaths);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(workflows));
@@ -612,14 +705,14 @@ function startHttpBridgeServer() {
 
   server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
-      logger.warn('Port 5174 is already in use by an active instance. Reusing existing bridge connection.');
+      logger.warn(`Port ${apiPort} is already in use by an active instance. Reusing existing bridge connection.`);
     } else {
       logger.error('HTTP Server bridge error:', err);
     }
   });
 
-  server.listen(5174, () => {
-    logger.info('HTTP Native Server Bridge running on http://localhost:5174');
+  server.listen(apiPort, '127.0.0.1', () => {
+    logger.info(`HTTP Native Server Bridge securely listening on http://127.0.0.1:${apiPort} (Localhost only)`);
   });
 }
 
@@ -754,6 +847,20 @@ function registerIpcHandlers() {
       await dbManager.run(
         'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
         ['default_download_folder', JSON.stringify(newConfig.default_download_folder)]
+      );
+    }
+
+    if (newConfig.local_api_enabled !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['local_api_enabled', JSON.stringify(newConfig.local_api_enabled)]
+      );
+    }
+
+    if (newConfig.local_api_port !== undefined) {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['local_api_port', JSON.stringify(newConfig.local_api_port)]
       );
     }
 

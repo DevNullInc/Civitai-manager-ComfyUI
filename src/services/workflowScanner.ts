@@ -95,6 +95,51 @@ export class WorkflowScanner {
     return results;
   }
 
+  /**
+   * Parse a raw JSON workflow or API prompt object/string directly from memory
+   * without reading from disk.
+   */
+  async parseWorkflow(workflowData: any, workflowName = 'direct_workflow.json'): Promise<WorkflowInfo> {
+    let parsed: any = workflowData;
+    if (typeof workflowData === 'string') {
+      try {
+        parsed = JSON.parse(workflowData);
+      } catch (e: any) {
+        throw new Error(`Invalid workflow JSON format: ${e.message}`);
+      }
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Workflow payload must be a valid JSON object or string');
+    }
+
+    // Load known local models from SQLite for instant matching
+    let localModelMap = new Map<string, string>();
+    try {
+      if (!(dbManager as any).db) {
+        await dbManager.init().catch(() => {});
+      }
+      const localRows: any[] = (await dbManager.all('SELECT file_name, file_path FROM local_models;')) || [];
+      for (const r of localRows) {
+        if (r.file_name) {
+          localModelMap.set(r.file_name.toLowerCase(), r.file_path);
+        }
+        if (r.file_path) {
+          localModelMap.set(path.basename(r.file_path).toLowerCase(), r.file_path);
+        }
+      }
+    } catch {}
+
+    const modelRefs = this.extractModelReferences(parsed, localModelMap);
+    return {
+      filePath: '',
+      fileName: workflowName,
+      fileType: 'json',
+      modelCount: modelRefs.length,
+      models: modelRefs,
+    };
+  }
+
   private collectWorkflowFiles(dir: string, list: string[], depth = 0) {
     if (depth > 5 || !fs.existsSync(dir)) return;
     try {

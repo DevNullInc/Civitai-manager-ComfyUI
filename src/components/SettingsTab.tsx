@@ -32,6 +32,9 @@ import {
   Download,
   Code,
   HardDrive,
+  Server,
+  Lock,
+  Terminal,
 } from 'lucide-react';
 import { AppConfig, ConflictStrategy, FilenamePatternRule, DEFAULT_FOLDER_MAP, DEFAULT_FILENAME_PATTERNS } from '../types/app';
 
@@ -55,6 +58,8 @@ export const SettingsTab: React.FC = () => {
     strict_hash_verification: true,
     max_concurrent_downloads: 2,
     default_download_folder: '',
+    local_api_enabled: true,
+    local_api_port: 5174,
   });
 
   const [saving, setSaving] = useState(false);
@@ -123,6 +128,8 @@ export const SettingsTab: React.FC = () => {
                 ? loaded.max_concurrent_downloads
                 : 2,
             default_download_folder: loaded.default_download_folder || '',
+            local_api_enabled: loaded.local_api_enabled !== false,
+            local_api_port: loaded.local_api_port || 5174,
           });
         }
       }
@@ -896,6 +903,98 @@ export const SettingsTab: React.FC = () => {
                 {webhookStatus.message}
               </p>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Localhost HTTP API Bridge (Custom Nodes & Integrations) */}
+      <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5 text-slate-100 font-bold text-base">
+            <Server className="text-emerald-400" size={20} />
+            <h2>Localhost HTTP API Bridge</h2>
+          </div>
+          <span
+            className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
+              config.local_api_enabled !== false
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                : 'bg-slate-800 text-slate-400 border border-slate-700'
+            }`}
+          >
+            {config.local_api_enabled !== false ? 'API Active' : 'API Disabled'}
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Enables local ComfyUI custom nodes, automation scripts, and workflow tools to query model statuses, parse raw workflow JSONs, and trigger automated downloads via <code className="text-emerald-300 font-mono text-[11px]">http://127.0.0.1:{config.local_api_port || 5174}</code>.
+        </p>
+
+        <div className="space-y-4 pt-1">
+          {/* Main Enable/Disable Switch */}
+          <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
+            <div className="space-y-0.5">
+              <label className="text-xs font-bold text-slate-200 block cursor-pointer">
+                Enable Localhost HTTP API Bridge
+              </label>
+              <p className="text-[11px] text-slate-400">
+                When enabled, local applications and custom nodes on this computer can communicate with CMM.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={config.local_api_enabled !== false}
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  local_api_enabled: config.local_api_enabled === false,
+                })
+              }
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                config.local_api_enabled !== false ? 'bg-emerald-500' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  config.local_api_enabled !== false ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Port and Settings */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                API Bridge Port (Default: 5174)
+              </label>
+              <input
+                type="number"
+                min="1024"
+                max="65535"
+                placeholder="5174"
+                value={config.local_api_port || 5174}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    local_api_port: parseInt(e.target.value, 10) || 5174,
+                  })
+                }
+                className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Port for the HTTP Bridge. Can also be overridden at launch via <code className="text-slate-400 font-mono">--api-port</code>.
+              </p>
+            </div>
+
+            {/* Security Isolation Notice */}
+            <div className="p-3.5 rounded-2xl bg-emerald-950/20 border border-emerald-800/40 text-emerald-300 text-xs flex items-start gap-2.5">
+              <Lock size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <span className="font-bold block mb-0.5">Strict Localhost Isolation</span>
+                Sockets outside <code className="text-emerald-200 font-mono">127.0.0.1</code> and non-local browser origins are blocked for filesystem security.
+              </div>
+            </div>
           </div>
         </div>
       </div>

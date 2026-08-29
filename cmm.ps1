@@ -30,6 +30,7 @@ param(
   [string]$Action = 'start',
 
   [int]$Port = 5173,
+  [int]$ApiPort = 5174,
 
   [switch]$Headless,
   [switch]$NoWindow,
@@ -308,6 +309,7 @@ function Start-App {
   # 2) Start Vite dev server (for browser access)
   Write-Status '>>' "Starting Vite server on port $Port..." 'Cyan'
   $env:PORT = "$Port"
+  $env:API_PORT = "$ApiPort"
   $env:VITE_DEV_SERVER_URL = "http://localhost:$Port"
   $viteProc = Start-Process -FilePath 'npx.cmd' `
     -ArgumentList "vite --port $Port --host 127.0.0.1" `
@@ -355,6 +357,7 @@ function Start-App {
   Write-Status 'ok' 'CivitAI Model Manager is running!' 'Green'
   Write-Host ''
   Write-Host "    Web / Browser UI : http://localhost:$Port" -ForegroundColor DarkGray
+  Write-Host "    HTTP API Bridge  : http://localhost:$ApiPort" -ForegroundColor DarkGray
   if ($Headless -or $NoWindow) {
     Write-Host "    Mode             : Headless / Web-only" -ForegroundColor DarkGray
   } else {

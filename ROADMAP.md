@@ -18,16 +18,21 @@ graph LR
 
 ## 📌 Planned Releases
 
-### 🎯 Phase 1: v1.4.0 — Workflow "1-Click Auto-Resolver" & Visual Scanner
-> **Goal**: Turn the Workflow Scanner engine into an interactive visual tab with automatic missing model resolution.
+### 🎯 Phase 1: v1.4.0 — Workflow "1-Click Auto-Resolver" & Local API Custom Node Bridge
+> **Goal**: Turn the Workflow Scanner engine into an interactive visual tab with automatic missing model resolution, and provide a secure Local API bridge for external ComfyUI custom nodes.
 
 - [ ] **Dedicated "Workflows" UI Tab**:
   - Drag-and-drop any ComfyUI `.json` workflow or generated image `.png` directly into CMM.
   - Visual dependency matrix displaying which Checkpoints, LoRAs, VAEs, ControlNets, UNETs, and Upscalers are **Installed** vs. **Missing**.
 - [ ] **"Download All Missing Models" 1-Click Action**:
   - Automatically queries CivitAI & Hugging Face for missing model names and enqueues all downloads with appropriate subfolder routing.
-- [ ] **ComfyUI Custom Node Extension Bridge**:
-  - Lightweight custom node / canvas extension connecting ComfyUI directly to CMM's HTTP Native Server Bridge (port 5174), allowing model management without leaving the canvas.
+- [ ] **Decoupled ComfyUI Custom Node Extension Package**:
+  - Maintained as an independent companion repository/package with ComfyUI's custom node folder structure (`custom_nodes/comfyui-civitai-manager-node`).
+  - Seamlessly communicates with CMM via the native HTTP Bridge on `127.0.0.1:5174`.
+- [ ] **Localhost-Only Security Hardening**:
+  - Strict `127.0.0.1` binding with remote IP filtering and Origin verification to guarantee zero remote/LAN access to local filesystem operations.
+- [ ] **Custom Node Developer Documentation**:
+  - Complete REST API guide with Python examples for node creators in [`docs/API_REFERENCE.md`](file:///home/stygianrenegade/Projects/manager/Civitai-manager-ComfyUI/docs/API_REFERENCE.md).
 
 ---
 

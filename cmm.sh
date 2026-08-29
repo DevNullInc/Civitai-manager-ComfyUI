@@ -1,0 +1,364 @@
+#!/usr/bin/env bash
+# ==============================================================================
+#   CivitAI Model Manager (CMM) - Linux Launcher Script
+#   Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
+#   Licensed under GNU General Public License v3.0 (GPL-3.0)
+# ==============================================================================
+
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PID_FILE="$SCRIPT_DIR/.cmm.pid"
+ACTION="${1:-start}"
+PORT=5173
+API_PORT=5174
+HEADLESS=false
+
+# Auto-configure GCC 13 C++ runtime and NVM environment if present
+if [ -d "/opt/gcc-13/lib64" ]; then
+  export LD_LIBRARY_PATH="/opt/gcc-13/lib64:${LD_LIBRARY_PATH:-}"
+fi
+
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # shellcheck source=/dev/null
+  \. "$NVM_DIR/nvm.sh" 2>/dev/null || true
+fi
+
+if [ -d "$HOME/.local/bin" ]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+# Color formatting
+C_RESET="\033[0m"
+C_RED="\033[1;31m"
+C_GREEN="\033[1;32m"
+C_YELLOW="\033[1;33m"
+C_BLUE="\033[1;34m"
+C_MAGENTA="\033[1;35m"
+C_CYAN="\033[1;36m"
+C_GRAY="\033[0;90m"
+
+write_status() {
+  local icon="$1"
+  local msg="$2"
+  local color="$3"
+  printf "  ${color}[%s]${C_RESET} %s\n" "$icon" "$msg"
+}
+
+# Parse custom flags (--port, --api-port, --bridge-port, --headless, --no-window)
+REMAINING_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port|-p)
+      PORT="$2"
+      shift 2
+      ;;
+    --api-port|--bridge-port)
+      API_PORT="$2"
+      shift 2
+      ;;
+    --headless|--no-window)
+      HEADLESS=true
+      shift
+      ;;
+    *)
+      REMAINING_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ ${#REMAINING_ARGS[@]} -gt 0 ]; then
+  ACTION="${REMAINING_ARGS[0]}"
+  CLI_ARGS=("${REMAINING_ARGS[@]:1}")
+else
+  ACTION="start"
+  CLI_ARGS=()
+fi
+
+ensure_node_installed() {
+  if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    write_status "!" "Node.js runtime was not detected on this system." "$C_YELLOW"
+    echo ""
+    echo -e "  ${C_YELLOW}CivitAI Model Manager requires Node.js (v20+ or v22 LTS recommended).${C_RESET}"
+    echo -e "  Please install Node.js: https://nodejs.org/ or install via NVM: https://github.com/nvm-sh/nvm"
+    echo ""
+    exit 1
+  fi
+
+  if [ ! -d "$SCRIPT_DIR/node_modules" ]; then
+    write_status ">>" "node_modules not found. Installing dependencies (npm install)..." "$C_CYAN"
+    (cd "$SCRIPT_DIR" && npm install)
+    write_status "ok" "Dependencies installed successfully." "$C_GREEN"
+  fi
+}
+
+get_running_pids() {
+  local pids=()
+  local seen=()
+
+  # 1. Read stored PID file
+  if [ -f "$PID_FILE" ]; then
+    while read -r pid; do
+      if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+        pids+=("$pid")
+        seen+=("$pid")
+      fi
+    done < "$PID_FILE"
+  fi
+
+  # 2. Check ports ($PORT and $API_PORT)
+  for p in "$PORT" "$API_PORT"; do
+    if command -v lsof >/dev/null 2>&1; then
+      for port_pid in $(lsof -ti :"$p" 2>/dev/null || true); do
+        if [[ ! " ${seen[*]} " =~ " ${port_pid} " ]] && kill -0 "$port_pid" 2>/dev/null; then
+          pids+=("$port_pid")
+          seen+=("$port_pid")
+        fi
+      done
+    elif command -v fuser >/dev/null 2>&1; then
+      for port_pid in $(fuser "$p"/tcp 2>/dev/null || true); do
+        if [[ ! " ${seen[*]} " =~ " ${port_pid} " ]] && kill -0 "$port_pid" 2>/dev/null; then
+          pids+=("$port_pid")
+          seen+=("$port_pid")
+        fi
+      done
+    fi
+  done
+
+  # 3. Check workspace Electron processes
+  for proc_pid in $(pgrep -f "electron.*$SCRIPT_DIR" 2>/dev/null || true); do
+    if [[ ! " ${seen[*]} " =~ " ${proc_pid} " ]] && kill -0 "$proc_pid" 2>/dev/null; then
+      pids+=("$proc_pid")
+      seen+=("$proc_pid")
+    fi
+  done
+
+  echo "${pids[@]}"
+}
+
+stop_app() {
+  local pids
+  read -r -a pids <<< "$(get_running_pids)"
+
+  if [ ${#pids[@]} -eq 0 ]; then
+    write_status "!" "No running CivitAI Model Manager processes found." "$C_YELLOW"
+    rm -f "$PID_FILE" 2>/dev/null || true
+    return 0
+  fi
+
+  write_status "x" "Stopping ${#pids[@]} process(es)..." "$C_RED"
+  for pid in "${pids[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.5
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+      write_status "ok" "Terminated PID $pid" "$C_GRAY"
+    fi
+  done
+
+  rm -f "$PID_FILE" 2>/dev/null || true
+  write_status "ok" "Application stopped." "$C_GREEN"
+}
+
+start_app() {
+  ensure_node_installed
+
+  local existing
+  read -r -a existing <<< "$(get_running_pids)"
+
+  if [ ${#existing[@]} -gt 0 ]; then
+    # Try bringing existing GUI window to focus if wmctrl/xdotool is available
+    if command -v wmctrl >/dev/null 2>&1 && wmctrl -a "CivitAI Model Manager" 2>/dev/null; then
+      write_status "ok" "CivitAI Model Manager is already running. Active window brought to front." "$C_GREEN"
+      return 0
+    elif command -v xdotool >/dev/null 2>&1 && xdotool search --name "CivitAI Model Manager" windowactivate 2>/dev/null; then
+      write_status "ok" "CivitAI Model Manager is already running. Active window brought to front." "$C_GREEN"
+      return 0
+    fi
+
+    write_status "!" "Port $PORT/$API_PORT is in use or orphaned process found. Cleaning up..." "$C_YELLOW"
+    stop_app
+    sleep 1
+  fi
+
+  cd "$SCRIPT_DIR"
+
+  # 1. Build project
+  write_status ">>" "Building project..." "$C_CYAN"
+  
+  write_status ">>" "Building renderer with Vite..." "$C_GRAY"
+  if ! npx vite build --base ./ --emptyOutDir false; then
+    write_status "!!" "Renderer build failed!" "$C_RED"
+    exit 1
+  fi
+  write_status "ok" "Renderer built successfully." "$C_GREEN"
+
+  write_status ">>" "Building Electron main process with TypeScript..." "$C_GRAY"
+  if ! npx tsc --project tsconfig.main.json; then
+    write_status "!!" "TypeScript main process compilation failed!" "$C_RED"
+    exit 1
+  fi
+  write_status "ok" "TypeScript compilation succeeded." "$C_GREEN"
+
+  if [ ! -f "$SCRIPT_DIR/dist/main/index.js" ]; then
+    write_status "!!" "Main entry point NOT FOUND: dist/main/index.js" "$C_RED"
+    exit 1
+  fi
+
+  # 2. Start Vite server in background
+  write_status ">>" "Starting Vite dev server on port $PORT..." "$C_CYAN"
+  export PORT="$PORT"
+  export API_PORT="$API_PORT"
+  export VITE_DEV_SERVER_URL="http://127.0.0.1:$PORT"
+  
+  npx vite --port "$PORT" --host 127.0.0.1 >/dev/null 2>&1 &
+  VITE_PID=$!
+  sleep 2
+
+  # 3. Launch Electron app
+  local ELECTRON_BIN="$SCRIPT_DIR/node_modules/electron/dist/electron"
+  if [ ! -f "$ELECTRON_BIN" ]; then
+    ELECTRON_BIN="npx electron"
+  fi
+
+  local ELECTRON_PID=""
+  if [ "$HEADLESS" = true ]; then
+    write_status ">>" "Starting Electron in headless background mode..." "$C_MAGENTA"
+    export HEADLESS="true"
+    $ELECTRON_BIN . --headless >/dev/null 2>&1 &
+    ELECTRON_PID=$!
+  else
+    write_status ">>" "Launching Electron desktop app window..." "$C_MAGENTA"
+    export HEADLESS="false"
+    $ELECTRON_BIN . >/dev/null 2>&1 &
+    ELECTRON_PID=$!
+  fi
+
+  # Store PIDs
+  {
+    echo "$VITE_PID"
+    if [ -n "$ELECTRON_PID" ]; then
+      echo "$ELECTRON_PID"
+    fi
+  } > "$PID_FILE"
+
+  echo ""
+  write_status "ok" "CivitAI Model Manager is running!" "$C_GREEN"
+  echo ""
+  echo -e "    ${C_GRAY}Web / Browser UI : http://127.0.0.1:$PORT${C_RESET}"
+  echo -e "    ${C_GRAY}HTTP API Bridge  : http://127.0.0.1:$API_PORT${C_RESET}"
+  if [ "$HEADLESS" = true ]; then
+    echo -e "    ${C_GRAY}Mode             : Headless / Background${C_RESET}"
+  else
+    echo -e "    ${C_GRAY}Electron App     : PID $ELECTRON_PID${C_RESET}"
+  fi
+  echo -e "    ${C_GRAY}PID file         : $PID_FILE${C_RESET}"
+  echo ""
+  echo -e "    ${C_GRAY}Use  ./cmm.sh stop     to shut down${C_RESET}"
+  echo -e "    ${C_GRAY}Use  ./cmm.sh restart  to restart${C_RESET}"
+  echo ""
+}
+
+show_status() {
+  local pids
+  read -r -a pids <<< "$(get_running_pids)"
+
+  if [ ${#pids[@]} -eq 0 ]; then
+    write_status "-" "CivitAI Model Manager is not running." "$C_YELLOW"
+  else
+    write_status "+" "CivitAI Model Manager is running (${#pids[@]} processes):" "$C_GREEN"
+    for pid in "${pids[@]}"; do
+      local pname
+      pname=$(ps -p "$pid" -o comm= 2>/dev/null || echo "process")
+      echo -e "      ${C_GRAY}PID $pid  -  $pname${C_RESET}"
+    done
+    echo ""
+    echo -e "      ${C_GRAY}Web UI:      http://127.0.0.1:$PORT${C_RESET}"
+    echo -e "      ${C_GRAY}HTTP Bridge: http://127.0.0.1:$API_PORT${C_RESET}"
+  fi
+}
+
+invoke_package() {
+  ensure_node_installed
+  cd "$SCRIPT_DIR"
+
+  write_status ">>" "Building production assets..." "$C_CYAN"
+  npx vite build --base ./ --emptyOutDir false
+  npx tsc --project tsconfig.main.json
+
+  write_status ">>" "Packaging standalone Linux binary with electron-builder..." "$C_CYAN"
+  npx electron-builder --linux
+
+  write_status "ok" "Standalone Linux application packaged successfully!" "$C_GREEN"
+  echo ""
+  echo -e "  ${C_GREEN}Release Binaries in ./release/${C_RESET}"
+  if [ -d "$SCRIPT_DIR/release" ]; then
+    find "$SCRIPT_DIR/release" -maxdepth 2 \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.AppImage" -o -name "linux-unpacked" \) | while read -r file; do
+      local size
+      size=$(du -sh "$file" | cut -f1)
+      echo -e "    ${C_CYAN}- $(basename "$file")  ($size)${C_RESET}"
+    done
+  fi
+  echo ""
+}
+
+# Print Banner
+echo ""
+echo -e "  ${C_MAGENTA}+----------------------------------------------+${C_RESET}"
+echo -e "  ${C_MAGENTA}|   CivitAI Model Manager - ComfyUI Edition   |${C_RESET}"
+echo -e "  ${C_MAGENTA}+----------------------------------------------+${C_RESET}"
+echo ""
+
+# Dispatch Command
+case "$ACTION" in
+  start)
+    start_app
+    ;;
+  stop)
+    stop_app
+    ;;
+  restart)
+    write_status ">>" "Restarting application..." "$C_CYAN"
+    stop_app
+    sleep 1
+    start_app
+    ;;
+  status)
+    show_status
+    ;;
+  package|publish|dist)
+    invoke_package
+    ;;
+  help|--help|-h)
+    echo "Usage: ./cmm.sh <command> [options]"
+    echo ""
+    echo "App Management Commands:"
+    echo "  start                    Start the desktop app and Vite web server (default)"
+    echo "  stop                     Stop all running CMM processes"
+    echo "  restart                  Restart the application"
+    echo "  status                   Show running process status & endpoints"
+    echo "  package / dist           Package standalone Linux binaries (.zip, .tar.gz)"
+    echo ""
+    echo "CLI Commands:"
+    echo "  scan                     Scan ComfyUI model directories"
+    echo "  download                 Download model from CivitAI"
+    echo "  check-updates            Check installed models for new versions"
+    echo "  export                   Export model database & configuration"
+    echo "  hf check <repo_id>       Inspect Hugging Face model repository"
+    echo "  hf whoami                Check Hugging Face CLI login status"
+    echo "  workflows                Scan workflows for referenced models"
+    echo ""
+    echo "Options:"
+    echo "  --port, -p <port>        Custom web port (default: 5173)"
+    echo "  --headless, --no-window  Run in background without Electron GUI window"
+    echo ""
+    ;;
+  *)
+    ensure_node_installed
+    node "$SCRIPT_DIR/bin/cmm.js" "$ACTION" "${CLI_ARGS[@]}"
+    ;;
+esac
