@@ -93,6 +93,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🛡️ Fixed & Improved
 
+- **CivitAI Keyword Search Pagination Fix**:
+  - Fixed keyword searches in the Browse tab failing with HTTP 400 (`Cannot use page param with query search. Use cursor-based pagination.`) by no longer sending `page` alongside `query` — keyword searches now use CivitAI's required cursor-based pagination while non-query browsing keeps `page` support.
+  - Credit to **haraguchi30** for identifying the root cause and contributing the fix.
+
 - **Process Shutdown Protection & Sanity Checking**:
   - Added strict blacklist protections in `cmm.sh`, `cmm.ps1`, and `src/main/index.ts` forbidding termination of web browsers (`firefox`, `chrome`, `chromium`, `brave`, `opera`, `msedge`, `safari`, `zen-browser`, `tor`) and system processes during `./cmm.sh stop` or `./cmm.sh restart`.
   - Port inspection filtered to `-sTCP:LISTEN` sockets only, preventing client TCP socket connections from being targeted.
