@@ -1073,12 +1073,15 @@ function startHttpBridgeServer() {
         (req.method === 'GET' || req.method === 'POST')
       ) {
         let nodeType = '';
+        let searchGitHub = false;
         if (req.method === 'GET') {
           const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
           nodeType = parsedUrl.searchParams.get('nodeType') || parsedUrl.searchParams.get('node_type') || parsedUrl.searchParams.get('type') || parsedUrl.searchParams.get('name') || '';
+          searchGitHub = parsedUrl.searchParams.get('searchGitHub') === 'true';
         } else {
           const body = await getBody();
           nodeType = body.nodeType || body.node_type || body.type || body.name || '';
+          searchGitHub = body.searchGitHub === true;
         }
         const targetNodesDir =
           currentConfig.comfyui_custom_nodes_dir ||
@@ -1087,7 +1090,8 @@ function startHttpBridgeServer() {
         const resolution = await nodeResolverService.resolveMissingNode(
           nodeType,
           targetNodesDir,
-          currentConfig.comfyui_install_dir
+          currentConfig.comfyui_install_dir,
+          { searchGitHub }
         );
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(resolution));
@@ -1714,7 +1718,7 @@ function registerIpcHandlers() {
   });
 
   // Node Resolution & GitHub Fallback Handlers
-  ipcMain.handle('resolve-missing-node', async (_event: unknown, nodeType: string, customNodesDir?: string) => {
+  ipcMain.handle('resolve-missing-node', async (_event: unknown, nodeType: string, customNodesDir?: string, searchGitHub = false) => {
     const targetNodesDir =
       customNodesDir ||
       currentConfig.comfyui_custom_nodes_dir ||
@@ -1723,7 +1727,8 @@ function registerIpcHandlers() {
     return await nodeResolverService.resolveMissingNode(
       nodeType,
       targetNodesDir,
-      currentConfig.comfyui_install_dir
+      currentConfig.comfyui_install_dir,
+      { searchGitHub: !!searchGitHub }
     );
   });
 

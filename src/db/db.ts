@@ -131,6 +131,23 @@ export class DatabaseManager {
       );
     `);
 
+    // 6. Node Resolution Cache Table (success & failure outcomes per workflow node + install)
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS node_resolution_cache (
+        node_type TEXT NOT NULL,
+        custom_nodes_dir TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        installed_folder TEXT,
+        installed_path TEXT,
+        manager_json TEXT,
+        github_candidates_json TEXT,
+        query_used TEXT,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (node_type, custom_nodes_dir)
+      );
+      CREATE INDEX IF NOT EXISTS idx_node_resolution_cache_updated ON node_resolution_cache(updated_at);
+    `);
+
     // Ensure all columns exist for existing database files (graceful migration)
     const columnUpdates = [
       'ALTER TABLE local_models ADD COLUMN preview_url TEXT;',

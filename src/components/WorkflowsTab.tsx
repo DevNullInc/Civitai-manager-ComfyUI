@@ -174,7 +174,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
   const activeWorkflow: WorkflowInfo | undefined = workflows[selectedWorkflowIndex];
 
-  // Resolve custom node classes for active workflow
+  // Resolve custom node classes for the active workflow. Resolution reads the persistent
+  // SQLite cache first (so reloading a workflow never re-attempts a node), then checks
+  // the local install and curated registry. GitHub is never queried via the API here;
+  // the per-node card opens GitHub in the browser instead.
   const resolveWorkflowNodes = async (wf?: WorkflowInfo) => {
     if (!wf || !wf.nodeTypes || wf.nodeTypes.length === 0 || !window.civitaiAPI?.resolveMissingNode) {
       return;

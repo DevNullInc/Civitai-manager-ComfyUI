@@ -32,6 +32,12 @@ const MANAGER_NODE_LIST_URL =
 
 const REGISTRY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
 
+// Persistent node-resolution cache TTLs (SQLite). Missing results refresh sooner so
+// newly-installed nodes get picked up; installed/registry results are long-lived but
+// installed entries are re-validated against disk before being trusted.
+const RESOLUTION_CACHE_MISSING_TTL_MS = 6 * 60 * 60 * 1000; // 6 Hours
+const RESOLUTION_CACHE_INSTALLED_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
+
 const VALID_PYTHON_BASENAMES = new Set([
   'python',
   'python3',
@@ -67,10 +73,14 @@ export function isValidPythonBinary(binPath: string): boolean {
 
 export class NodeResolverService {
   private inMemorySearchCache = new Map<string, { timestamp: number; results: GitHubNodeRepo[] }>();
+  private inFlightSearches = new Map<string, Promise<GitHubNodeRepo[]>>();
   private requestQueue: Array<() => Promise<void>> = [];
   private isProcessingQueue = false;
   private lastRequestTimestamp = 0;
   private minIntervalMs = 750; // Respect GitHub 10 req/min unauthenticated limit
+  private rateLimitCooldownUntil = 0;
+  private rateLimitCooldownLoggedAt = 0;
+  private readonly GITHUB_RATE_LIMIT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes after a 403
 
   /**
    * Auto-locates the exact Python binary associated with the local ComfyUI installation.
@@ -264,11 +274,21 @@ export class NodeResolverService {
   }
 
   /**
-   * Queries GitHub Search API with token-bucket rate limiter, 600ms debounce, and query sanitization.
+   * Queries GitHub Search API with token-bucket rate limiter, in-flight de-duplication,
+   * and a 403 circuit breaker. Only commits results to the in-memory cache when the
+   * search was not aborted by rate limiting, so affected nodes can retry after cooldown.
    */
   async searchGitHubNodes(query: string, limit = 3): Promise<GitHubNodeRepo[]> {
     const rawTerm = query.trim();
     if (!rawTerm) return [];
+
+    // Circuit breaker: after a 403 rate-limit response, refuse GitHub searches for
+    // the cooldown window so a single burst cannot keep tripping the unauthenticated
+    // 10 req/min budget.
+    if (Date.now() < this.rateLimitCooldownUntil) {
+      this.logRateLimitCooldown();
+      return [];
+    }
 
     const cacheKey = rawTerm.toLowerCase();
     const cached = this.inMemorySearchCache.get(cacheKey);
@@ -276,6 +296,31 @@ export class NodeResolverService {
       return cached.results.slice(0, limit);
     }
 
+    // De-duplicate concurrent searches for the same term into a single request chain.
+    const inFlight = this.inFlightSearches.get(cacheKey);
+    if (inFlight) {
+      return (await inFlight).slice(0, limit);
+    }
+
+    const request = this.performGitHubSearches(rawTerm, limit).then((results) => {
+      if (Date.now() >= this.rateLimitCooldownUntil) {
+        this.inMemorySearchCache.set(cacheKey, { timestamp: Date.now(), results });
+      }
+      return results;
+    });
+
+    this.inFlightSearches.set(cacheKey, request);
+    try {
+      return (await request).slice(0, limit);
+    } finally {
+      this.inFlightSearches.delete(cacheKey);
+    }
+  }
+
+  /**
+   * Runs the sanitized query cascade (scoped search, then fallbacks) for a single term.
+   */
+  private async performGitHubSearches(rawTerm: string, limit: number): Promise<GitHubNodeRepo[]> {
     // Query Sanitization: strip common prefixes and suffixes
     const sanitized = rawTerm
       .replace(/^(ComfyUI-|Comfy_|comfyui-|comfy_)/i, '')
@@ -295,12 +340,28 @@ export class NodeResolverService {
       results = await this.executeGitHubSearch(`ComfyUI ${sanitized} in:name,description`, limit);
     }
 
-    this.inMemorySearchCache.set(cacheKey, { timestamp: Date.now(), results });
-    return results.slice(0, limit);
+    return results;
+  }
+
+  private onGitHubRateLimited(): void {
+    this.rateLimitCooldownUntil = Date.now() + this.GITHUB_RATE_LIMIT_COOLDOWN_MS;
+    this.logRateLimitCooldown();
+  }
+
+  private logRateLimitCooldown(): void {
+    const now = Date.now();
+    if (now - this.rateLimitCooldownLoggedAt > 60_000) {
+      this.rateLimitCooldownLoggedAt = now;
+      logger.warn('GitHub Search API rate limit reached; pausing GitHub node searches until the cooldown expires.');
+    }
   }
 
   private executeGitHubSearch(q: string, limit: number): Promise<GitHubNodeRepo[]> {
     return new Promise((resolve) => {
+      if (Date.now() < this.rateLimitCooldownUntil) {
+        this.logRateLimitCooldown();
+        return resolve([]);
+      }
       this.enqueueRateLimited(async () => {
         try {
           const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(
@@ -333,7 +394,14 @@ export class NodeResolverService {
           }
           resolve([]);
         } catch (err: any) {
-          logger.warn(`GitHub Search API error for query "${q}":`, err?.message || err);
+          const message = err?.message || String(err);
+          if (/^HTTP 403|rate limit/i.test(message)) {
+            // Trip the circuit breaker and stay quiet: every subsequent search in
+            // the cooldown window would only fan the flames.
+            this.onGitHubRateLimited();
+          } else {
+            logger.warn(`GitHub Search API error for query "${q}":`, message);
+          }
           resolve([]);
         }
       });
@@ -341,15 +409,18 @@ export class NodeResolverService {
   }
 
   /**
-   * 4-Tier Node Resolution:
+   * Node Resolution:
    * Tier 1: Local package & NODE_CLASS_MAPPINGS inspection
    * Tier 2: ComfyUI-Manager curated database lookup
-   * Tier 3: Rate-limited GitHub Search API fallback (top 3 candidates)
+   * Tier 3 (opt-in): Rate-limited GitHub Search API fallback (top 3 candidates).
+   *   Tier 3 only runs when opts.searchGitHub is true — i.e. for a specifically
+   *   requested node in an active workflow — never for bulk workflow scans.
    */
   async resolveMissingNode(
     nodeType: string,
     customNodesDir?: string,
-    installDir?: string
+    installDir?: string,
+    opts?: { searchGitHub?: boolean }
   ): Promise<NodeResolutionResult> {
     const cleanType = nodeType.trim();
     const result: NodeResolutionResult = {
@@ -359,6 +430,14 @@ export class NodeResolverService {
     };
 
     if (!cleanType) return result;
+
+    // Persistent cache (SQLite): previous outcomes — successful or failed — are
+    // honored so that loading the same workflow again never re-attempts a node.
+    // Passed only when the caller explicitly asks for a fresh (re-)search.
+    if (!opts?.searchGitHub) {
+      const cached = await this.getCachedResolution(cleanType, customNodesDir);
+      if (cached) return cached;
+    }
 
     // Tier 1: Local Check
     if (customNodesDir && fs.existsSync(customNodesDir)) {
@@ -375,6 +454,7 @@ export class NodeResolverService {
           result.isInstalled = true;
           result.installedFolder = pkg.folderName;
           result.installedPath = pkg.fullPath;
+          await this.storeResolution(cleanType, result, customNodesDir);
           return result;
         }
       }
@@ -392,13 +472,131 @@ export class NodeResolverService {
         gitUrl,
         description: `Registered ComfyUI extension supplying [${cleanType}]`,
       };
+      await this.storeResolution(cleanType, result, customNodesDir);
       return result;
     }
 
-    // Tier 3: GitHub Fallback Search (Top 3 Candidates)
-    result.queryUsed = cleanType;
-    result.githubCandidates = await this.searchGitHubNodes(cleanType, 3);
+    // Tier 3: GitHub Fallback Search (Top 3 Candidates) - opt-in only
+    if (opts?.searchGitHub) {
+      result.queryUsed = cleanType;
+      result.githubCandidates = await this.searchGitHubNodes(cleanType, 3);
+    }
+
+    // Failed attempt — persisted so the same workflow won't re-attempt this node.
+    await this.storeResolution(cleanType, result, customNodesDir);
     return result;
+  }
+
+  /**
+   * Reads a persisted resolution outcome for a node type from SQLite.
+   * Returns null when the entry is missing, stale, or no longer valid on disk.
+   */
+  private async getCachedResolution(
+    nodeType: string,
+    customNodesDir?: string
+  ): Promise<NodeResolutionResult | null> {
+    try {
+      const row: any = await dbManager.get(
+        'SELECT * FROM node_resolution_cache WHERE node_type = ? AND custom_nodes_dir = ?;',
+        [nodeType, customNodesDir || '']
+      );
+      if (!row?.status) return null;
+
+      const age = Date.now() - (row.updated_at || 0);
+      const ttl = row.status === 'missing' ? RESOLUTION_CACHE_MISSING_TTL_MS : RESOLUTION_CACHE_INSTALLED_TTL_MS;
+      if (age > ttl) return null;
+
+      // Installed entries are only trusted while the folder still exists on disk.
+      if (row.status === 'installed') {
+        const exists =
+          (row.installed_path && fs.existsSync(row.installed_path)) ||
+          (row.installed_folder &&
+            customNodesDir &&
+            fs.existsSync(path.join(customNodesDir, row.installed_folder)));
+        if (!exists) return null;
+      }
+
+      const result: NodeResolutionResult = {
+        nodeType,
+        isInstalled: row.status === 'installed',
+        githubCandidates: [],
+      };
+      if (row.status === 'installed') {
+        result.isInstalled = true;
+        if (row.installed_folder) result.installedFolder = row.installed_folder;
+        if (row.installed_path) result.installedPath = row.installed_path;
+      } else if (row.status === 'registry' && row.manager_json) {
+        try {
+          result.managerMatch = JSON.parse(row.manager_json);
+        } catch {}
+      }
+      if (row.github_candidates_json) {
+        try {
+          result.githubCandidates = JSON.parse(row.github_candidates_json) || [];
+        } catch {}
+      }
+      if (row.query_used) result.queryUsed = row.query_used;
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Persists a resolution outcome — successful or failed — into the SQLite cache.
+   */
+  private async storeResolution(
+    nodeType: string,
+    result: NodeResolutionResult,
+    customNodesDir?: string
+  ): Promise<void> {
+    try {
+      const status = result.isInstalled ? 'installed' : result.managerMatch ? 'registry' : 'missing';
+      await dbManager.run(
+        `INSERT OR REPLACE INTO node_resolution_cache
+          (node_type, custom_nodes_dir, status, installed_folder, installed_path, manager_json, github_candidates_json, query_used, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        [
+          result.nodeType,
+          customNodesDir || '',
+          status,
+          result.installedFolder || null,
+          result.installedPath || null,
+          result.managerMatch ? JSON.stringify(result.managerMatch) : null,
+          result.githubCandidates && result.githubCandidates.length > 0
+            ? JSON.stringify(result.githubCandidates)
+            : null,
+          result.queryUsed || null,
+          Date.now(),
+        ]
+      );
+    } catch (err) {
+      logger.debug('Failed to persist node resolution cache:', err);
+    }
+  }
+
+  /**
+   * Clears cached outcomes for any node type supplied by a freshly installed folder,
+   * so the next resolution pass detects it instead of serving a stale "missing".
+   */
+  private async invalidateResolutionCacheForFolder(folderPath: string): Promise<void> {
+    try {
+      const folderName = path.basename(folderPath);
+      const nodeTypes = this.extractClassMappingsFromFolder(folderPath);
+      const conditions: string[] = [];
+      const binds: any[] = [];
+      if (nodeTypes.length > 0) {
+        conditions.push(`node_type IN (${nodeTypes.map(() => '?').join(',')})`);
+        binds.push(...nodeTypes);
+      }
+      // Also drop any entry previously recorded as resolved from this exact folder.
+      conditions.push('installed_folder = ?');
+      binds.push(folderName);
+      await dbManager.run(
+        `DELETE FROM node_resolution_cache WHERE ${conditions.join(' OR ')}`,
+        binds
+      );
+    } catch {}
   }
 
   /**
@@ -474,6 +672,9 @@ export class NodeResolverService {
       const hasInstallScript = fs.existsSync(path.join(targetPath, 'install.py'));
       const detectedPythonPath = this.detectPythonBinary(comfyuiDir);
 
+      // Drop stale "missing" cache entries that this folder may now satisfy.
+      await this.invalidateResolutionCacheForFolder(targetPath);
+
       return {
         success: true,
         folderName,
@@ -494,6 +695,9 @@ export class NodeResolverService {
       const detectedPythonPath = this.detectPythonBinary(comfyuiDir);
 
       logger.info(`Successfully cloned custom node [${folderName}]. Dependencies: requirements=${hasRequirements}, installScript=${hasInstallScript}`);
+
+      // Drop stale "missing" cache entries that this new folder may now satisfy.
+      await this.invalidateResolutionCacheForFolder(targetPath);
 
       return {
         success: true,

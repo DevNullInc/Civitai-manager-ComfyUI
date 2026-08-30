@@ -503,12 +503,12 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
-      resolveMissingNode: async (nodeType: string, customNodesDir?: string) => {
+      resolveMissingNode: async (nodeType: string, customNodesDir?: string, searchGitHub?: boolean) => {
         try {
           const res = await fetch(`${API_BASE}/nodes/resolve`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nodeType, customNodesDir }),
+            body: JSON.stringify({ nodeType, customNodesDir, searchGitHub }),
           });
           return await res.json();
         } catch (e) {

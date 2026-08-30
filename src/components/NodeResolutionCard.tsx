@@ -21,7 +21,7 @@ import {
   Link as LinkIcon,
   Package,
 } from 'lucide-react';
-import { GitHubNodeRepo, NodeResolutionResult, NodeCloneResult } from '../types/app';
+import { NodeResolutionResult, NodeCloneResult } from '../types/app';
 
 interface NodeResolutionCardProps {
   nodeType: string;
@@ -110,6 +110,14 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
     }
   };
 
+  const handleSearchGitHub = () => {
+    if (!window.civitaiAPI?.openExternal) return;
+    // Open GitHub repository search in the user's browser instead of the API so we
+    // never trip the unauthenticated Search API rate limit.
+    const searchUrl = `https://github.com/search?q=${encodeURIComponent(`comfyui ${nodeType}`)}&type=repositories`;
+    window.civitaiAPI.openExternal(searchUrl);
+  };
+
   const candidates = resolution?.githubCandidates || [];
 
   return (
@@ -134,6 +142,23 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
           </span>
         )}
       </div>
+
+      {/* On-demand GitHub search - browser-only (avoids API rate limits), available for missing nodes */}
+      {!resolution?.isInstalled && (
+        <div className="flex items-start gap-2.5 flex-wrap">
+          <button
+            onClick={handleSearchGitHub}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow cursor-pointer"
+            title="Opens GitHub repository search in your browser"
+          >
+            <ExternalLink size={13} />
+            <span>Search GitHub</span>
+          </button>
+          <span className="text-[11px] text-slate-500 pt-1">
+            Opens GitHub in your browser, then paste the repo URL below to install.
+          </span>
+        </div>
+      )}
 
       {/* ComfyUI Manager Registry Match */}
       {resolution?.managerMatch && !resolution.isInstalled && (

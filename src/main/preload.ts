@@ -80,8 +80,8 @@ const api = {
   testWebhook: (url: string, event: string) => ipcRenderer.invoke('test-webhook', url, event),
 
   // Node Resolution & GitHub Fallback
-  resolveMissingNode: (nodeType: string, customNodesDir?: string) =>
-    ipcRenderer.invoke('resolve-missing-node', nodeType, customNodesDir),
+  resolveMissingNode: (nodeType: string, customNodesDir?: string, searchGitHub?: boolean) =>
+    ipcRenderer.invoke('resolve-missing-node', nodeType, customNodesDir, searchGitHub),
   searchGitHubNodes: (query: string, limit?: number) =>
     ipcRenderer.invoke('search-github-nodes', query, limit),
   cloneCustomNode: (gitUrl: string, customFolderName?: string, customNodesDir?: string) =>
