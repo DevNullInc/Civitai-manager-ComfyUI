@@ -477,6 +477,38 @@ function inspectComfyUIInstall(installPath?: string) {
   };
 }
 
+/**
+ * Determines the custom_nodes directory to scan for node resolution, in priority order:
+ * explicit caller override, configured custom_nodes dir, the install dir's custom_nodes,
+ * or (as a last resort) a real inferred install. Never falls back to a syntactically
+ * derived "sibling" dir that does not actually belong to a ComfyUI install.
+ */
+function resolveCustomNodesDir(config: AppConfig, explicitCustomNodesDir?: string): string {
+  if (explicitCustomNodesDir && explicitCustomNodesDir.trim()) return explicitCustomNodesDir.trim();
+  if (config.comfyui_custom_nodes_dir && config.comfyui_custom_nodes_dir.trim()) {
+    return config.comfyui_custom_nodes_dir.trim();
+  }
+  if (config.comfyui_install_dir && config.comfyui_install_dir.trim()) {
+    return path.join(config.comfyui_install_dir.trim(), 'custom_nodes');
+  }
+  const inferred = inspectComfyUIInstall();
+  return inferred && inferred.customNodesDir ? inferred.customNodesDir : '';
+}
+
+/** Deletes resolution-cache rows that were written against a now-stale custom_nodes dir. */
+async function purgeStaleNodeResolutionCache() {
+  try {
+    const good = resolveCustomNodesDir(currentConfig);
+    if (!good) return;
+    await dbManager.run(
+      "DELETE FROM node_resolution_cache WHERE custom_nodes_dir != '' AND custom_nodes_dir != ?;",
+      [good]
+    );
+  } catch (err) {
+    logger.warn('Failed to prune stale node resolution cache:', err);
+  }
+}
+
 function autoDetectComfyUIInstall() {
   const candidates: string[] = [];
 
@@ -1083,10 +1115,7 @@ function startHttpBridgeServer() {
           nodeType = body.nodeType || body.node_type || body.type || body.name || '';
           searchGitHub = body.searchGitHub === true;
         }
-        const targetNodesDir =
-          currentConfig.comfyui_custom_nodes_dir ||
-          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const targetNodesDir = resolveCustomNodesDir(currentConfig);
         const resolution = await nodeResolverService.resolveMissingNode(
           nodeType,
           targetNodesDir,
@@ -1104,11 +1133,7 @@ function startHttpBridgeServer() {
         res.end(JSON.stringify({ query, candidates }));
       } else if (url === '/api/nodes/clone' && req.method === 'POST') {
         const body = await getBody();
-        const targetNodesDir =
-          body.customNodesDir ||
-          currentConfig.comfyui_custom_nodes_dir ||
-          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const targetNodesDir = resolveCustomNodesDir(currentConfig, body.customNodesDir);
         const cloneRes = await nodeResolverService.cloneCustomNode(
           body.gitUrl,
           targetNodesDir,
@@ -1126,20 +1151,13 @@ function startHttpBridgeServer() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(depRes));
       } else if (url === '/api/nodes/installed' && req.method === 'GET') {
-        const targetNodesDir =
-          currentConfig.comfyui_custom_nodes_dir ||
-          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const targetNodesDir = resolveCustomNodesDir(currentConfig);
         const pkgs = await nodeResolverService.inspectLocalCustomNodes(targetNodesDir);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(pkgs));
       } else if (url === '/api/nodes/mark-installed' && req.method === 'POST') {
         const body = await getBody();
-        const targetNodesDir =
-          body.customNodesDir ||
-          currentConfig.comfyui_custom_nodes_dir ||
-          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const targetNodesDir = resolveCustomNodesDir(currentConfig, body.customNodesDir);
         const markRes = await nodeResolverService.markNodeInstalled(
           body.nodeType,
           body.folderName,
@@ -1733,11 +1751,7 @@ function registerIpcHandlers() {
 
   // Node Resolution & GitHub Fallback Handlers
   ipcMain.handle('resolve-missing-node', async (_event: unknown, nodeType: string, customNodesDir?: string, searchGitHub = false) => {
-    const targetNodesDir =
-      customNodesDir ||
-      currentConfig.comfyui_custom_nodes_dir ||
-      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    const targetNodesDir = resolveCustomNodesDir(currentConfig, customNodesDir);
     return await nodeResolverService.resolveMissingNode(
       nodeType,
       targetNodesDir,
@@ -1751,11 +1765,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('clone-custom-node', async (_event: unknown, gitUrl: string, customFolderName?: string, customNodesDir?: string) => {
-    const targetNodesDir =
-      customNodesDir ||
-      currentConfig.comfyui_custom_nodes_dir ||
-      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    const targetNodesDir = resolveCustomNodesDir(currentConfig, customNodesDir);
     return await nodeResolverService.cloneCustomNode(
       gitUrl,
       targetNodesDir,
@@ -1769,19 +1779,12 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('get-installed-custom-nodes', async () => {
-    const targetNodesDir =
-      currentConfig.comfyui_custom_nodes_dir ||
-      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    const targetNodesDir = resolveCustomNodesDir(currentConfig);
     return await nodeResolverService.inspectLocalCustomNodes(targetNodesDir);
   });
 
   ipcMain.handle('mark-node-installed', async (_event: unknown, nodeType: string, folderName: string, customNodesDir?: string) => {
-    const targetNodesDir =
-      customNodesDir ||
-      currentConfig.comfyui_custom_nodes_dir ||
-      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
-      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    const targetNodesDir = resolveCustomNodesDir(currentConfig, customNodesDir);
     return await nodeResolverService.markNodeInstalled(nodeType, folderName, targetNodesDir);
   });
 
@@ -2095,6 +2098,7 @@ async function performLiveRestart() {
   try {
     // 1. Re-load and apply all configuration from SQLite
     await loadConfigFromDb();
+    await purgeStaleNodeResolutionCache();
 
     // 2. Re-initialize and sync backend services
     if (currentConfig.civitai_api_key) {
@@ -2218,6 +2222,7 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     await dbManager.init();
     await loadConfigFromDb();
+    await purgeStaleNodeResolutionCache();
     registerIpcHandlers();
     startHttpBridgeServer();
 

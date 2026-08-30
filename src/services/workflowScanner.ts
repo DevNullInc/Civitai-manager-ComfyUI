@@ -217,10 +217,11 @@ export class WorkflowScanner {
     // 1. Full UI Canvas Workflow format (nodes with positions & link definitions)
     const uiWorkflow = normalized.workflow ? normalized.workflow : (normalized.nodes ? normalized : null);
     if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
+      const subgraphNames = this.extractSubgraphNames(uiWorkflow, normalized);
       return {
         nodes: uiWorkflow.nodes.map((n: any) => ({
           id: n.id,
-          type: n.type || n.class_type || 'Node',
+          type: this.resolveNodeTypeLabel(n.type || n.class_type, subgraphNames) || 'Node',
           pos: Array.isArray(n.pos) ? [n.pos[0], n.pos[1]] : [100, 100],
           size: n.size || [220, 120],
           inputs: Array.isArray(n.inputs) ? n.inputs : [],
@@ -235,9 +236,10 @@ export class WorkflowScanner {
       };
     }
 
-    // 2. Fallback: Synthesize spatial layout from prompt execution dictionary
+// 2. Fallback: Synthesize spatial layout from prompt execution dictionary
     const promptNodes = normalized.prompt ? normalized.prompt : normalized;
     if (promptNodes && typeof promptNodes === 'object' && !Array.isArray(promptNodes)) {
+      const subgraphNames = this.extractSubgraphNames(normalized, promptNodes);
       const nodeEntries = Object.entries<any>(promptNodes).filter(([_, v]) => v && typeof v === 'object' && (v.class_type || v.type || v.inputs));
       if (nodeEntries.length > 0) {
         const nodes: any[] = [];
@@ -247,7 +249,8 @@ export class WorkflowScanner {
         nodeEntries.forEach(([id, nodeObj], index) => {
           const col = index % 4;
           const row = Math.floor(index / 4);
-          const classType = nodeObj.class_type || nodeObj.type || 'Node';
+
+          const classType = this.resolveNodeTypeLabel(nodeObj.class_type || nodeObj.type, subgraphNames) || 'Node';
           const inputs = nodeObj.inputs || {};
 
           const nodeInputs: any[] = [];
@@ -280,20 +283,72 @@ export class WorkflowScanner {
     return undefined;
   }
 
+  /** ComfyUI component/subgraph references use UUIDs as canvas node "type" values. */
+  private static readonly UUID_TYPE_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+  /**
+   * Newer ComfyUI canvas exports (component/subgraph "definitions" bundles) reference reusable
+   * subgraphs with a UUID node "type". This maps those UUIDs to the subgraph's human-readable
+   * name so nodes surface as names instead of raw hashes.
+   */
+  private extractSubgraphNames(...sources: any[]): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const src of sources) {
+      if (!src || typeof src !== 'object') continue;
+      const defs = src.definitions;
+      if (!defs || typeof defs !== 'object') continue;
+
+      const list: any[] = Array.isArray(defs) ? defs : Array.isArray(defs.subgraphs) ? defs.subgraphs : [];
+      for (const sub of list) {
+        if (!sub || typeof sub !== 'object') continue;
+        const id = sub.id != null ? String(sub.id) : '';
+        const name = sub.name || sub.display_name || sub.title;
+        if (id && typeof name === 'string' && name.trim()) {
+          map.set(id, name.trim());
+        }
+      }
+
+      if (!Array.isArray(defs)) {
+        for (const [key, val] of Object.entries<any>(defs)) {
+          if (!val || typeof val !== 'object' || Array.isArray(val) || key === 'subgraphs') continue;
+          const name = val.name || val.display_name || val.title;
+          if (typeof name === 'string' && name.trim()) {
+            map.set(key, name.trim());
+          }
+        }
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Resolves a canvas node's type label. UUID-typed nodes (component/subgraph references) are
+   * translated to the subgraph's display name; unrecognized UUIDs resolve to null so they are
+   * never surfaced as hashed "missing" nodes.
+   */
+  private resolveNodeTypeLabel(raw: any, subgraphNames: Map<string, string>): string | null {
+    if (typeof raw !== 'string') return null;
+    const t = raw.trim();
+    if (!t) return null;
+    if (WorkflowScanner.UUID_TYPE_RE.test(t)) {
+      return subgraphNames.get(t) || null;
+    }
+    return t;
+  }
+
   extractNodeTypes(data: any): string[] {
     const types = new Set<string>();
     if (!data || typeof data !== 'object') return [];
     const normalized = this.normalizeWorkflowData(data) || data;
+    const subgraphNames = this.extractSubgraphNames(normalized, normalized.workflow);
 
     // Format 1: UI workflow format
     const uiWorkflow = normalized.workflow ? normalized.workflow : normalized;
     if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
       for (const node of uiWorkflow.nodes) {
         if (node && typeof node === 'object') {
-          const t = node.type || node.class_type;
-          if (t && typeof t === 'string' && t.trim()) {
-            types.add(t.trim());
-          }
+          const t = this.resolveNodeTypeLabel(node.type || node.class_type, subgraphNames);
+          if (t) types.add(t);
         }
       }
     }
@@ -303,10 +358,8 @@ export class WorkflowScanner {
     if (rootNodes && typeof rootNodes === 'object' && !Array.isArray(rootNodes)) {
       for (const node of Object.values<any>(rootNodes)) {
         if (node && typeof node === 'object') {
-          const t = node.class_type || node.type;
-          if (t && typeof t === 'string' && t.trim()) {
-            types.add(t.trim());
-          }
+          const t = this.resolveNodeTypeLabel(node.class_type || node.type, subgraphNames);
+          if (t) types.add(t);
         }
       }
     }

@@ -46,6 +46,41 @@ import {
 } from '../types/app';
 import { NodeResolutionCard } from './NodeResolutionCard';
 
+// ComfyUI component/subgraph references use UUIDs as canvas node "type" values.
+const UUID_TYPE_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function collectSubgraphNames(data: any): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!data || typeof data !== 'object') return map;
+  const defs = data.definitions;
+  if (!defs || typeof defs !== 'object') return map;
+
+  const list: any[] = Array.isArray(defs) ? defs : Array.isArray(defs.subgraphs) ? defs.subgraphs : [];
+  for (const sub of list) {
+    if (!sub || typeof sub !== 'object') continue;
+    const id = sub.id != null ? String(sub.id) : '';
+    const name = sub.name || sub.display_name || sub.title;
+    if (id && typeof name === 'string' && name.trim()) map.set(id, name.trim());
+  }
+
+  if (!Array.isArray(defs)) {
+    for (const [key, val] of Object.entries<any>(defs)) {
+      if (!val || typeof val !== 'object' || Array.isArray(val) || key === 'subgraphs') continue;
+      const name = val.name || val.display_name || val.title;
+      if (typeof name === 'string' && name.trim()) map.set(key, name.trim());
+    }
+  }
+  return map;
+}
+
+function resolveNodeTypeLabel(raw: any, subgraphNames: Map<string, string>): string | null {
+  if (typeof raw !== 'string') return null;
+  const t = raw.trim();
+  if (!t) return null;
+  if (UUID_TYPE_RE.test(t)) return subgraphNames.get(t) || null;
+  return t;
+}
+
 interface WorkflowsTabProps {
   onSearchModel?: (query: string) => void;
   onNavigateToDownloads?: () => void;
@@ -275,12 +310,14 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
           const modelRefs: WorkflowModelReference[] = [];
           const nodeTypes = new Set<string>();
+          const subgraphNames = collectSubgraphNames(parsed);
 
           // UI Canvas format
           const nodes = parsed.nodes || parsed.workflow?.nodes || [];
           if (Array.isArray(nodes)) {
             for (const n of nodes) {
-              if (n.type) nodeTypes.add(n.type);
+              const label = resolveNodeTypeLabel(n.type, subgraphNames);
+              if (label) nodeTypes.add(label);
               if (Array.isArray(n.widgets_values)) {
                 for (const w of n.widgets_values) {
                   if (typeof w === 'string' && (w.endsWith('.safetensors') || w.endsWith('.ckpt') || w.endsWith('.gguf') || w.endsWith('.pt'))) {
@@ -303,7 +340,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           if (promptNodes && typeof promptNodes === 'object' && !Array.isArray(promptNodes)) {
             for (const [id, nodeObj] of Object.entries<any>(promptNodes)) {
               if (nodeObj && typeof nodeObj === 'object') {
-                const classType = nodeObj.class_type || nodeObj.type;
+                const classType = resolveNodeTypeLabel(nodeObj.class_type || nodeObj.type, subgraphNames);
                 if (classType) nodeTypes.add(classType);
                 if (nodeObj.inputs) {
                   for (const [k, v] of Object.entries(nodeObj.inputs)) {
@@ -380,10 +417,12 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           const nodeTypes = new Set<string>();
 
           const rawData = extracted.workflow || extracted.prompt || extracted;
+          const subgraphNames = collectSubgraphNames(rawData);
           const nodes = rawData.nodes || [];
           if (Array.isArray(nodes)) {
             for (const n of nodes) {
-              if (n.type) nodeTypes.add(n.type);
+              const label = resolveNodeTypeLabel(n.type, subgraphNames);
+              if (label) nodeTypes.add(label);
               if (Array.isArray(n.widgets_values)) {
                 for (const w of n.widgets_values) {
                   if (typeof w === 'string' && (w.endsWith('.safetensors') || w.endsWith('.ckpt') || w.endsWith('.gguf') || w.endsWith('.pt'))) {

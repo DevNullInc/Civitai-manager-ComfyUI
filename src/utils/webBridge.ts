@@ -7,7 +7,11 @@
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  */
-const API_BASE = '/api';
+// Always target the native HTTP bridge (same process that serves the Electron UI) so the
+// browser/headless frontend hits the exact same endpoints and config as the desktop app.
+// The relative '/api' path would resolve against the Vite dev-server origin, which does not
+// implement the workflow/nodes endpoints (they live on the native bridge).
+const API_BASE = 'http://127.0.0.1:5174/api';
 
 const scanProgressListeners: Array<(progress: any) => void> = [];
 const downloadProgressListeners: Array<(tasks: any[]) => void> = [];
