@@ -23,9 +23,140 @@ export class DownloadManager {
   private maxConcurrent: number = 2;
   private defaultConflictStrategy: ConflictStrategy = 'rename';
   private strictHashVerification: boolean = true;
+  private persistenceTimer: NodeJS.Timeout | null = null;
+  private dbReady: boolean = false;
 
   constructor(maxConcurrent = 2) {
     this.maxConcurrent = maxConcurrent;
+  }
+
+  /**
+   * Load any previously queued / completed downloads from the SQLite `downloads`
+   * table into memory and start periodically persisting task state so the queue
+   * (including finished downloads) survives application restarts.
+   */
+  async initPersistence(): Promise<void> {
+    try {
+      await this.hydrateFromDb();
+      this.dbReady = true;
+      logger.info(`Restored ${this.tasks.size} persisted download task(s) from database.`);
+    } catch (err) {
+      logger.warn('Download persistence storage unavailable; downloads will run in memory only.', err);
+    }
+    if (!this.persistenceTimer) {
+      this.persistenceTimer = setInterval(() => {
+        this.persistAll().catch(() => {});
+      }, 3000);
+    }
+  }
+
+  private async hydrateFromDb(): Promise<void> {
+    let rows: any[] = [];
+    try {
+      rows = await dbManager.all(
+        'SELECT * FROM downloads ORDER BY created_at ASC, id ASC;'
+      );
+    } catch {
+      return;
+    }
+
+    for (const r of rows) {
+      if (!r || !r.id || this.tasks.has(r.id)) continue;
+
+      // Tasks that were mid-flight at shutdown are queued again so they resume
+      // automatically; explicitly paused ones stay paused.
+      let status = (r.status || 'paused') as DownloadTask['status'];
+      if (status === 'downloading' || status === 'verifying' || status === 'pending') {
+        status = 'pending';
+      }
+
+      const task: DownloadTask = {
+        id: r.id,
+        modelVersionId: r.model_version_id || 0,
+        modelId: r.model_id || 0,
+        modelName: r.model_name || 'Unknown Model',
+        versionName: r.version_name || '',
+        modelType: r.model_type || 'Checkpoint',
+        baseModel: r.base_model || '',
+        creator: r.creator || undefined,
+        targetFolder: r.target_folder || '',
+        targetRoot: r.target_root || undefined,
+        fileName: r.file_name || 'model.safetensors',
+        downloadUrl: r.download_url || '',
+        sizeKB: r.size_kb || 0,
+        sha256: r.sha256 || undefined,
+        status,
+        progress: r.progress || 0,
+        downloadedBytes: r.downloaded_bytes || 0,
+        totalBytes: r.total_bytes || Math.round((r.size_kb || 0) * 1024),
+        speedBps: 0,
+        error: r.error || undefined,
+        computedPath: r.computed_path || '',
+        isHashMismatch: !!r.is_hash_mismatch,
+        deleteOldVersionFile: r.delete_old_version_file || undefined,
+        deleteOldModelId: r.delete_old_model_id || undefined,
+        completedAt: r.completed_at || undefined,
+      };
+
+      // Stats for prior sessions are historical; live speed starts at 0.
+      task.speedBps = 0;
+      this.tasks.set(task.id, task);
+    }
+
+    // Auto-resume tasks that were pending or mid-download when the app exited.
+    this.processQueue();
+  }
+
+  private async persistTask(id: string): Promise<void> {
+    if (!this.dbReady) return;
+    const task = this.tasks.get(id);
+    if (!task) return;
+    try {
+      await dbManager.run(
+        `INSERT OR REPLACE INTO downloads
+          (id, model_version_id, model_id, model_name, version_name, model_type, base_model, creator,
+           target_folder, target_root, file_name, download_url, size_kb, sha256, status, progress,
+           downloaded_bytes, total_bytes, speed_bps, error, computed_path, completed_at,
+           is_hash_mismatch, delete_old_version_file, delete_old_model_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        [
+          task.id,
+          task.modelVersionId || 0,
+          task.modelId || 0,
+          task.modelName || 'Unknown Model',
+          task.versionName || '',
+          task.modelType || 'Checkpoint',
+          task.baseModel || null,
+          task.creator || null,
+          task.targetFolder || '',
+          task.targetRoot || null,
+          task.fileName || '',
+          task.downloadUrl || '',
+          task.sizeKB || 0,
+          task.sha256 || null,
+          task.status,
+          Math.round(task.progress || 0),
+          task.downloadedBytes || 0,
+          task.totalBytes || 0,
+          task.speedBps || 0,
+          task.error || null,
+          task.computedPath || null,
+          task.completedAt || null,
+          task.isHashMismatch ? 1 : 0,
+          task.deleteOldVersionFile || null,
+          task.deleteOldModelId || null,
+        ]
+      );
+    } catch (err) {
+      logger.warn(`Failed to persist download task ${id}:`, err);
+    }
+  }
+
+  private async persistAll(): Promise<void> {
+    if (!this.dbReady || this.tasks.size === 0) return;
+    for (const id of Array.from(this.tasks.keys())) {
+      await this.persistTask(id);
+    }
   }
 
   setMaxConcurrent(max: number) {
@@ -63,6 +194,7 @@ export class DownloadManager {
     };
 
     this.tasks.set(id, fullTask);
+    this.persistTask(id).catch(() => {});
     this.processQueue();
     return fullTask;
   }
@@ -78,6 +210,7 @@ export class DownloadManager {
       task.status = 'paused';
       task.speedBps = 0;
       logger.info(`Paused download task: ${task.fileName}`);
+      this.persistTask(id).catch(() => {});
     }
   }
 
@@ -86,6 +219,7 @@ export class DownloadManager {
     if (task && (task.status === 'paused' || task.status === 'failed')) {
       task.status = 'pending';
       task.error = undefined;
+      this.persistTask(id).catch(() => {});
       this.processQueue();
     }
   }
@@ -112,7 +246,66 @@ export class DownloadManager {
       this.tasks.delete(id);
       logger.info(`Cancelled download task and deleted partial data: ${task.fileName}`);
     }
+    this.removePersistedRecord(id);
     this.processQueue();
+  }
+
+  /**
+   * Permanently removes a download from the queue list (never touches the finished
+   * file on disk). Active/incomplete tasks are cancelled and their partial files
+   * cleaned up, then the record is deleted from the database.
+   */
+  async deleteTask(id: string): Promise<boolean> {
+    const active = this.activeDownloads.get(id);
+    if (active) {
+      try {
+        active.cancel();
+      } catch {}
+      try {
+        active.cleanup();
+      } catch {}
+      this.activeDownloads.delete(id);
+    }
+    const task = this.tasks.get(id);
+    if (task) {
+      const partFile = `${task.computedPath}.part`;
+      try {
+        if (fs.existsSync(partFile)) {
+          fs.unlinkSync(partFile);
+        }
+      } catch (e) {
+        logger.warn(`Could not delete partial file ${partFile}:`, e);
+      }
+      this.tasks.delete(id);
+    }
+    await this.removePersistedRecord(id);
+    this.processQueue();
+    return true;
+  }
+
+  /**
+   * Removes every completed download from the queue list. Finished files on disk
+   * are never touched — only the queue history entries are cleared.
+   */
+  async clearFinishedTasks(): Promise<number> {
+    const finishedIds = Array.from(this.tasks.values())
+      .filter((t) => t.status === 'completed')
+      .map((t) => t.id);
+    for (const id of finishedIds) {
+      this.tasks.delete(id);
+      await this.removePersistedRecord(id);
+    }
+    this.processQueue();
+    return finishedIds.length;
+  }
+
+  private async removePersistedRecord(id: string): Promise<void> {
+    if (!this.dbReady) return;
+    try {
+      await dbManager.run('DELETE FROM downloads WHERE id = ?;', [id]);
+    } catch (err) {
+      logger.warn(`Failed to delete persisted download record ${id}:`, err);
+    }
   }
 
   private async processQueue() {
@@ -165,6 +358,7 @@ export class DownloadManager {
     if (!task) return;
 
     task.status = 'downloading';
+    this.persistTask(id).catch(() => {});
     let targetPath = task.computedPath;
 
     // Handle conflict resolution
@@ -172,6 +366,8 @@ export class DownloadManager {
     if (!resolvedPath) {
       task.status = 'completed';
       task.progress = 100;
+      task.completedAt = task.completedAt || new Date().toISOString();
+      this.persistTask(id).catch(() => {});
       this.processQueue();
       return;
     }
@@ -318,6 +514,7 @@ export class DownloadManager {
             task.isHashMismatch = true;
             task.error = `SHA256 hash mismatch! Expected ${task.sha256}, got ${computedHash}`;
             logger.error(task.error);
+            this.persistTask(id).catch(() => {});
             this.processQueue();
             return;
           }
@@ -353,6 +550,8 @@ export class DownloadManager {
       task.progress = 100;
       task.speedBps = 0;
       task.isHashMismatch = false;
+      task.completedAt = task.completedAt || new Date().toISOString();
+      this.persistTask(id).catch(() => {});
       logger.info(`Successfully completed download: ${task.fileName} -> ${resolvedPath}`);
       webhookService.triggerDownloadComplete(task).catch((err) => {
         logger.warn('Error triggering download complete webhook:', err);
@@ -365,6 +564,7 @@ export class DownloadManager {
         task.status = 'failed';
         task.error = err.message || 'Unknown download error';
         logger.error(`Download failed for task ${task.fileName}:`, err);
+        this.persistTask(id).catch(() => {});
       }
     }
 
@@ -392,7 +592,9 @@ export class DownloadManager {
       task.speedBps = 0;
       task.error = undefined;
       task.isHashMismatch = false;
+      task.completedAt = task.completedAt || new Date().toISOString();
       logger.info(`Manually forced download completion for: ${task.fileName} -> ${task.computedPath}`);
+      this.persistTask(id).catch(() => {});
       return true;
     } catch (err: any) {
       logger.error(`Failed to force complete download task ${task.fileName}:`, err);

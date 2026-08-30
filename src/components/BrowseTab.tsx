@@ -118,6 +118,9 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
   useEffect(() => {
     if (initialQuery !== undefined && initialQuery !== '') {
       setQuery(initialQuery);
+      setCurrentPage(1);
+      setPageCursors({});
+      fetchModels(1, '', initialQuery);
     }
   }, [initialQuery]);
 
@@ -196,8 +199,9 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
 
   const PAGE_SIZE = 48;
 
-  const fetchModels = async (pageToFetch?: number, cursorOverride?: string) => {
+  const fetchModels = async (pageToFetch?: number, cursorOverride?: string, queryOverride?: string) => {
     const pageNum = pageToFetch ?? currentPage;
+    const effectiveQuery = queryOverride !== undefined ? queryOverride : query;
     const initialCursor = cursorOverride !== undefined ? cursorOverride : (pageNum > 1 ? pageCursors[pageNum] : undefined);
 
     setLoading(true);
@@ -217,7 +221,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
         const requestLimit = (!includeNsfw || maxNsfwLevel < 5) ? 100 : PAGE_SIZE;
 
         const params: SearchParams = {
-          query: query.trim() || undefined,
+          query: effectiveQuery.trim() || undefined,
           types: selectedType !== 'All' ? [selectedType as ModelType] : undefined,
           baseModels: selectedBaseModel !== 'All' ? [selectedBaseModel] : undefined,
           sort,
@@ -297,7 +301,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
         timestamp: new Date().toLocaleTimeString(),
         durationMs,
         status: 'success',
-        requestParams: { query, selectedType, selectedBaseModel, sort, period, includeNsfw, pageNum },
+        requestParams: { query: effectiveQuery, selectedType, selectedBaseModel, sort, period, includeNsfw, pageNum },
         apiUrl: `https://civitai.com/api/v1/models?limit=${PAGE_SIZE}&page=${pageNum}`,
         resultCount: finalItems.length,
       });

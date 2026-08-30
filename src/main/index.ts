@@ -1365,6 +1365,15 @@ function startHttpBridgeServer() {
         downloadManager.cancelTask(body.id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/delete-download' && req.method === 'POST') {
+        const body = await getBody();
+        const success = await downloadManager.deleteTask(body.id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success }));
+      } else if (/^\/api\/clear(-|_)finished(-|_)downloads$/.test(url) && req.method === 'POST') {
+        const cleared = await downloadManager.clearFinishedTasks();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, cleared }));
       } else if (url === '/api/delete-local-model' && req.method === 'POST') {
         const body = await getBody();
         const model = await dbManager.get('SELECT * FROM local_models WHERE id = ?', [body.id]);
@@ -1985,6 +1994,16 @@ function registerIpcHandlers() {
     return downloadManager.getTasks();
   });
 
+  ipcMain.handle('delete-download', async (_event: unknown, id: string) => {
+    const success = await downloadManager.deleteTask(id);
+    return { success };
+  });
+
+  ipcMain.handle('clear-finished-downloads', async () => {
+    const cleared = await downloadManager.clearFinishedTasks();
+    return { success: true, cleared };
+  });
+
   // Fetch version history for a given model ID
   ipcMain.handle('fetch-versions', async (_event: unknown, modelId: number) => {
     try {
@@ -2311,6 +2330,7 @@ if (!gotTheLock) {
 
   app.whenReady().then(async () => {
     await dbManager.init();
+    await downloadManager.initPersistence();
     await loadConfigFromDb();
     await purgeStaleNodeResolutionCache();
     registerIpcHandlers();

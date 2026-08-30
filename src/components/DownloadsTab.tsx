@@ -19,11 +19,23 @@ import {
   RefreshCw,
   Activity,
   ArrowDownCircle,
+  Trash2,
+  ListChecks,
+  Check,
 } from 'lucide-react';
 import { DownloadTask } from '../types/app';
 
 export const DownloadsTab: React.FC = () => {
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<boolean>(false);
+
+  const refresh = async () => {
+    if (window.civitaiAPI) {
+      const currentTasks = await window.civitaiAPI.getDownloads();
+      setTasks(Array.isArray(currentTasks) ? currentTasks : []);
+    }
+  };
 
   useEffect(() => {
     const fetchDownloads = async () => {
@@ -41,6 +53,78 @@ export const DownloadsTab: React.FC = () => {
       });
     }
   }, []);
+
+  // Prune selections that reference tasks that no longer exist in the queue.
+  useEffect(() => {
+    setSelected((prev) => {
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (tasks.some((t) => t.id === id)) next.add(id);
+      });
+      return next;
+    });
+  }, [tasks]);
+
+  const toggleTask = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllFinished = () => {
+    const finishedIds = tasks.filter((t) => t.status === 'completed').map((t) => t.id);
+    if (finishedIds.length === 0) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const shouldSelectAll = finishedIds.some((id) => !next.has(id));
+      finishedIds.forEach((id) => {
+        if (shouldSelectAll) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+  };
+
+  const existingSelectedCount = Array.from(selected).filter((id) => tasks.some((t) => t.id === id)).length;
+  const finishedCount = tasks.filter((t) => t.status === 'completed').length;
+  const allFinishedSelected = finishedCount > 0 && tasks.filter((t) => t.status === 'completed').every((t) => selected.has(t.id));
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selected).filter((id) => tasks.some((t) => t.id === id));
+    if (ids.length === 0 || !window.civitaiAPI) return;
+    if (!window.confirm(`Remove ${ids.length} download(s) from the list?\n\nThe model files on disk will NOT be deleted.`)) return;
+    setBusy(true);
+    for (const id of ids) {
+      try {
+        await window.civitaiAPI.deleteDownload(id);
+      } catch (err) {
+        console.error('Failed to delete download from list:', id, err);
+      }
+    }
+    setSelected(new Set());
+    await refresh();
+    setBusy(false);
+  };
+
+  const handleClearFinished = async () => {
+    if (finishedCount === 0 || !window.civitaiAPI) return;
+    if (!window.confirm(`Clear ${finishedCount} finished download(s) from the list?\n\nThe model files on disk will NOT be deleted.`)) return;
+    setBusy(true);
+    try {
+      await window.civitaiAPI.clearFinishedDownloads();
+    } catch (err) {
+      console.error('Failed to clear finished downloads:', err);
+    }
+    setSelected(new Set());
+    await refresh();
+    setBusy(false);
+  };
 
   const handlePause = async (id: string) => {
     if (window.civitaiAPI) await window.civitaiAPI.pauseDownload(id);
@@ -103,6 +187,53 @@ export const DownloadsTab: React.FC = () => {
         </div>
       </div>
 
+      {/* Queue Management Toolbar */}
+      {tasks.length > 0 && (
+        <div className="glass-panel p-3.5 rounded-2xl flex flex-wrap items-center gap-3 justify-between border border-slate-800 shadow-xl">
+          <button
+            onClick={toggleSelectAllFinished}
+            disabled={finishedCount === 0}
+            className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+              allFinishedSelected
+                ? 'bg-purple-600/20 border-purple-500/50 text-purple-200'
+                : 'bg-slate-900/80 border-slate-700/80 text-slate-300 hover:text-white hover:border-purple-500/40'
+            }`}
+            title={allFinishedSelected ? 'Unselect all finished downloads' : `Select all finished downloads (${finishedCount})`}
+          >
+            <span className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+              allFinishedSelected ? 'bg-purple-500 border-purple-400' : 'bg-slate-950 border-slate-600'
+            }`}>
+              {allFinishedSelected && <Check size={13} className="text-white stroke-[3]" />}
+            </span>
+            <span>
+              {allFinishedSelected ? 'Unselect Finished' : `Select Finished (${finishedCount})`}
+            </span>
+          </button>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleDeleteSelected}
+              disabled={existingSelectedCount === 0 || busy}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Delete the selected downloads from this list. Files on disk are NOT touched."
+            >
+              <Trash2 size={14} className="text-rose-400" />
+              <span>Delete Selected ({existingSelectedCount})</span>
+            </button>
+
+            <button
+              onClick={handleClearFinished}
+              disabled={finishedCount === 0 || busy}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Remove every finished download from this list. Files on disk are NOT touched."
+            >
+              <ListChecks size={14} className="text-emerald-400" />
+              <span>Clear All Finished ({finishedCount})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Queue List */}
       {tasks.length === 0 ? (
         <div className="text-center py-28 text-slate-500 text-sm glass-panel rounded-2xl">
@@ -113,9 +244,26 @@ export const DownloadsTab: React.FC = () => {
           {tasks.map((task) => (
             <div
               key={task.id}
-              className="glass-card p-6 rounded-2xl border border-slate-800 space-y-4 shadow-xl"
+              className={`glass-card p-4 pl-3 sm:p-5 sm:pl-4 rounded-2xl border space-y-4 shadow-xl flex items-start gap-3 transition-colors ${
+                selected.has(task.id) ? 'border-purple-500/60 bg-purple-950/10' : 'border-slate-800'
+              }`}
             >
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <label
+                className={`mt-5 shrink-0 flex items-center justify-center w-5 h-5 rounded-md border cursor-pointer transition-colors select-none ${
+                  selected.has(task.id) ? 'bg-purple-500 border-purple-400' : 'bg-slate-950/80 border-slate-600 hover:border-purple-400'
+                }`}
+                title={selected.has(task.id) ? 'Deselect this download' : 'Select this download'}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(task.id)}
+                  onChange={() => toggleTask(task.id)}
+                  className="sr-only"
+                />
+                {selected.has(task.id) && <Check size={14} className="text-white stroke-[3] pointer-events-none" />}
+              </label>
+              <div className="flex-1 min-w-0 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2.5">
                     <h3 className="font-bold text-slate-100 text-base">{task.modelName}</h3>
@@ -224,6 +372,7 @@ export const DownloadsTab: React.FC = () => {
                     </button>
                   </div>
                 )}
+                </div>
               </div>
             </div>
           ))}

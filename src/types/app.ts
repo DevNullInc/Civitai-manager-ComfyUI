@@ -303,6 +303,7 @@ export interface DownloadTask {
   isHashMismatch?: boolean;
   deleteOldVersionFile?: string;
   deleteOldModelId?: string;
+  completedAt?: string;
 }
 
 export interface LocalModel {

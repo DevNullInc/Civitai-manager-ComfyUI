@@ -36,6 +36,7 @@ import { DownloadFolderPromptModal } from './components/DownloadFolderPromptModa
 import { DevelopmentUpdateBanner } from './components/DevelopmentUpdateBanner';
 import { ScanProvider, useScan } from './context/ScanContext';
 import { CivitAIModel, CivitAIModelVersion } from './types/civitai';
+import { LocalModel } from './types/app';
 
 type Tab = 'browse' | 'library' | 'workflows' | 'downloads' | 'settings' | 'about';
 
@@ -237,7 +238,13 @@ function AppContent() {
     }
   };
 
-  const handleCheckUpdate = (_localModel: any) => {
+  const handleCheckUpdate = (localModel: LocalModel) => {
+    const rawName = localModel?.civitaiName || localModel?.fileName || '';
+    const query = rawName
+      .replace(/\.(safetensors|pt|ckpt|bin)$/i, '')
+      .replace(/_/g, ' ')
+      .trim();
+    setBrowseInitialQuery(query);
     setActiveTab('browse');
   };
 

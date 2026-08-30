@@ -51,6 +51,7 @@ function apiServerPlugin(): Plugin {
     name: 'api-server-plugin',
     async configureServer(server) {
       await loadConfig();
+      await downloadManager.initPersistence();
 
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/api')) {
@@ -170,6 +171,13 @@ function apiServerPlugin(): Plugin {
             const body = await getBody();
             downloadManager.cancelTask(body.id);
             res.end(JSON.stringify({ success: true }));
+          } else if (req.url === '/api/delete-download' && req.method === 'POST') {
+            const body = await getBody();
+            const success = await downloadManager.deleteTask(body.id);
+            res.end(JSON.stringify({ success }));
+          } else if ('/api/clear-finished-downloads' === req.url && req.method === 'POST') {
+            const cleared = await downloadManager.clearFinishedTasks();
+            res.end(JSON.stringify({ success: true, cleared }));
           } else {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: 'Endpoint not found' }));

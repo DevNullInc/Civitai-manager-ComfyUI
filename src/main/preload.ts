@@ -44,6 +44,8 @@ const api = {
   resumeDownload: (id: string) => ipcRenderer.invoke('resume-download', id),
   cancelDownload: (id: string) => ipcRenderer.invoke('cancel-download', id),
   forceCompleteDownload: (id: string) => ipcRenderer.invoke('force-complete-download', id),
+  deleteDownload: (id: string) => ipcRenderer.invoke('delete-download', id),
+  clearFinishedDownloads: () => ipcRenderer.invoke('clear-finished-downloads'),
   getDownloads: () => ipcRenderer.invoke('get-downloads'),
   onDownloadProgress: (callback: (tasks: any[]) => void) => {
     ipcRenderer.on('download-progress', (_event: unknown, tasks: any) => callback(tasks));

@@ -92,7 +92,9 @@ export class DatabaseManager {
         version_name TEXT NOT NULL,
         model_type TEXT NOT NULL,
         base_model TEXT,
+        creator TEXT,
         target_folder TEXT NOT NULL,
+        target_root TEXT,
         file_name TEXT NOT NULL,
         download_url TEXT NOT NULL,
         size_kb INTEGER,
@@ -106,6 +108,7 @@ export class DatabaseManager {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         completed_at DATETIME,
         computed_path TEXT,
+        is_hash_mismatch INTEGER DEFAULT 0,
         delete_old_version_file TEXT,
         delete_old_model_id TEXT
       );
@@ -177,6 +180,9 @@ export class DatabaseManager {
       'ALTER TABLE local_models ADD COLUMN ignored_version_id INTEGER;',
       'ALTER TABLE downloads ADD COLUMN delete_old_version_file TEXT;',
       'ALTER TABLE downloads ADD COLUMN delete_old_model_id TEXT;',
+      'ALTER TABLE downloads ADD COLUMN creator TEXT;',
+      'ALTER TABLE downloads ADD COLUMN target_root TEXT;',
+      'ALTER TABLE downloads ADD COLUMN is_hash_mismatch INTEGER DEFAULT 0;',
     ];
 
     for (const sql of columnUpdates) {

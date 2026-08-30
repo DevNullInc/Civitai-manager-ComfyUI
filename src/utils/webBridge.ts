@@ -280,6 +280,31 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      deleteDownload: async (id: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/delete-download`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          });
+          return await res.json();
+        } catch (e) {
+          return { success: false };
+        }
+      },
+
+      clearFinishedDownloads: async () => {
+        try {
+          const res = await fetch(`${API_BASE}/clear-finished-downloads`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          return await res.json();
+        } catch (e) {
+          return { success: false, cleared: 0 };
+        }
+      },
+
       forceCompleteDownload: async (id: string) => {
         try {
           const res = await fetch(`${API_BASE}/force-complete-download`, {
