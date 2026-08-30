@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🌟 Added
 
+- **Dedicated macOS Launcher Scripts (`cmm-mac.sh` / `cmm-dev-mac.sh`)**:
+  - Added `cmm-mac.sh` as the dedicated macOS launcher (mirroring `cmm.sh` for Linux and `cmm.ps1` for Windows) with full command support: `start`, `stop`, `restart`, `status`, `update`, `package`/`dist`, `help`, and CLI passthrough.
+  - macOS-specific Electron binary path resolution (`Electron.app/Contents/MacOS/Electron`) instead of Linux `electron/dist/electron`.
+  - Window focus via `osascript` (AppleScript) instead of Linux `wmctrl`/`xdotool`.
+  - Port detection using `lsof` only (no `ss` fallback — `ss` is Linux-only).
+  - macOS-specific protected process blacklist (Finder, Dock, WindowServer, loginwindow, Spotlight, launchd, etc.) preventing accidental termination of system services.
+  - Node.js install hint includes `brew install node` for Homebrew users.
+  - Homebrew path auto-detection for both Apple Silicon (`/opt/homebrew/bin`) and Intel (`/usr/local/bin`) Macs.
+  - `timeout` command gracefully falls back to `gtimeout` (GNU coreutils) or no-timeout when checking Git remotes.
+  - Packaging target uses `electron-builder --mac dmg zip` and scans for `.dmg` and `.zip` release artifacts.
+  - Banner identifies itself as the **macOS Launcher** variant.
+  - Added `cmm-dev-mac.sh` development wrapper setting `CMM_DEV_BUILD=true` and `NODE_ENV=development` before delegating to `cmm-mac.sh`.
+  - Added `cmm:start:mac`, `cmm:stop:mac`, `cmm:restart:mac`, `cmm:status:mac`, `cmm:package:mac` npm convenience scripts in `package.json`.
+  - `cmm.sh` is now explicitly Linux-only; macOS users should use `cmm-mac.sh`.
+
 - **Automatic ComfyUI Model Subfolder Scaffolding & Verification**:
   - Automatically creates and verifies the full standard ComfyUI model subfolder tree (`checkpoints/`, `loras/`, `vae/`, `controlnet/`, `diffusion_models/`, `upscale_models/`, `clip/`, `clip_vision/`, `text_encoders/`, `unet/`, `hypernetworks/`, `gligen/`, `style_models/`, `model_patches/`, `configs/`, `vae_approx/`, `ipadapter/`, `insightface/`, `photomaker/`, `pulid/`, `reactor/`, `gguf/`, `wildcards/`, `ultralytics/`, `yolo/`, `sams/`) inside configured model directories if any subdirectories are missing.
   - Workflows directory is explicitly omitted from model folders since workflows are managed separately (`workflows/`, `user/default/workflows/`).

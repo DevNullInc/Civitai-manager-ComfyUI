@@ -53,12 +53,12 @@ export const ScanStatusBar: React.FC<ScanStatusBarProps> = ({
       role="status"
       aria-live="polite"
       aria-label="Background Folder Scan Progress"
-      className="w-full bg-slate-950/95 border-t border-purple-500/40 backdrop-blur-xl px-6 py-2.5 shadow-2xl flex-shrink-0 z-40 animate-fadeIn select-none"
+      className="w-full bg-slate-950/95 border-t border-purple-500/40 backdrop-blur-xl px-6 py-2.5 shadow-2xl shrink-0 z-40 animate-fadeIn select-none"
     >
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
         {/* Left: Progress info & animation */}
         <div className="flex items-center gap-3 min-w-0 flex-1 w-full sm:w-auto">
-          <div className="p-1.5 rounded-xl bg-purple-500/20 text-purple-300 flex-shrink-0">
+          <div className="p-1.5 rounded-xl bg-purple-500/20 text-purple-300 shrink-0">
             <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
           </div>
 
@@ -79,15 +79,15 @@ export const ScanStatusBar: React.FC<ScanStatusBarProps> = ({
         </div>
 
         {/* Center Progress Bar */}
-        <div className="w-full sm:w-64 bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800 flex-shrink-0 shadow-inner">
+        <div className="w-full sm:w-64 bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800 shrink-0 shadow-inner">
           <div
-            className="bg-gradient-to-r from-purple-600 via-indigo-500 to-purple-400 h-full transition-all duration-300 rounded-full glow-purple"
+            className="bg-linear-to-r from-purple-600 via-indigo-500 to-purple-400 h-full transition-all duration-300 rounded-full glow-purple"
             style={{ width: `${percent}%` }}
           />
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
           {activeTab !== 'library' && onNavigateToLibrary && (
             <button
               onClick={onNavigateToLibrary}

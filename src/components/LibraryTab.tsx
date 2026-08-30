@@ -579,7 +579,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             <button
               onClick={cancelScan}
               title="Stop Scanning ComfyUI Folders"
-              className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-rose-600/40 glow-rose cursor-pointer active:scale-95 animate-pulse"
+              className="flex items-center gap-2.5 px-6 py-3 bg-linear-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-rose-600/40 glow-rose cursor-pointer active:scale-95 animate-pulse"
             >
               <Square size={16} className="fill-white" />
               <span>Stop Scanning</span>
@@ -588,7 +588,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             <button
               onClick={startScan}
               title="Scan ComfyUI Folders"
-              className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95"
+              className="flex items-center gap-2.5 px-6 py-3 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95"
             >
               <FolderSearch size={20} />
               <span>Scan ComfyUI Folders</span>
@@ -602,7 +602,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             title="Query CivitAI hash database for all unidentified models to fetch names, preview images, and metadata"
             className={`flex items-center gap-2 px-5 py-3 border font-bold rounded-2xl text-sm transition-all shadow-md cursor-pointer disabled:opacity-50 active:scale-95 ${
               localModels.some((m) => !m.isMatched)
-                ? 'bg-gradient-to-r from-indigo-900/60 to-purple-900/60 hover:from-indigo-900/80 hover:to-purple-900/80 border-indigo-500/40 text-indigo-200 glow-purple'
+                ? 'bg-linear-to-r from-indigo-900/60 to-purple-900/60 hover:from-indigo-900/80 hover:to-purple-900/80 border-indigo-500/40 text-indigo-200 glow-purple'
                 : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700/80 hover:border-indigo-500/50 text-slate-200 hover:text-indigo-300'
             }`}
           >
@@ -701,7 +701,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
 
           <div className="w-full bg-slate-950 rounded-full h-3.5 overflow-hidden border border-slate-800/80 shadow-inner">
             <div
-              className="bg-gradient-to-r from-purple-600 via-indigo-500 to-purple-500 h-full transition-all duration-300 rounded-full glow-purple"
+              className="bg-linear-to-r from-purple-600 via-indigo-500 to-purple-500 h-full transition-all duration-300 rounded-full glow-purple"
               style={{
                 width: `${
                   scanProgress.totalFiles > 0
@@ -736,7 +736,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
             <button
               onClick={handlePullAllMissingModels}
               disabled={pullingAllMissing || isScanning}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
             >
               {pullingAllMissing ? (
                 <>
@@ -775,8 +775,8 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer flex items-center gap-1.5 ${
                   filter === t
                     ? isMissingFilter
-                      ? 'bg-gradient-to-r from-rose-600 to-amber-600 text-white shadow-md shadow-rose-600/30'
-                      : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                      ? 'bg-linear-to-r from-rose-600 to-amber-600 text-white shadow-md shadow-rose-600/30'
+                      : 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
                     : isMissingFilter && count > 0
                     ? 'bg-rose-950/40 text-rose-300 hover:text-rose-200 border border-rose-500/40 animate-pulse'
                     : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
@@ -949,7 +949,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                   >
                     {/* Preview thumbnail if available, otherwise HardDrive icon */}
                     {model.previewUrl ? (
-                      <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border border-purple-500/30 shadow-md bg-slate-950 relative group">
+                      <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-purple-500/30 shadow-md bg-slate-950 relative group">
                         <FallbackImage
                           src={model.previewUrl}
                           alt={model.civitaiName || model.fileName}
@@ -971,7 +971,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                         )}
                       </div>
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-purple-400 flex-shrink-0 shadow-inner">
+                      <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-purple-400 shrink-0 shadow-inner">
                         <HardDrive size={20} />
                       </div>
                     )}
@@ -1045,7 +1045,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                         )}
                       </div>
                       <p className="text-xs text-slate-400 font-mono truncate mt-1 flex items-center gap-1.5">
-                        <Folder size={12} className="text-slate-500 flex-shrink-0" />
+                        <Folder size={12} className="text-slate-500 shrink-0" />
                         <span className="truncate">{model.filePath}</span>
                       </p>
                     </div>
@@ -1099,7 +1099,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                       <button
                         onClick={() => handlePullMissingModel(model)}
                         disabled={pullingModelId === model.id || isScanning}
-                        className="flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold px-3.5 py-1.5 rounded-xl hover:shadow-lg hover:shadow-purple-500/30 transition-all cursor-pointer disabled:opacity-50 active:scale-95 text-xs shadow-md shadow-purple-950/40"
+                        className="flex items-center gap-1.5 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold px-3.5 py-1.5 rounded-xl hover:shadow-lg hover:shadow-purple-500/30 transition-all cursor-pointer disabled:opacity-50 active:scale-95 text-xs shadow-md shadow-purple-950/40"
                         title={
                           model.civitaiVersionId
                             ? `Download ${model.civitaiName || model.fileName} from CivitAI into your models directory`
@@ -1247,7 +1247,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className="flex-shrink-0">
+                              <div className="shrink-0">
                                 {isKeeper ? (
                                   <div className="w-5 h-5 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center text-emerald-400">
                                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -1333,7 +1333,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                         type="button"
                         disabled={resolvingHash === model.sha256 || duplicateCopies.length <= 1}
                         onClick={() => model.sha256 && handleResolveDuplicates(model.sha256, currentKeeperId, duplicateCopies)}
-                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-red-950/30 cursor-pointer disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-red-950/30 cursor-pointer disabled:opacity-50"
                       >
                         <Trash2 size={14} />
                         <span>
@@ -1414,7 +1414,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                 className="w-full text-left p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5">
-                  <BookmarkMinus size={18} className="text-amber-400 flex-shrink-0" />
+                  <BookmarkMinus size={18} className="text-amber-400 shrink-0" />
                   <div className="flex-1">
                     <span className="font-bold text-sm text-amber-200 group-hover:text-amber-100 block">
                       Remove from Library Only
@@ -1453,7 +1453,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
                 className="w-full text-left p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition-all cursor-pointer group"
               >
                 <div className="flex items-center gap-2.5">
-                  <Trash2 size={18} className="text-rose-400 flex-shrink-0" />
+                  <Trash2 size={18} className="text-rose-400 shrink-0" />
                   <div className="flex-1">
                     <span className="font-bold text-sm text-rose-200 group-hover:text-rose-100 block">
                       Delete from Disk & Library

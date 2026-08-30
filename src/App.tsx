@@ -256,10 +256,10 @@ function AppContent() {
       <DevelopmentUpdateBanner />
 
       {/* Sticky Top Navigation Bar */}
-      <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 backdrop-blur-xl px-6 py-3 shadow-2xl flex items-center justify-between gap-6 w-full flex-shrink-0">
+      <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 backdrop-blur-xl px-6 py-3 shadow-2xl flex items-center justify-between gap-6 w-full shrink-0">
         {/* Left: Brand Logo & Title */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 flex items-center justify-center">
+          <div className="p-2.5 rounded-2xl bg-linear-to-tr from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 flex items-center justify-center">
             <Layers size={22} />
           </div>
           <div>
@@ -278,7 +278,7 @@ function AppContent() {
             onClick={() => setActiveTab('browse')}
             className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'browse'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                ? 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
@@ -290,7 +290,7 @@ function AppContent() {
             onClick={() => setActiveTab('library')}
             className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'library'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                ? 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
@@ -302,7 +302,7 @@ function AppContent() {
             onClick={() => setActiveTab('workflows')}
             className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'workflows'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                ? 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
@@ -314,7 +314,7 @@ function AppContent() {
             onClick={() => setActiveTab('downloads')}
             className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer relative whitespace-nowrap ${
               activeTab === 'downloads'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                ? 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
@@ -332,7 +332,7 @@ function AppContent() {
             onClick={() => setActiveTab('settings')}
             className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'settings'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                ? 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
@@ -344,7 +344,7 @@ function AppContent() {
             onClick={() => setActiveTab('about')}
             className={`flex-1 min-w-[110px] max-w-[160px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
               activeTab === 'about'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
+                ? 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
             }`}
           >
@@ -488,7 +488,7 @@ function AppContent() {
           <button
             onClick={scrollToTop}
             title="Return to Top"
-            className="fixed bottom-14 right-8 z-[100] p-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-2xl shadow-purple-600/50 hover:scale-110 active:scale-95 transition-all duration-200 border border-purple-400/40 glow-purple flex items-center justify-center cursor-pointer"
+            className="fixed bottom-14 right-8 z-[100] p-3.5 rounded-2xl bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-2xl shadow-purple-600/50 hover:scale-110 active:scale-95 transition-all duration-200 border border-purple-400/40 glow-purple flex items-center justify-center cursor-pointer"
           >
             <ChevronUp size={20} className="stroke-[3]" />
           </button>
@@ -499,7 +499,7 @@ function AppContent() {
       <ScanStatusBar onNavigateToLibrary={() => setActiveTab('library')} activeTab={activeTab} />
 
       {/* Persistent Footer */}
-      <footer className="sticky bottom-0 z-40 glass-panel border-t border-slate-800/80 backdrop-blur-xl px-6 py-2 shadow-2xl flex items-center justify-between text-xs text-slate-400 w-full flex-shrink-0">
+      <footer className="sticky bottom-0 z-40 glass-panel border-t border-slate-800/80 backdrop-blur-xl px-6 py-2 shadow-2xl flex items-center justify-between text-xs text-slate-400 w-full shrink-0">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-slate-300">CivitAI Model Manager</span>
           <span className="text-slate-600">•</span>

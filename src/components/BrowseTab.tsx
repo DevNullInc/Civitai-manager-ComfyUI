@@ -571,7 +571,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
           </div>
           <button
             type="submit"
-            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-lg shadow-purple-600/25 flex items-center gap-2"
+            className="px-5 py-2.5 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-lg shadow-purple-600/25 flex items-center gap-2"
           >
             <span>Search</span>
           </button>
@@ -816,7 +816,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
             </button>
 
             {/* Page Indicator Pill */}
-            <div className="px-3.5 py-2 bg-gradient-to-r from-purple-600/20 to-indigo-600/20 border border-purple-500/30 text-purple-200 font-bold rounded-xl shadow-inner flex items-center gap-1">
+            <div className="px-3.5 py-2 bg-linear-to-r from-purple-600/20 to-indigo-600/20 border border-purple-500/30 text-purple-200 font-bold rounded-xl shadow-inner flex items-center gap-1">
               <span>Page</span>
               <span className="text-white font-extrabold">{currentPage}</span>
               {metadata.totalPages ? (
@@ -831,7 +831,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
               className={`px-4 py-2 rounded-xl border flex items-center gap-1.5 transition-all ${
                 !metadata.nextPage && !metadata.nextCursor && !pageCursors[currentPage + 1] && displayedModels.length < PAGE_SIZE
                   ? 'bg-slate-950/40 border-slate-900 text-slate-600 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold border-transparent shadow-lg shadow-purple-600/25 cursor-pointer glow-purple'
+                  : 'bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold border-transparent shadow-lg shadow-purple-600/25 cursor-pointer glow-purple'
               }`}
             >
               <span>Next</span>
@@ -1033,7 +1033,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
                             candidateUrls={selectedVersion.images ? selectedVersion.images.slice(idx).map((i) => i.url) : []}
                             alt="Preview sample"
                             cacheType="browse"
-                            className="w-32 h-32 object-cover rounded-xl border border-slate-800 bg-slate-950 flex-shrink-0"
+                            className="w-32 h-32 object-cover rounded-xl border border-slate-800 bg-slate-950 shrink-0"
                           />
                         ))}
                       </div>
@@ -1058,7 +1058,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
               {selectedVersion && (
                 <button
                   onClick={() => triggerDownload(selectedVersion)}
-                  className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer"
+                  className="flex items-center gap-2.5 px-6 py-3 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer"
                 >
                   <Download size={18} />
                   <span>
@@ -1142,7 +1142,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
             {/* Error Banner */}
             {debugInfo.error && (
               <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 flex items-start gap-2.5">
-                <AlertTriangle size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+                <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <span className="font-bold block text-red-200">API Error Response:</span>
                   <pre className="font-mono text-[11px] mt-1 whitespace-pre-wrap break-all text-red-300 bg-red-950/50 p-2.5 rounded-lg border border-red-500/20">

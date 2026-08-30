@@ -703,7 +703,7 @@ export const SettingsTab: React.FC = () => {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95 shrink-0"
+          className="flex items-center gap-2 px-6 py-3 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 glow-purple cursor-pointer active:scale-95 shrink-0"
         >
           <Save size={18} />
           <span>{saving ? 'Saving...' : 'Save Settings'}</span>
@@ -770,7 +770,7 @@ export const SettingsTab: React.FC = () => {
                   type="button"
                   onClick={handleInstallCmmNode}
                   disabled={isCloningCmmNode}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-purple-600/30 to-cyan-600/30 hover:from-purple-600/50 hover:to-cyan-600/50 text-cyan-200 border border-cyan-500/40 shadow-md hover:shadow-cyan-500/20 transition-all cursor-pointer group disabled:opacity-50 active:scale-95"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-linear-to-r from-purple-600/30 to-cyan-600/30 hover:from-purple-600/50 hover:to-cyan-600/50 text-cyan-200 border border-cyan-500/40 shadow-md hover:shadow-cyan-500/20 transition-all cursor-pointer group disabled:opacity-50 active:scale-95"
                   title="Click to automatically Git clone ComfyUI-Model-Manager into your custom_nodes/ folder. (Currently Untested — please submit a bug report on GitHub if you encounter any issues!)"
                 >
                   {isCloningCmmNode ? (
@@ -857,7 +857,7 @@ export const SettingsTab: React.FC = () => {
                 type="button"
                 onClick={handleInstallCmmNode}
                 disabled={isCloningCmmNode}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 border border-cyan-500/40 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-cyan-950/40 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-linear-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 border border-cyan-500/40 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-cyan-950/40 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
                 title="Git clone https://github.com/DevNullInc/ComfyUI-Model-Manager into custom_nodes/ (Currently Untested — please submit a bug report on GitHub if you encounter any issues!)"
               >
                 {isCloningCmmNode ? (
@@ -1138,7 +1138,7 @@ export const SettingsTab: React.FC = () => {
                       type="button"
                       onClick={handleInstallCmmNode}
                       disabled={isCloningCmmNode}
-                      className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-950/50 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-linear-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-950/50 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
                       title="1-Click Git clone into custom_nodes/. (Currently Untested — please report issues on GitHub if you encounter problems!)"
                     >
                       {isCloningCmmNode ? (
@@ -1277,7 +1277,7 @@ export const SettingsTab: React.FC = () => {
           />
           <button
             onClick={addFolder}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
           >
             <FolderPlus size={16} />
             <span>Add Folder</span>
@@ -1388,7 +1388,7 @@ export const SettingsTab: React.FC = () => {
             <button
               onClick={handleCreateBackupZip}
               disabled={isExportingBackup}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/40 cursor-pointer disabled:opacity-50"
             >
               <Download size={15} />
               <span>{isExportingBackup ? 'Creating Backup...' : 'Create Backup (.ZIP)'}</span>
@@ -1975,7 +1975,7 @@ export const SettingsTab: React.FC = () => {
           <button
             onClick={handleRestart}
             disabled={!!appAction}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 bg-linear-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-indigo-600/20 cursor-pointer"
           >
             <RefreshCw size={16} className={appAction === 'restarting' ? 'animate-spin' : ''} />
             <span>{appAction === 'restarting' ? 'Restarting...' : 'Restart App'}</span>
@@ -1983,7 +1983,7 @@ export const SettingsTab: React.FC = () => {
           <button
             onClick={handleShutdown}
             disabled={!!appAction}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-red-600/20 cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 bg-linear-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-red-600/20 cursor-pointer"
           >
             <Power size={16} />
             <span>{appAction === 'shutting-down' ? 'Shutting Down...' : 'Shut Down'}</span>
@@ -2030,7 +2030,7 @@ export const SettingsTab: React.FC = () => {
               <button
                 onClick={handlePasteImportSubmit}
                 disabled={!pastedJsonText.trim()}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-purple-600/30 cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-purple-600/30 cursor-pointer"
               >
                 Apply & Save JSON
               </button>

@@ -93,7 +93,7 @@ export function AboutTab() {
 
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
-            <div className="p-4 rounded-3xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-600 text-white shadow-xl shadow-purple-600/30 flex items-center justify-center">
+            <div className="p-4 rounded-3xl bg-linear-to-tr from-purple-600 via-indigo-600 to-blue-600 text-white shadow-xl shadow-purple-600/30 flex items-center justify-center">
               <Layers size={36} />
             </div>
             <div>
@@ -313,7 +313,7 @@ export function AboutTab() {
               onClick={handleCopyReport}
               className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg ${copied
                 ? 'bg-emerald-600 text-white shadow-emerald-600/30 glow-emerald'
-                : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-600/30 glow-purple'
+                : 'bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-600/30 glow-purple'
                 }`}
             >
               {copied ? (

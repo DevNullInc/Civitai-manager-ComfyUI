@@ -616,7 +616,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 transition-all cursor-pointer"
           >
             <Upload size={15} />
             <span>Upload JSON / PNG</span>
@@ -776,7 +776,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                     onClick={() => handleSelectWorkflow(idx)}
                     className={`flex items-center gap-2.5 pl-4 pr-8 py-3 rounded-2xl border transition-all cursor-pointer text-left ${
                       isSelected
-                        ? 'bg-gradient-to-r from-purple-950/60 to-indigo-950/60 border-purple-500/60 shadow-lg shadow-purple-900/30'
+                        ? 'bg-linear-to-r from-purple-950/60 to-indigo-950/60 border-purple-500/60 shadow-lg shadow-purple-900/30'
                         : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 text-slate-300'
                     }`}
                   >
@@ -1103,7 +1103,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                           </div>
                           <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                             <div
-                              className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full transition-all duration-300"
+                              className="bg-linear-to-r from-cyan-500 to-blue-500 h-full transition-all duration-300"
                               style={{ width: `${task.progress}%` }}
                             />
                           </div>

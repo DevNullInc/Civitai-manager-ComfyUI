@@ -37,6 +37,11 @@
     "cmm:restart:linux": "./cmm.sh restart",
     "cmm:status:linux": "./cmm.sh status",
     "cmm:package:linux": "./cmm.sh package",
+    "cmm:start:mac": "./cmm-mac.sh start",
+    "cmm:stop:mac": "./cmm-mac.sh stop",
+    "cmm:restart:mac": "./cmm-mac.sh restart",
+    "cmm:status:mac": "./cmm-mac.sh status",
+    "cmm:package:mac": "./cmm-mac.sh package",
     "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [

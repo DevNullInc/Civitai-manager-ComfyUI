@@ -151,9 +151,9 @@ cd Civitai-manager-ComfyUI
 npm install
 ```
 
-#### 🚀 Recommended: Launch with `cmm.ps1` (Windows / PowerShell) or `cmm.sh` (Linux / macOS)
+#### 🚀 Recommended: Launch with `cmm.ps1` (Windows), `cmm.sh` (Linux), or `cmm-mac.sh` (macOS)
 
-The included `cmm.ps1` (PowerShell) and `cmm.sh` (Bash) scripts are the primary launchers for starting, stopping, restarting, and managing background processes.
+The included `cmm.ps1` (PowerShell), `cmm.sh` (Linux Bash), and `cmm-mac.sh` (macOS Bash) scripts are the primary launchers for starting, stopping, restarting, and managing background processes.
 
 **Windows (PowerShell):**
 
@@ -178,7 +178,7 @@ The included `cmm.ps1` (PowerShell) and `cmm.sh` (Bash) scripts are the primary 
 .\cmm.ps1 stop
 ```
 
-**Linux / macOS (Bash):**
+**Linux (Bash):**
 
 ```bash
 # 1. Start application with local Electron window & HTTP bridge
@@ -193,6 +193,24 @@ The included `cmm.ps1` (PowerShell) and `cmm.sh` (Bash) scripts are the primary 
 ./cmm.sh stop
 ```
 
+**macOS (Bash):**
+
+```bash
+# 1. Start application with local Electron window & HTTP bridge
+./cmm-mac.sh start
+
+# 2. Start on custom port or headless mode
+./cmm-mac.sh start --port 8080 --headless
+
+# 3. Check status / Stop / Restart
+./cmm-mac.sh status
+./cmm-mac.sh restart
+./cmm-mac.sh stop
+
+# 4. Package standalone macOS binaries (.dmg & .zip)
+./cmm-mac.sh package
+```
+
 #### 🍏 Building & Packaging on macOS
 
 To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directly on a Mac:
@@ -202,6 +220,8 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
 
    ```bash
    xcode-select --install
+   # Node.js via Homebrew:
+   brew install node
    ```
 
 2. **Clone & Install Dependencies**:
@@ -215,8 +235,11 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
 3. **Run in Development**:
 
    ```bash
-   # Run Vite + Electron desktop application in live development mode:
-   npm run electron:dev
+   # Run with the dedicated macOS launcher:
+   ./cmm-mac.sh start
+
+   # Or run with development flags (Git update checks & dev banner):
+   ./cmm-dev-mac.sh start
 
    # Or run Vite browser interface only (headless):
    npm run dev
@@ -225,7 +248,10 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
 4. **Compile Standalone macOS Application (`.dmg` & `.zip`)**:
 
    ```bash
-   # Build universal / native architecture packages for macOS:
+   # Build via the dedicated macOS launcher script:
+   ./cmm-mac.sh package
+
+   # Or build via npm script directly:
    npm run dist:mac
    ```
 
@@ -242,12 +268,12 @@ Please keep the following platform differences and limitations in mind when runn
 - **Unsigned Binaries & Gatekeeper**: Self-built or unsigned macOS applications will be flagged by Apple Gatekeeper as from an "Unidentified Developer". You must right-click $\rightarrow$ Open or execute `xattr -cr "/Applications/CivitAI Model Manager.app"` to bypass the quarantine check.
 - **Native C++ Node Module Compilation**: Packages utilizing native C++ bindings (`sqlite3` and `keytar`) must compile locally for your target architecture (`arm64` vs `x64`). Run `npm run postinstall` (or `npx electron-builder install-app-deps`) if architecture mismatches occur.
 - **Python Environment Resolution**: Automatic detection of Windows-specific embedded Python environments (`ComfyUI_windows_portable\python_embeded\python.exe`) is bypassed on macOS; CMM will look for virtualenvs (`venv/bin/python`, `.venv/bin/python`), Conda environments (`conda`/`miniconda`), or your active system Python interpreter when running companion node dependency installers.
-- **Window Activation Tools**: Linux-specific window focus utilities (`wmctrl` / `xdotool`) in `cmm.sh` are skipped on macOS.
+- **Dedicated macOS Launcher**: Use `./cmm-mac.sh` (and `./cmm-dev-mac.sh` for development) instead of `./cmm.sh` on macOS. The macOS script uses `osascript` (AppleScript) for window focus, macOS-specific Electron binary paths (`Electron.app/Contents/MacOS/Electron`), and macOS-specific protected process lists.
 - **Hardware Acceleration**: CPU-level SHA256 file hashing leverages ARM NEON and Apple Crypto engines on Apple Silicon Macs, while x86_64 uses Intel/AMD AVX-512 and SHA-NI extensions.
 
 #### Packaging Standalone Binaries & Cross-Platform Releases
 
-You can compile standalone binaries using `cmm.ps1`, `cmm.sh`, the dedicated release builder script `build-release.ps1`, or npm scripts:
+You can compile standalone binaries using `cmm.ps1` (Windows), `cmm.sh` (Linux), `cmm-mac.sh` (macOS), the dedicated release builder script `build-release.ps1`, or npm scripts:
 
 ```powershell
 # Build Windows portable standalone .exe and NSIS setup installer

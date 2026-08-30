@@ -194,10 +194,10 @@ export const DownloadsTab: React.FC = () => {
                   <div
                     className={`h-full transition-all duration-300 ${
                       task.status === 'completed'
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                        ? 'bg-linear-to-r from-emerald-500 to-teal-400'
                         : task.status === 'failed'
                         ? 'bg-red-500'
-                        : 'bg-gradient-to-r from-purple-600 to-indigo-500'
+                        : 'bg-linear-to-r from-purple-600 to-indigo-500'
                     }`}
                     style={{ width: `${task.progress}%` }}
                   />
@@ -218,7 +218,7 @@ export const DownloadsTab: React.FC = () => {
                     </div>
                     <button
                       onClick={() => handleForceComplete(task.id)}
-                      className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer shrink-0"
+                      className="px-3.5 py-1.5 bg-linear-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer shrink-0"
                     >
                       Keep & Finish File
                     </button>
