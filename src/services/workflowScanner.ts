@@ -471,25 +471,10 @@ export class WorkflowScanner {
         lowerName.endsWith('.bin') ||
         lowerName.endsWith('.onnx');
 
-      const isModelLoader =
-        nodeType.toLowerCase().includes('loader') ||
-        nodeType.toLowerCase().includes('checkpoint') ||
-        nodeType.toLowerCase().includes('lora') ||
-        nodeType.toLowerCase().includes('unet') ||
-        nodeType.toLowerCase().includes('diffusion') ||
-        nodeType.toLowerCase().includes('vae');
-
-      const isModelKey =
-        inputName.toLowerCase().includes('ckpt') ||
-        inputName.toLowerCase().includes('lora') ||
-        inputName.toLowerCase().includes('vae') ||
-        inputName.toLowerCase().includes('unet') ||
-        inputName.toLowerCase().includes('model') ||
-        inputName.toLowerCase().includes('clip') ||
-        inputName.toLowerCase().includes('control_net') ||
-        inputName.toLowerCase().includes('widget');
-
-      if (!isKnownModelExt && !(isModelLoader && isModelKey)) {
+      // STRICT: only values carrying an approved, generation-related file extension are
+      // treated as model references. Widget values such as switches/modes ("off", "on",
+      // "simple", ...) are never models, regardless of the node type or input name.
+      if (!isKnownModelExt) {
         return;
       }
 
@@ -508,7 +493,9 @@ export class WorkflowScanner {
       });
     };
 
-    // 1. UI workflow format { "nodes": [ ... ] }
+    // 1. UI workflow format { "nodes": [ ... ] } — only widget VALUES carrying a model
+    //    filename are scanned. Node input/output socket sections are never scanned, since
+    //    they describe connections, not model data.
     const uiWorkflow = normalized.workflow ? normalized.workflow : normalized;
     if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
       for (const node of uiWorkflow.nodes) {
@@ -528,15 +515,6 @@ export class WorkflowScanner {
           for (const [k, v] of Object.entries(widgets)) {
             if (typeof v === 'string') {
               checkAndAdd(String(nodeId), nodeType, k, v);
-            }
-          }
-        }
-
-        if (node.inputs && typeof node.inputs === 'object') {
-          const inputList = Array.isArray(node.inputs) ? node.inputs : Object.values(node.inputs);
-          for (const inObj of inputList as any[]) {
-            if (inObj && typeof inObj === 'object' && typeof inObj.value === 'string') {
-              checkAndAdd(String(nodeId), nodeType, inObj.name || 'input', inObj.value);
             }
           }
         }
