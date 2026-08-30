@@ -130,6 +130,13 @@ export class FolderRouter {
   scaffoldModelSubfolders(targetDir: string): { targetDir: string; created: string[]; existing: string[] } {
     if (!targetDir) return { targetDir: '', created: [], existing: [] };
 
+    // Only ever create directories under absolute paths. Refuse relative/loose values so raw
+    // (unvalidated) text can never be escalated into folders on disk (e.g. "comfyui", "c", "/models").
+    if (!path.isAbsolute(targetDir)) {
+      logger.warn(`Refusing to scaffold non-absolute model directory: ${targetDir}`);
+      return { targetDir, created: [], existing: [] };
+    }
+
     const created: string[] = [];
     const existing: string[] = [];
 

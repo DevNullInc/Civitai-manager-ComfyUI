@@ -178,9 +178,6 @@ async function loadConfigFromDb() {
       separateByCreator: currentConfig.organize_by.creator,
       advancedMappings: currentConfig.advanced_mappings,
     });
-
-    // Auto-build missing standard ComfyUI model subdirectories in configured model roots
-    scaffoldConfiguredModelFolders(currentConfig);
   } catch (err) {
     logger.error('Error loading config from SQLite:', err);
   }
@@ -1077,9 +1074,6 @@ function startHttpBridgeServer() {
           advancedMappings: currentConfig.advanced_mappings,
         });
 
-        // Auto-build missing standard ComfyUI model subdirectories in configured model roots
-        scaffoldConfiguredModelFolders(currentConfig);
-
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(currentConfig));
       } else if (url === '/api/scaffold-model-folders' && req.method === 'POST') {
@@ -1702,9 +1696,6 @@ function registerIpcHandlers() {
       separateByCreator: currentConfig.organize_by.creator,
       advancedMappings: currentConfig.advanced_mappings,
     });
-
-    // Auto-build missing standard ComfyUI model subdirectories in configured model roots
-    scaffoldConfiguredModelFolders(currentConfig);
 
     return currentConfig;
   });

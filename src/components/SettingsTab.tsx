@@ -164,43 +164,40 @@ export const SettingsTab: React.FC = () => {
     return `${clean}${sep}models`;
   };
 
-  const handleComfyUIInstallDirChange = (val: string) => {
-    const trimmed = val.trim();
-    let updatedFolders = [...config.comfyui_folders];
-    let newRoot = config.comfyui_root;
-
-    if (trimmed) {
+  const adoptDerivedModelsFolder = (installDir: string) => {
+    const trimmed = installDir.trim();
+    setConfig((prev) => {
+      const base = { ...prev, comfyui_install_dir: installDir };
+      if (!trimmed) return base;
+      const first = prev.comfyui_folders[0];
+      const isDefaultModelsPath = !first || /[\\/]models[\\/]?$/i.test(first);
       const derivedModels = deriveModelsFolder(trimmed);
-      if (updatedFolders.length === 0) {
-        updatedFolders = [derivedModels];
-        newRoot = derivedModels;
-      } else {
-        const first = updatedFolders[0];
-        const isDefaultModelsPath =
-          !first ||
-          first.endsWith('/models') ||
-          first.endsWith('\\models') ||
-          first.endsWith('/models/') ||
-          first.endsWith('\\models\\');
-
-        if (isDefaultModelsPath && updatedFolders.length === 1) {
-          updatedFolders = [derivedModels];
-          newRoot = derivedModels;
-        } else if (!updatedFolders.includes(derivedModels)) {
-          updatedFolders = [derivedModels, ...updatedFolders.filter((f) => f !== derivedModels)];
-          newRoot = derivedModels;
-        }
+      if (isDefaultModelsPath) {
+        return { ...base, comfyui_folders: [derivedModels], comfyui_root: derivedModels };
       }
-    }
+      if (!prev.comfyui_folders.includes(derivedModels)) {
+        return {
+          ...base,
+          comfyui_folders: [derivedModels, ...prev.comfyui_folders.filter((f) => f !== derivedModels)],
+          comfyui_root: derivedModels,
+        };
+      }
+      return base;
+    });
+  };
 
-    setConfig((prev) => ({
-      ...prev,
-      comfyui_install_dir: val,
-      comfyui_folders: updatedFolders,
-      comfyui_root: newRoot,
-    }));
-
+  const handleComfyUIInstallDirChange = (val: string, commitFolders = true) => {
+    setConfig((prev) => ({ ...prev, comfyui_install_dir: val }));
+    if (commitFolders) adoptDerivedModelsFolder(val);
     checkInstallDir(val);
+  };
+
+  const handleInstallDirBlur = () => {
+    // Only adopt the derived "\models" folder once the field is left, so partially typed text
+    // is never treated as a real model root (and never scaffolded on disk).
+    if (config.comfyui_install_dir && config.comfyui_install_dir.trim()) {
+      adoptDerivedModelsFolder(config.comfyui_install_dir);
+    }
   };
 
   const checkInstallDir = async (customPath?: string) => {
@@ -829,7 +826,8 @@ export const SettingsTab: React.FC = () => {
                 type="text"
                 placeholder="e.g. C:\AI\comfyui or /home/user/ComfyUI or D:\ComfyUI_windows_portable\ComfyUI"
                 value={config.comfyui_install_dir || ''}
-                onChange={(e) => handleComfyUIInstallDirChange(e.target.value)}
+                onChange={(e) => handleComfyUIInstallDirChange(e.target.value, false)}
+                onBlur={handleInstallDirBlur}
                 className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
               />
             </div>
