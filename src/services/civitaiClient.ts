@@ -84,8 +84,14 @@ export class CivitAIClient {
       if (params.period) queryParams.period = params.period;
       if (params.nsfw !== undefined) queryParams.nsfw = params.nsfw;
       if (params.limit) queryParams.limit = params.limit;
-      if (params.page) queryParams.page = params.page;
-      if (params.cursor) queryParams.cursor = params.cursor;
+
+      if (params.query) {
+        if (params.cursor) queryParams.cursor = params.cursor;
+      } else {
+        if (params.page) queryParams.page = params.page;
+        if (params.cursor) queryParams.cursor = params.cursor;
+      }
+
       if (params.tag) queryParams.tag = params.tag;
       if (params.username) queryParams.username = params.username;
 
