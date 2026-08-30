@@ -90,6 +90,8 @@ const api = {
     ipcRenderer.invoke('install-node-dependencies', nodeFolderPath),
   getInstalledCustomNodes: () =>
     ipcRenderer.invoke('get-installed-custom-nodes'),
+  markCustomNodeInstalled: (nodeType: string, folderName: string, customNodesDir?: string) =>
+    ipcRenderer.invoke('mark-node-installed', nodeType, folderName, customNodesDir),
 
   // Hugging Face
   hfCheckModel: (repoId: string) => ipcRenderer.invoke('hf-check-model', repoId),

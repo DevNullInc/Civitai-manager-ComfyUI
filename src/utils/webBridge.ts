@@ -565,6 +565,19 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      markCustomNodeInstalled: async (nodeType: string, folderName: string, customNodesDir?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/nodes/mark-installed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodeType, folderName, customNodesDir }),
+          });
+          return await res.json();
+        } catch (e) {
+          return { nodeType, isInstalled: false, githubCandidates: [] };
+        }
+      },
+
       hfCheckModel: async (repoId: string) => {
         try {
           const res = await fetch(`${API_BASE}/hf/check`, {

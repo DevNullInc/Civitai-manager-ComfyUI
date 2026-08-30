@@ -20,8 +20,11 @@ import {
   Sparkles,
   Link as LinkIcon,
   Package,
+  FolderSearch,
+  Search,
+  ChevronDown,
 } from 'lucide-react';
-import { NodeResolutionResult, NodeCloneResult } from '../types/app';
+import { NodeResolutionResult, NodeCloneResult, CustomNodePackage } from '../types/app';
 
 interface NodeResolutionCardProps {
   nodeType: string;
@@ -40,6 +43,14 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
   const [isInstallingDeps, setIsInstallingDeps] = useState(false);
   const [installOutput, setInstallOutput] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
+
+  // Manual fallback mapping (searchable dropdown of installed custom node folders)
+  const [manualPickerOpen, setManualPickerOpen] = useState(false);
+  const [manualSearch, setManualSearch] = useState('');
+  const [installedFolders, setInstalledFolders] = useState<CustomNodePackage[]>([]);
+  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
+  const [isMapping, setIsMapping] = useState(false);
+  const [mappingError, setMappingError] = useState<string | null>(null);
 
   const formatStars = (count: number): string => {
     if (count >= 1000) {
@@ -118,6 +129,48 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
     window.civitaiAPI.openExternal(searchUrl);
   };
 
+  const handleOpenManualPicker = async () => {
+    const nextOpen = !manualPickerOpen;
+    setManualPickerOpen(nextOpen);
+    if (nextOpen && installedFolders.length === 0 && window.civitaiAPI?.getInstalledCustomNodes) {
+      setIsLoadingFolders(true);
+      try {
+        const pkgs = await window.civitaiAPI.getInstalledCustomNodes();
+        setInstalledFolders(Array.isArray(pkgs) ? pkgs : []);
+      } catch {
+        setInstalledFolders([]);
+      } finally {
+        setIsLoadingFolders(false);
+      }
+    }
+  };
+
+  const handleManualSelect = async (folderName: string) => {
+    if (!folderName || !window.civitaiAPI?.markCustomNodeInstalled) return;
+    setIsMapping(true);
+    setMappingError(null);
+    try {
+      const res = await window.civitaiAPI.markCustomNodeInstalled(nodeType, folderName);
+      if (res?.isInstalled) {
+        setManualPickerOpen(false);
+        setManualSearch('');
+        if (onInstalled) onInstalled(folderName);
+      } else {
+        setMappingError(
+          'Could not map this node to that folder. The folder may have been removed from disk.'
+        );
+      }
+    } catch (err: any) {
+      setMappingError(err?.message || 'Failed to map node to folder.');
+    } finally {
+      setIsMapping(false);
+    }
+  };
+
+  const filteredFolders = installedFolders.filter((f) =>
+    f.folderName.toLowerCase().includes(manualSearch.toLowerCase())
+  );
+
   const candidates = resolution?.githubCandidates || [];
 
   return (
@@ -157,6 +210,74 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
           <span className="text-[11px] text-slate-500 pt-1">
             Opens GitHub in your browser, then paste the repo URL below to install.
           </span>
+        </div>
+      )}
+
+      {/* Fallback: map a "missing" node to an installed folder the scanner failed to detect */}
+      {!resolution?.isInstalled && (
+        <div className="p-3.5 rounded-xl bg-slate-950/40 border border-slate-800/80 space-y-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <button
+              onClick={handleOpenManualPicker}
+              className="text-xs font-semibold text-cyan-300 hover:text-cyan-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Select the folder that provides this node from your installed custom nodes"
+            >
+              <FolderSearch size={14} />
+              <span>Already have this node? Map it to its installed folder</span>
+              <ChevronDown
+                size={13}
+                className={`transition-transform ${manualPickerOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {mappingError && <span className="text-[11px] text-rose-400">{mappingError}</span>}
+          </div>
+
+          {manualPickerOpen && (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search installed custom node folders..."
+                  value={manualSearch}
+                  onChange={(e) => setManualSearch(e.target.value)}
+                  autoFocus
+                  className="w-full bg-slate-900/90 border border-slate-700/80 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+                />
+              </div>
+
+              <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 custom-scrollbar">
+                {isLoadingFolders ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 text-[11px] text-slate-400">
+                    <Loader2 size={12} className="animate-spin" />
+                    <span>Scanning custom_nodes folder...</span>
+                  </div>
+                ) : filteredFolders.length === 0 ? (
+                  <p className="px-3 py-2.5 text-[11px] text-slate-500 italic">
+                    {installedFolders.length === 0
+                      ? 'No custom node folders detected.'
+                      : 'No folders match your search.'}
+                  </p>
+                ) : (
+                  filteredFolders.map((f) => (
+                    <button
+                      key={f.folderName}
+                      onClick={() => handleManualSelect(f.folderName)}
+                      disabled={isMapping}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-900 text-xs text-slate-200 transition-colors cursor-pointer disabled:opacity-50 border-b border-slate-800/50 last:border-b-0"
+                    >
+                      <span className="font-mono truncate">{f.folderName}</span>
+                      {f.nodeClasses.length > 0 && (
+                        <span className="text-[10px] text-slate-500 shrink-0">
+                          {f.nodeClasses.length} class{f.nodeClasses.length !== 1 ? 'es' : ''}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

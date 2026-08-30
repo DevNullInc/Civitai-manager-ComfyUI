@@ -177,6 +177,7 @@ export class NodeResolverService {
 
   /**
    * Scans Python files within a custom node folder for NODE_CLASS_MAPPINGS keys.
+   * Uses brace-balanced extraction so nested dicts never truncate the mapping block.
    */
   private extractClassMappingsFromFolder(folderPath: string): string[] {
     const classNames = new Set<string>();
@@ -188,10 +189,9 @@ export class NodeResolverService {
       for (const pyFile of pyFiles) {
         try {
           const content = fs.readFileSync(path.join(folderPath, pyFile), 'utf-8');
-          // Match NODE_CLASS_MAPPINGS dictionary entries
-          const mappingBlock = content.match(/NODE_CLASS_MAPPINGS\s*=\s*\{([^}]+)\}/s);
-          if (mappingBlock && mappingBlock[1]) {
-            const keyMatches = mappingBlock[1].matchAll(/["']([^"']+)["']\s*:/g);
+          const blocks = this.extractAssignmentBraces(content, 'NODE_CLASS_MAPPINGS');
+          for (const block of blocks) {
+            const keyMatches = block.matchAll(/["']([^"']+)["']\s*:/g);
             for (const m of keyMatches) {
               if (m[1]) classNames.add(m[1].trim());
             }
@@ -201,6 +201,41 @@ export class NodeResolverService {
     } catch {}
 
     return Array.from(classNames);
+  }
+
+  /**
+   * Locates `name = { ... }` blocks in Python source and returns each block's inner
+   * content using brace counting, skipping quoted strings. Unlike a naive [^}]+ match,
+   * this tolerates nested dictionaries inside the mapping.
+   */
+  private extractAssignmentBraces(content: string, name: string): string[] {
+    const blocks: string[] = [];
+    const re = new RegExp(`\\b${name}\\s*=\\s*\\{`, 'g');
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(content)) !== null) {
+      let depth = 1;
+      let i = re.lastIndex;
+      while (i < content.length && depth > 0) {
+        const ch = content[i];
+        if (ch === "'" || ch === '"') {
+          const quote = ch;
+          i++;
+          while (i < content.length && content[i] !== quote) {
+            if (content[i] === '\\') i++;
+            i++;
+          }
+          i++;
+          continue;
+        }
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+        i++;
+      }
+      if (depth === 0) {
+        blocks.push(content.slice(re.lastIndex, i - 1));
+      }
+    }
+    return blocks;
   }
 
   /**
@@ -431,6 +466,18 @@ export class NodeResolverService {
 
     if (!cleanType) return result;
 
+    // Authoritative manual override: the user declared which installed folder supplies
+    // this node (fallback for when the local scanner fails to detect a class that is
+    // actually installed). Consulted before any cache or scan so the workflow stops
+    // flagging the node as missing.
+    const manual = await this.getManualMapping(cleanType, customNodesDir);
+    if (manual) {
+      result.isInstalled = true;
+      result.installedFolder = manual.folder_name;
+      result.installedPath = manual.folder_path || undefined;
+      return result;
+    }
+
     // Persistent cache (SQLite): previous outcomes — successful or failed — are
     // honored so that loading the same workflow again never re-attempts a node.
     // Passed only when the caller explicitly asks for a fresh (re-)search.
@@ -485,6 +532,82 @@ export class NodeResolverService {
     // Failed attempt — persisted so the same workflow won't re-attempt this node.
     await this.storeResolution(cleanType, result, customNodesDir);
     return result;
+  }
+
+  /**
+   * User-declared fallback: maps a node type to an existing folder in the custom_nodes
+   * directory, permanently marking the node as installed. Used when the local scanner
+   * cannot detect a class that the user knows is installed. The mapping is durable
+   * (no TTL) and is consulted by resolveMissingNode before any cache or scan.
+   */
+  async markNodeInstalled(
+    nodeType: string,
+    folderName: string,
+    customNodesDir?: string
+  ): Promise<NodeResolutionResult> {
+    const cleanType = nodeType.trim();
+    const cleanFolder = folderName.trim();
+    const result: NodeResolutionResult = {
+      nodeType: cleanType,
+      isInstalled: false,
+      githubCandidates: [],
+    };
+
+    if (!cleanType || !cleanFolder || !customNodesDir) {
+      return result;
+    }
+
+    const folderPath = path.join(customNodesDir, cleanFolder);
+    // Refuse the override if the folder no longer exists on disk.
+    if (!fs.existsSync(folderPath)) {
+      return result;
+    }
+
+    try {
+      await dbManager.run(
+        `INSERT OR REPLACE INTO manual_node_mappings
+          (node_type, custom_nodes_dir, folder_name, folder_path, created_at)
+        VALUES (?, ?, ?, ?, ?);`,
+        [cleanType, customNodesDir, cleanFolder, folderPath, Date.now()]
+      );
+      result.isInstalled = true;
+      result.installedFolder = cleanFolder;
+      result.installedPath = folderPath;
+      // Refresh the fast-path resolution cache so both reads agree with the override.
+      await this.storeResolution(cleanType, result, customNodesDir);
+    } catch (err) {
+      logger.warn(`Failed to persist manual node mapping [${cleanType}] -> ${cleanFolder}:`, err);
+    }
+    return result;
+  }
+
+  /**
+   * Reads a durable user-declared mapping (node_type -> folder), if any. Stale mappings
+   * whose folder has disappeared are dropped so a genuinely missing node is not hidden
+   * forever by an obsolete override.
+   */
+  private async getManualMapping(
+    nodeType: string,
+    customNodesDir?: string
+  ): Promise<{ folder_name: string; folder_path: string | null } | null> {
+    try {
+      const row: any = await dbManager.get(
+        'SELECT folder_name, folder_path FROM manual_node_mappings WHERE node_type = ? AND custom_nodes_dir = ?;',
+        [nodeType, customNodesDir || '']
+      );
+      if (!row?.folder_name) return null;
+
+      if (customNodesDir && !fs.existsSync(path.join(customNodesDir, row.folder_name))) {
+        await dbManager.run(
+          'DELETE FROM manual_node_mappings WHERE node_type = ? AND custom_nodes_dir = ?;',
+          [nodeType, customNodesDir || '']
+        );
+        return null;
+      }
+      return { folder_name: row.folder_name, folder_path: row.folder_path || null };
+    } catch {
+      return null;
+    }
   }
 
   /**

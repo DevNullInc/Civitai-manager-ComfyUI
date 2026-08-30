@@ -1133,6 +1133,20 @@ function startHttpBridgeServer() {
         const pkgs = await nodeResolverService.inspectLocalCustomNodes(targetNodesDir);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(pkgs));
+      } else if (url === '/api/nodes/mark-installed' && req.method === 'POST') {
+        const body = await getBody();
+        const targetNodesDir =
+          body.customNodesDir ||
+          currentConfig.comfyui_custom_nodes_dir ||
+          (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+          (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+        const markRes = await nodeResolverService.markNodeInstalled(
+          body.nodeType,
+          body.folderName,
+          targetNodesDir
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(markRes));
       } else if ((url === '/api/health' || url === '/health') && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), pid: process.pid }));
@@ -1760,6 +1774,15 @@ function registerIpcHandlers() {
       (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
       (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
     return await nodeResolverService.inspectLocalCustomNodes(targetNodesDir);
+  });
+
+  ipcMain.handle('mark-node-installed', async (_event: unknown, nodeType: string, folderName: string, customNodesDir?: string) => {
+    const targetNodesDir =
+      customNodesDir ||
+      currentConfig.comfyui_custom_nodes_dir ||
+      (currentConfig.comfyui_install_dir ? path.join(currentConfig.comfyui_install_dir, 'custom_nodes') : '') ||
+      (currentConfig.comfyui_folders?.[0] ? path.join(path.dirname(currentConfig.comfyui_folders[0]), 'custom_nodes') : '');
+    return await nodeResolverService.markNodeInstalled(nodeType, folderName, targetNodesDir);
   });
 
   // Webhook Handlers

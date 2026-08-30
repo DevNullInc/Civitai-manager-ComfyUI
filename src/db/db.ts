@@ -148,6 +148,22 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_node_resolution_cache_updated ON node_resolution_cache(updated_at);
     `);
 
+    // 7. Manual Node Mappings Table (user-declared node -> folder overrides). These are
+    //    authoritative user fallbacks: when the local scan fails to detect a class but the
+    //    user knows which installed folder supplies it, the mapping permanently marks the
+    //    node as installed (unlike the TTL-based resolution cache).
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS manual_node_mappings (
+        node_type TEXT NOT NULL,
+        custom_nodes_dir TEXT NOT NULL DEFAULT '',
+        folder_name TEXT NOT NULL,
+        folder_path TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (node_type, custom_nodes_dir)
+      );
+      CREATE INDEX IF NOT EXISTS idx_manual_node_mappings_folder ON manual_node_mappings(folder_name);
+    `);
+
     // Ensure all columns exist for existing database files (graceful migration)
     const columnUpdates = [
       'ALTER TABLE local_models ADD COLUMN preview_url TEXT;',
