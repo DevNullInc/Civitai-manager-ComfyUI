@@ -176,7 +176,8 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
   // Resolve custom node classes for the active workflow. Resolution reads the persistent
   // SQLite cache first (so reloading a workflow never re-attempts a node), then checks
-  // the local install and curated registry. GitHub is never queried via the API here;
+  // the local install, ComfyUI's built-in core nodes (parsed from install nodes.py +
+  // comfy_extras), and the curated registry. GitHub is never queried via the API here;
   // the per-node card opens GitHub in the browser instead.
   const resolveWorkflowNodes = async (wf?: WorkflowInfo) => {
     if (!wf || !wf.nodeTypes || wf.nodeTypes.length === 0 || !window.civitaiAPI?.resolveMissingNode) {
@@ -186,56 +187,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     setIsResolvingNodes(true);
     const newResolutions: Record<string, NodeResolutionResult> = {};
 
-    // Standard ComfyUI Core built-in nodes that do not require custom extensions
-    const coreBuiltinNodes = new Set([
-      'KSampler',
-      'KSamplerAdvanced',
-      'CheckpointLoaderSimple',
-      'CheckpointLoader',
-      'VAELoader',
-      'VAEDecode',
-      'VAEEncode',
-      'CLIPTextEncode',
-      'CLIPLoader',
-      'DualCLIPLoader',
-      'TripleCLIPLoader',
-      'UNETLoader',
-      'DiffusionModelLoader',
-      'LoraLoader',
-      'LoraLoaderModelOnly',
-      'ControlNetLoader',
-      'ControlNetApply',
-      'ControlNetApplyAdvanced',
-      'EmptyLatentImage',
-      'SaveImage',
-      'PreviewImage',
-      'LoadImage',
-      'UpscaleModelLoader',
-      'ImageUpscaleWithModel',
-      'ImageScale',
-      'ImageScaleBy',
-      'LatentUpscale',
-      'LatentUpscaleBy',
-      'ConditioningCombine',
-      'ConditioningAverage',
-      'ConditioningConcat',
-      'ConditioningSetArea',
-      'Reroute',
-      'PrimitiveNode',
-      'Note',
-    ]);
-
     for (const nodeType of wf.nodeTypes) {
-      if (coreBuiltinNodes.has(nodeType)) {
-        newResolutions[nodeType] = {
-          nodeType,
-          isInstalled: true,
-          installedFolder: 'ComfyUI Core (Built-in)',
-          githubCandidates: [],
-        };
-        continue;
-      }
-
       try {
         const res = await window.civitaiAPI.resolveMissingNode(nodeType);
         newResolutions[nodeType] = res;

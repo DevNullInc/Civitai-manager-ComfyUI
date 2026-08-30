@@ -38,6 +38,62 @@ const REGISTRY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
 const RESOLUTION_CACHE_MISSING_TTL_MS = 6 * 60 * 60 * 1000; // 6 Hours
 const RESOLUTION_CACHE_INSTALLED_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
 
+// ComfyUI built-in core node classes — static fallback used only when the ComfyUI
+// install's nodes.py / comfy_extras sources cannot be read. The authoritative list is
+// parsed dynamically from the install so every core node is recognized.
+const CORE_NODE_FALLBACK = new Set<string>([
+  'KSampler',
+  'KSamplerAdvanced',
+  'CheckpointLoaderSimple',
+  'CheckpointLoader',
+  'CheckpointLoaderSDXL',
+  'VAELoader',
+  'VAEDecode',
+  'VAEDecodeTiled',
+  'VAEEncode',
+  'VAEEncodeTiled',
+  'CLIPTextEncode',
+  'CLIPTextEncodeSDXL',
+  'CLIPLoader',
+  'DualCLIPLoader',
+  'TripleCLIPLoader',
+  'UNETLoader',
+  'DiffusionModelLoader',
+  'LoraLoader',
+  'LoraLoaderModelOnly',
+  'ControlNetLoader',
+  'ControlNetApply',
+  'ControlNetApplyAdvanced',
+  'EmptyLatentImage',
+  'EmptyLatentImageSDXL',
+  'SaveImage',
+  'PreviewImage',
+  'LoadImage',
+  'LoadImageMask',
+  'ImageToMask',
+  'MaskToImage',
+  'UpscaleModelLoader',
+  'ImageUpscaleWithModel',
+  'ImageScale',
+  'ImageScaleBy',
+  'LatentUpscale',
+  'LatentUpscaleBy',
+  'LatentComposite',
+  'LatentBlend',
+  'LatentFlip',
+  'LatentRotate',
+  'LatentCrop',
+  'ConditioningCombine',
+  'ConditioningAverage',
+  'ConditioningConcat',
+  'ConditioningSetArea',
+  'ConditioningSetTimestepRange',
+  'ConditioningZeroOut',
+  'Reroute',
+  'PrimitiveNode',
+  'Note',
+]);
+
 const VALID_PYTHON_BASENAMES = new Set([
   'python',
   'python3',
@@ -81,6 +137,7 @@ export class NodeResolverService {
   private rateLimitCooldownUntil = 0;
   private rateLimitCooldownLoggedAt = 0;
   private readonly GITHUB_RATE_LIMIT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes after a 403
+  private coreNodeTypesCache: { key: string; nodeTypes: Set<string> } | null = null;
 
   /**
    * Auto-locates the exact Python binary associated with the local ComfyUI installation.
@@ -444,6 +501,75 @@ export class NodeResolverService {
   }
 
   /**
+   * Builds a cache key that changes whenever the ComfyUI core node sources (nodes.py
+   * or any comfy_extras/*.py) are modified, so parsed results stay fresh.
+   */
+  private getCoreNodeCacheKey(comfyuiDir: string): string {
+    try {
+      const nodesPy = path.join(comfyuiDir, 'nodes.py');
+      const parts = [`nodes.py:${fs.statSync(nodesPy).mtimeMs}`];
+      const extrasDir = path.join(comfyuiDir, 'comfy_extras');
+      if (fs.existsSync(extrasDir)) {
+        const extras = fs.readdirSync(extrasDir).filter((f) => f.endsWith('.py')).sort();
+        let sig = '';
+        for (const f of extras) {
+          try {
+            sig += `${f}:${fs.statSync(path.join(extrasDir, f)).mtimeMs};`;
+          } catch {}
+        }
+        parts.push(`comfy_extras:${sig}`);
+      }
+      return parts.join('|');
+    } catch {
+      return 'invalid';
+    }
+  }
+
+  /**
+   * Parses the installed ComfyUI's built-in core node classes from its base folder:
+   * nodes.py plus comfy_extras/nodes_*.py (the same sources the frontend loads).
+   * Results are cached per install until those files change.
+   */
+  private async getComfyUICoreNodeTypes(comfyuiDir?: string): Promise<Set<string>> {
+    if (!comfyuiDir || !fs.existsSync(path.join(comfyuiDir, 'nodes.py'))) {
+      return new Set(CORE_NODE_FALLBACK);
+    }
+
+    const cacheKey = this.getCoreNodeCacheKey(comfyuiDir);
+    if (this.coreNodeTypesCache && this.coreNodeTypesCache.key === cacheKey) {
+      return this.coreNodeTypesCache.nodeTypes;
+    }
+
+    const nodeTypes = new Set<string>();
+    const filesToScan = [path.join(comfyuiDir, 'nodes.py')];
+    const extrasDir = path.join(comfyuiDir, 'comfy_extras');
+    try {
+      if (fs.existsSync(extrasDir)) {
+        for (const f of fs.readdirSync(extrasDir)) {
+          if (f.endsWith('.py')) filesToScan.push(path.join(extrasDir, f));
+        }
+      }
+      for (const file of filesToScan) {
+        try {
+          const content = fs.readFileSync(file, 'utf8');
+          for (const block of this.extractAssignmentBraces(content, 'NODE_CLASS_MAPPINGS')) {
+            const keyMatches = block.matchAll(/["']([^"']+)["']\s*:/g);
+            for (const m of keyMatches) {
+              if (m[1]) nodeTypes.add(m[1].trim());
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+
+    for (const fallback of CORE_NODE_FALLBACK) {
+      if (!nodeTypes.has(fallback)) nodeTypes.add(fallback);
+    }
+    this.coreNodeTypesCache = { key: cacheKey, nodeTypes };
+    return nodeTypes;
+  }
+
+  /**
    * Node Resolution:
    * Tier 1: Local package & NODE_CLASS_MAPPINGS inspection
    * Tier 2: ComfyUI-Manager curated database lookup
@@ -465,6 +591,16 @@ export class NodeResolverService {
     };
 
     if (!cleanType) return result;
+
+    // ComfyUI built-in core nodes — parsed from <install_dir>/nodes.py + comfy_extras/*.py,
+    // with a static fallback for installs whose sources can't be read. Always installed, so
+    // never persisted to the SQLite cache (they're deterministic per install).
+    const coreNodeTypes = await this.getComfyUICoreNodeTypes(installDir);
+    if (coreNodeTypes.has(cleanType)) {
+      result.isInstalled = true;
+      result.installedFolder = 'ComfyUI Core (Built-in)';
+      return result;
+    }
 
     // Authoritative manual override: the user declared which installed folder supplies
     // this node (fallback for when the local scanner fails to detect a class that is
