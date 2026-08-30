@@ -314,6 +314,14 @@ export class WorkflowScanner {
     return Array.from(types).sort((a, b) => a.localeCompare(b));
   }
 
+  /** Directories that should never be traversed when looking for workflow files. */
+  private static readonly EXCLUDED_DIRS = new Set([
+    'node_modules', '.git', '.venv', 'venv', '__pycache__', '.cache',
+    'dist', 'build', 'output', 'temp', 'tmp', '.temp', '.tmp',
+    'web', 'web_custom_versions', 'tests', 'test',
+    '.tox', '.mypy_cache', '.pytest_cache', '.eggs',
+  ]);
+
   private collectWorkflowFiles(dir: string, list: string[], depth = 0) {
     if (depth > 5 || !fs.existsSync(dir)) return;
     try {
@@ -321,6 +329,7 @@ export class WorkflowScanner {
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
+          if (WorkflowScanner.EXCLUDED_DIRS.has(entry.name.toLowerCase())) continue;
           this.collectWorkflowFiles(fullPath, list, depth + 1);
         } else if (entry.isFile()) {
           const ext = path.extname(entry.name).toLowerCase();

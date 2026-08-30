@@ -796,12 +796,8 @@ function resolveWorkflowScanPaths(config: AppConfig, customPaths?: string | stri
 
     // Check specific workflow directory subpaths
     const subPaths = [
-      '',
       'workflows',
       path.join('user', 'default', 'workflows'),
-      path.join('user', 'workflows'),
-      'input',
-      'output',
     ];
 
     for (const sub of subPaths) {
