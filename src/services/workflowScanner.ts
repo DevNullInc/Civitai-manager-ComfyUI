@@ -237,7 +237,7 @@ export class WorkflowScanner {
     }
 
 // 2. Fallback: Synthesize spatial layout from prompt execution dictionary
-    const promptNodes = normalized.prompt ? normalized.prompt : normalized;
+const promptNodes = normalized.prompt ? normalized.prompt : normalized;
     if (promptNodes && typeof promptNodes === 'object' && !Array.isArray(promptNodes)) {
       const subgraphNames = this.extractSubgraphNames(normalized, promptNodes);
       const nodeEntries = Object.entries<any>(promptNodes).filter(([_, v]) => v && typeof v === 'object' && (v.class_type || v.type || v.inputs));
@@ -247,9 +247,6 @@ export class WorkflowScanner {
         let linkIdCounter = 1;
 
         nodeEntries.forEach(([id, nodeObj], index) => {
-          const col = index % 4;
-          const row = Math.floor(index / 4);
-
           const classType = this.resolveNodeTypeLabel(nodeObj.class_type || nodeObj.type, subgraphNames) || 'Node';
           const inputs = nodeObj.inputs || {};
 
@@ -269,12 +266,20 @@ export class WorkflowScanner {
           nodes.push({
             id: Number(id) || id,
             type: classType,
-            pos: [80 + col * 320, 80 + row * 220],
+            pos: [0, 0],
             size: [240, 140],
             inputs: nodeInputs,
             outputs: [{ name: 'OUT', type: 'any' }],
           });
         });
+
+        // Tempo: layered (longest-path) layout instead of a fixed 4-across grid so
+        // linear pipelines read as left-to-right columns instead of a zigzagging blob.
+        const layout = this.computeLayeredPositions(nodes, links);
+        for (const n of nodes) {
+          const p = layout.get(String(n.id));
+          if (p) n.pos = [p.x, p.y];
+        }
 
         return { nodes, links, groups: [] };
       }
@@ -334,6 +339,88 @@ export class WorkflowScanner {
       return subgraphNames.get(t) || null;
     }
     return t;
+  }
+
+  /**
+   * Layered (longest-path) layout for synthesized prompt graphs. Each node gets a column
+   * matching its execution depth, and same-depth nodes stack vertically so overlapping or
+   * lopsided clusters never occur.
+   */
+  private computeLayeredPositions(
+    nodes: { id: number | string }[],
+    links: any[][]
+  ): Map<string, { x: number; y: number }> {
+    const NODE_W = 240;
+    const NODE_H = 120;
+    const COL_GAP = NODE_W + 160;
+    const ROW_GAP = NODE_H + 190;
+    const margin = 120;
+
+    const out = new Map<string, string[]>();
+    const indeg = new Map<string, number>();
+    for (const n of nodes) {
+      const id = String(n.id);
+      out.set(id, []);
+      indeg.set(id, 0);
+    }
+
+    for (const l of links) {
+      if (!Array.isArray(l)) continue;
+      const src = l[1];
+      const dst = l[3];
+      if (src == null || dst == null) continue;
+      const srcId = String(src);
+      const dstId = String(dst);
+      if (srcId === dstId || !out.has(srcId) || !out.has(dstId)) continue;
+      out.get(srcId)!.push(dstId);
+      indeg.set(dstId, (indeg.get(dstId) || 0) + 1);
+    }
+
+    const level = new Map<string, number>();
+    const queue: string[] = [];
+    for (const n of nodes) {
+      const id = String(n.id);
+      if (indeg.get(id) === 0) {
+        level.set(id, 0);
+        queue.push(id);
+      }
+    }
+    while (queue.length) {
+      const cur = queue.shift()!;
+      const cl = level.get(cur) ?? 0;
+      for (const nxt of out.get(cur) || []) {
+        level.set(nxt, Math.max(level.get(nxt) ?? -1, cl + 1));
+        const d = indeg.get(nxt)! - 1;
+        indeg.set(nxt, d);
+        if (d <= 0) queue.push(nxt);
+      }
+    }
+
+    let nextLevel = 0;
+    for (const n of nodes) {
+      const lv = level.get(String(n.id));
+      if (lv != null) nextLevel = Math.max(nextLevel, lv + 1);
+    }
+    for (const n of nodes) {
+      const id = String(n.id);
+      if (!level.has(id)) level.set(id, nextLevel++);
+    }
+
+    const cols = new Map<number, number[]>();
+    nodes.forEach((n, i) => {
+      const lv = level.get(String(n.id)) ?? 0;
+      if (!cols.has(lv)) cols.set(lv, []);
+      cols.get(lv)!.push(i);
+    });
+
+    const layout = new Map<string, { x: number; y: number }>();
+    for (const [lv, indices] of cols) {
+      indices.forEach((nodeIdx, row) => {
+        const id = String(nodes[nodeIdx].id);
+        layout.set(id, { x: margin + lv * COL_GAP, y: margin + row * ROW_GAP });
+      });
+    }
+    return layout;
   }
 
   extractNodeTypes(data: any): string[] {

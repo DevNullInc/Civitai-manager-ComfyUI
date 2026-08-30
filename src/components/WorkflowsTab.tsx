@@ -81,6 +81,240 @@ function resolveNodeTypeLabel(raw: any, subgraphNames: Map<string, string>): str
   return t;
 }
 
+const CANVAS_NODE_W = 220;
+const CANVAS_NODE_H = 110;
+
+interface NodeCoord {
+  x: number;
+  y: number;
+}
+
+interface CanvasBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+type NodeLayout = Map<string, NodeCoord>;
+
+/** Normalize a ComfyUI link entry (array form or object form) into an edge reference. */
+function normalizeEdge(link: any): { srcId: string; dstId: string } | null {
+  if (!link) return null;
+  if (Array.isArray(link)) {
+    // ComfyUI link array: [linkId, origin_id, origin_slot, target_id, target_slot, type]
+    const [, src, , dst] = link;
+    if (src == null || dst == null) return null;
+    return { srcId: String(src), dstId: String(dst) };
+  }
+  if (typeof link === 'object') {
+    const src = link.origin_id ?? link.source_id ?? link.source;
+    const dst = link.target_id ?? link.target;
+    if (src == null || dst == null) return null;
+    return { srcId: String(src), dstId: String(dst) };
+  }
+  return null;
+}
+
+/**
+ * Layered (longest-path) layout synthesized from the link DAG. Each node is placed in a
+ * horizontal column matching its execution depth (sources on the left), with nodes of the
+ * same depth stacked vertically. Used whenever the workflow file has no usable coordinates,
+ * or when those coordinates are missing/duplicated and would collapse nodes together.
+ */
+function buildLayeredLayout(nodes: CanvasNode[], links: any[]): NodeLayout {
+  const out = new Map<string, string[]>();
+  const indeg = new Map<string, number>();
+  for (const n of nodes) {
+    const id = String(n.id);
+    out.set(id, []);
+    indeg.set(id, 0);
+  }
+
+  for (const l of links) {
+    const e = normalizeEdge(l);
+    if (!e || e.srcId === e.dstId) continue;
+    if (!out.has(e.srcId) || !out.has(e.dstId)) continue;
+    out.get(e.srcId)!.push(e.dstId);
+    indeg.set(e.dstId, (indeg.get(e.dstId) || 0) + 1);
+  }
+
+  // Longest-path layering via Kahn's algorithm.
+  const level = new Map<string, number>();
+  const queue: string[] = [];
+  for (const n of nodes) {
+    const id = String(n.id);
+    if (indeg.get(id) === 0) {
+      level.set(id, 0);
+      queue.push(id);
+    }
+  }
+  while (queue.length) {
+    const cur = queue.shift()!;
+    const cl = level.get(cur) ?? 0;
+    for (const nxt of out.get(cur) || []) {
+      level.set(nxt, Math.max(level.get(nxt) ?? -1, cl + 1));
+      const d = indeg.get(nxt)! - 1;
+      indeg.set(nxt, d);
+      if (d <= 0) queue.push(nxt);
+    }
+  }
+
+  // Leftover nodes (e.g. cycles) get pushed into fresh columns so they never overlap.
+  let nextLevel = 0;
+  for (const n of nodes) {
+    const lv = level.get(String(n.id));
+    if (lv != null) nextLevel = Math.max(nextLevel, lv + 1);
+  }
+  for (const n of nodes) {
+    const id = String(n.id);
+    if (!level.has(id)) level.set(id, nextLevel++);
+  }
+
+  const cols = new Map<number, number[]>();
+  nodes.forEach((n, i) => {
+    const lv = level.get(String(n.id)) ?? 0;
+    if (!cols.has(lv)) cols.set(lv, []);
+    cols.get(lv)!.push(i);
+  });
+
+  const margin = 120;
+  const layout: NodeLayout = new Map();
+  for (const [lv, indices] of cols) {
+    indices.forEach((nodeIdx, row) => {
+      const id = String(nodes[nodeIdx].id);
+      layout.set(id, {
+        x: margin + lv * (CANVAS_NODE_W + 160),
+        y: margin + row * (CANVAS_NODE_H + 190),
+      });
+    });
+  }
+  return layout;
+}
+
+function computeBounds(boxes: NodeLayout): CanvasBounds {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const box of boxes.values()) {
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x);
+    maxY = Math.max(maxY, box.y);
+  }
+  if (!isFinite(minX) || !isFinite(minY)) {
+    minX = 100;
+    minY = 100;
+    maxX = 100 + CANVAS_NODE_W;
+    maxY = 100 + CANVAS_NODE_H;
+  }
+  return { minX, minY, maxX: maxX + CANVAS_NODE_W, maxY: maxY + CANVAS_NODE_H };
+}
+
+/**
+ * Produces node coordinates for the visual map. Embedded canvas positions are honored when
+ * they are present, distinct, and actually spread out. Otherwise (missing, all-identical, or
+ * collapsed into a tiny cluster) a layered layout is synthesized so nodes never overlap.
+ */
+function resolveCanvasLayout(
+  graph: CanvasGraph | undefined
+): { boxes: NodeLayout; bounds: CanvasBounds } {
+  const nodes = graph?.nodes || [];
+  const links = graph?.links || [];
+
+  const positions: (NodeCoord | null)[] = nodes.map((n) => {
+    const p = n.pos;
+    return Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number'
+      ? { x: p[0], y: p[1] }
+      : null;
+  });
+
+  const anyPos = positions.some((p) => p !== null);
+  const distinct = new Set(
+    positions.map((p) => (p ? `${p.x},${p.y}` : 'null'))
+  ).size;
+  let spread = 0;
+  if (anyPos) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    positions.forEach((p) => {
+      if (!p) return;
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    });
+    spread = maxX - minX + (maxY - minY);
+  }
+  const usable = anyPos && nodes.length > 0 && distinct === nodes.length && spread > 60;
+
+  let boxes: NodeLayout;
+  if (usable) {
+    boxes = new Map();
+    nodes.forEach((n, i) => {
+      const p = positions[i];
+      if (p) boxes.set(String(n.id), p);
+    });
+  } else {
+    boxes = buildLayeredLayout(nodes, links);
+  }
+
+  return { boxes, bounds: computeBounds(boxes) };
+}
+
+function buildEdgePaths(boxes: NodeLayout, links: any[]): { key: string; d: string }[] {
+  const paths: { key: string; d: string }[] = [];
+  const seen = new Set<string>();
+  for (const l of links) {
+    const e = normalizeEdge(l);
+    if (!e) continue;
+    const src = boxes.get(e.srcId);
+    const dst = boxes.get(e.dstId);
+    if (!src || !dst) continue;
+    const key = `${e.srcId}->${e.dstId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const sCX = src.x + CANVAS_NODE_W / 2;
+    const sCY = src.y + CANVAS_NODE_H / 2;
+    const dCX = dst.x + CANVAS_NODE_W / 2;
+    const dCY = dst.y + CANVAS_NODE_H / 2;
+    const dx = dCX - sCX;
+    const dy = dCY - sCY;
+    let d: string;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      // Mostly horizontal edge: leave the source's right/left side and enter the target's.
+      const rightward = dx >= 0;
+      let aX = src.x + (rightward ? CANVAS_NODE_W : 0);
+      let bX = dst.x + (rightward ? 0 : CANVAS_NODE_W);
+      if (rightward && bX <= aX) {
+        aX = sCX;
+        bX = dCX;
+      }
+      const mx = (aX + bX) / 2;
+      d = `M ${aX} ${sCY} C ${mx} ${sCY}, ${mx} ${dCY}, ${bX} ${dCY}`;
+    } else {
+      // Mostly vertical edge: leave the source's bottom/top and enter the target's.
+      const downward = dy >= 0;
+      let aY = src.y + (downward ? CANVAS_NODE_H : 0);
+      let bY = dst.y + (downward ? 0 : CANVAS_NODE_H);
+      if (downward && bY <= aY) {
+        aY = sCY;
+        bY = dCY;
+      }
+      const my = (aY + bY) / 2;
+      d = `M ${sCX} ${aY} C ${sCX} ${my}, ${dCX} ${my}, ${dCX} ${bY}`;
+    }
+
+    paths.push({ key, d });
+  }
+  return paths;
+}
+
 interface WorkflowsTabProps {
   onSearchModel?: (query: string) => void;
   onNavigateToDownloads?: () => void;
@@ -208,6 +442,37 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   };
 
   const activeWorkflow: WorkflowInfo | undefined = workflows[selectedWorkflowIndex];
+
+  // Visual-map geometry: node coordinates (embedded or synthesized) and connection paths.
+  const { boxes: nodeBoxes, bounds: graphBounds } = useMemo(
+    () => resolveCanvasLayout(activeWorkflow?.canvasGraph),
+    [activeWorkflow?.canvasGraph]
+  );
+  const edgePaths = useMemo(
+    () => buildEdgePaths(nodeBoxes, activeWorkflow?.canvasGraph?.links || []),
+    [nodeBoxes, activeWorkflow?.canvasGraph?.links]
+  );
+
+  // Auto-fit the whole graph into view whenever a workflow is selected/parsed.
+  useEffect(() => {
+    const graph = activeWorkflow?.canvasGraph;
+    if (!graph?.nodes || graph.nodes.length === 0) return;
+    const el = canvasContainerRef.current;
+    if (!el) return;
+    const viewW = el.clientWidth || 800;
+    const viewH = el.clientHeight || 420;
+    const pad = 60;
+    const bw = graphBounds.maxX - graphBounds.minX;
+    const bh = graphBounds.maxY - graphBounds.minY;
+    if (!isFinite(bw) || !isFinite(bh) || bw <= 0 || bh <= 0) return;
+    const scale = Math.max(0.15, Math.min(1, (viewW - pad) / bw, (viewH - pad) / bh));
+    setZoomLevel(scale);
+    setPanOffset({
+      x: pad / 2 - graphBounds.minX * scale,
+      y: pad / 2 - graphBounds.minY * scale,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkflow]);
 
   // Resolve custom node classes for the active workflow. Resolution reads the persistent
   // SQLite cache first (so reloading a workflow never re-attempts a node), then checks
@@ -926,7 +1191,8 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                 activeWorkflow.canvasGraph.nodes.map((node) => {
                   const status = getNodeStatus(node);
                   const isSelected = selectedNodeId === node.id || selectedNodeId === node.type;
-                  const pos = node.pos || [100, 100];
+                  const coord = nodeBoxes.get(String(node.id));
+                  const pos: [number, number] = coord ? [coord.x, coord.y] : [100, 100];
 
                   return (
                     <div
@@ -939,7 +1205,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                         position: 'absolute',
                         left: `${pos[0]}px`,
                         top: `${pos[1]}px`,
-                        minWidth: '220px',
+                        minWidth: `${CANVAS_NODE_W}px`,
                       }}
                       className={`p-3 rounded-2xl border transition-all shadow-xl cursor-pointer ${
                         isSelected
@@ -1000,6 +1266,37 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                 <div className="p-12 text-center text-slate-500 text-xs">
                   No visual canvas coordinates embedded. Synthesized execution layout will appear here.
                 </div>
+              )}
+
+              {/* Connection Layer */}
+              {edgePaths.length > 0 && (
+                <svg
+                  className="pointer-events-none"
+                  style={{
+                    position: 'absolute',
+                    left: graphBounds.minX - 40,
+                    top: graphBounds.minY - 40,
+                    width: graphBounds.maxX - graphBounds.minX + 80,
+                    height: graphBounds.maxY - graphBounds.minY + 80,
+                  }}
+                >
+                  {edgePaths.map((p) => (
+                    <g key={p.key}>
+                      <path
+                        d={p.d}
+                        fill="none"
+                        stroke="rgba(34,211,238,0.18)"
+                        strokeWidth={3.5}
+                      />
+                      <path
+                        d={p.d}
+                        fill="none"
+                        stroke="rgba(148,163,184,0.55)"
+                        strokeWidth={1.5}
+                      />
+                    </g>
+                  ))}
+                </svg>
               )}
             </div>
           </div>
