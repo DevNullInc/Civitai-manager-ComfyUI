@@ -467,6 +467,32 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
+      browseFolder: async (defaultPath?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/browse-folder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ defaultPath }),
+          });
+          return await res.json();
+        } catch (e) {
+          return { canceled: true };
+        }
+      },
+
+      listDirectory: async (dirPath?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/list-directory`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dirPath }),
+          });
+          return await res.json();
+        } catch (e) {
+          return { path: '', parent: '', isRoot: true, roots: [], entries: [] };
+        }
+      },
+
       scanWorkflows: async (folderPaths?: string | string[]) => {
         try {
           const res = await fetch(`${API_BASE}/workflows`, {

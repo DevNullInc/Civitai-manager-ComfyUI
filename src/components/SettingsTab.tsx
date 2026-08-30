@@ -53,6 +53,9 @@ import {
   DEFAULT_FILENAME_PATTERNS,
 } from '../types/app';
 
+import { NodeResolutionCard } from './NodeResolutionCard';
+import { FolderBrowserModal } from './FolderBrowserModal';
+
 export const SettingsTab: React.FC = () => {
   const [config, setConfig] = useState<AppConfig>({
     comfyui_root: '',
@@ -104,6 +107,7 @@ export const SettingsTab: React.FC = () => {
   const [scaffoldFeedback, setScaffoldFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [isScaffolding, setIsScaffolding] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [folderBrowser, setFolderBrowser] = useState<{ target: 'install' | 'addFolder'; start: string } | null>(null);
 
   const handleAutoDetectComfyUI = async () => {
     setIsAutoDetecting(true);
@@ -198,6 +202,27 @@ export const SettingsTab: React.FC = () => {
     if (config.comfyui_install_dir && config.comfyui_install_dir.trim()) {
       adoptDerivedModelsFolder(config.comfyui_install_dir);
     }
+  };
+
+  const openFolderBrowser = (target: 'install' | 'addFolder') => {
+    const start =
+      target === 'install'
+        ? (config.comfyui_install_dir || config.comfyui_folders[0] || '')
+        : (newFolderInput || config.comfyui_folders[0] || '');
+    setFolderBrowser({ target, start });
+  };
+
+  const handleFolderBrowserSelect = (path: string) => {
+    if (!path) {
+      setFolderBrowser(null);
+      return;
+    }
+    if (folderBrowser?.target === 'install') {
+      handleComfyUIInstallDirChange(path, true);
+    } else {
+      setNewFolderInput(path);
+    }
+    setFolderBrowser(null);
   };
 
   const checkInstallDir = async (customPath?: string) => {
@@ -833,6 +858,15 @@ export const SettingsTab: React.FC = () => {
             </div>
             <button
               type="button"
+              onClick={() => openFolderBrowser('install')}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 active:scale-95"
+              title="Browse for the ComfyUI installation folder"
+            >
+              <Folder size={15} />
+              <span>Browse</span>
+            </button>
+            <button
+              type="button"
               onClick={handleAutoDetectComfyUI}
               disabled={isAutoDetecting}
               className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 active:scale-95"
@@ -1273,6 +1307,15 @@ export const SettingsTab: React.FC = () => {
             onKeyDown={(e) => { if (e.key === 'Enter') addFolder(); }}
             className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
           />
+          <button
+            type="button"
+            onClick={() => openFolderBrowser('addFolder')}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 active:scale-95"
+            title="Browse for a model folder"
+          >
+            <Folder size={14} />
+            <span>Browse</span>
+          </button>
           <button
             onClick={addFolder}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
@@ -2035,6 +2078,16 @@ export const SettingsTab: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {folderBrowser && (
+        <FolderBrowserModal
+          open
+          title={folderBrowser.target === 'install' ? 'Select ComfyUI Installation Folder' : 'Select Model Folder'}
+          initialPath={folderBrowser.start}
+          onSelect={handleFolderBrowserSelect}
+          onCancel={() => setFolderBrowser(null)}
+        />
       )}
     </div>
   );

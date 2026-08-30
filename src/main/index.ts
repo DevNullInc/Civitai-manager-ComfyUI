@@ -232,6 +232,60 @@ function getSubdirectories(dirPath: string): string[] {
   }
 }
 
+interface DirectoryEntry {
+  name: string;
+  isDirectory: boolean;
+  path: string;
+}
+
+/** Lists the drive roots plus the contents of a directory, for the in-app folder browser. */
+function listDirectoryEntries(dirPath?: string) {
+  const roots =
+    process.platform === 'win32'
+      ? Array.from({ length: 26 }, (_, i) => `${String.fromCharCode(65 + i)}:\\`)
+      : [path.parse(os.homedir()).root];
+  const availableRoots = roots.filter((r) => fs.existsSync(r));
+
+  let target = dirPath && dirPath.trim() ? path.resolve(dirPath.trim()) : availableRoots[0] || os.homedir();
+
+  try {
+    const stat = fs.statSync(target);
+    if (!stat.isDirectory()) target = path.dirname(target);
+  } catch {
+    target = path.dirname(target);
+  }
+
+  const isRoot = availableRoots.includes(target) || path.parse(target).root === target;
+  const entries: DirectoryEntry[] = [];
+  if (!isRoot) {
+    try {
+      const parent = path.dirname(target);
+      entries.push({ name: '..', isDirectory: true, path: parent });
+    } catch {}
+  }
+  try {
+    const items = fs.readdirSync(target, { withFileTypes: true }).filter((e) => e.isDirectory());
+    for (const item of items) {
+      if (item.name.startsWith('.') || item.name === '__pycache__') continue;
+      entries.push({ name: item.name, isDirectory: true, path: path.join(target, item.name) });
+    }
+  } catch {}
+  entries.sort((a, b) => {
+    if (a.name === '..') return -1;
+    if (b.name === '..') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return {
+    path: target,
+    name: path.basename(target) || target,
+    parent: path.dirname(target),
+    isRoot,
+    roots: availableRoots,
+    entries,
+  };
+}
+
 function checkCmmCompanionNode(nodes: string[], customNodesDir: string): { installed: boolean; folderName?: string } {
   if (!customNodesDir || !nodes || nodes.length === 0) {
     return { installed: false };
@@ -1343,6 +1397,30 @@ function startHttpBridgeServer() {
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+      } else if (url === '/api/browse-folder' && req.method === 'POST') {
+        const body = await getBody();
+        try {
+          const result = await dialog.showOpenDialog({
+            title: 'Select Folder',
+            properties: ['openDirectory', 'createDirectory'],
+            defaultPath: body?.defaultPath && String(body.defaultPath).trim() ? String(body.defaultPath).trim() : undefined,
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify(
+              result.canceled || !result.filePaths || result.filePaths.length === 0
+                ? { canceled: true }
+                : { canceled: false, path: result.filePaths[0] }
+            )
+          );
+        } catch (e: any) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ canceled: true, error: e?.message || 'Failed to open folder dialog' }));
+        }
+      } else if (url === '/api/list-directory' && (req.method === 'POST' || req.method === 'GET')) {
+        const body = req.method === 'POST' ? await getBody() : {};
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(listDirectoryEntries(body?.dirPath)));
       } else if (url === '/api/cancel-scan' && req.method === 'POST') {
         libraryScanner.cancelScan();
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2028,6 +2106,27 @@ function registerIpcHandlers() {
       }
     }
     return false;
+  });
+
+  ipcMain.handle('browse-folder', async (_event: unknown, defaultPath?: string) => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select Folder',
+        properties: ['openDirectory', 'createDirectory'],
+        defaultPath: defaultPath && defaultPath.trim() ? defaultPath.trim() : undefined,
+      });
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { canceled: true };
+      }
+      return { canceled: false, path: result.filePaths[0] };
+    } catch (e: any) {
+      logger.warn('browse-folder failed:', e);
+      return { canceled: true, error: e?.message || 'Failed to open folder dialog' };
+    }
+  });
+
+  ipcMain.handle('list-directory', async (_event: unknown, dirPath?: string) => {
+    return listDirectoryEntries(dirPath);
   });
 
   ipcMain.handle('ignore-duplicate-set', async (_event: unknown, sha256: string, count: number = 2) => {

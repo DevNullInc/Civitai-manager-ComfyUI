@@ -73,6 +73,8 @@ const api = {
   setModelNsfw: (modelId: string, nsfw: boolean) =>
     ipcRenderer.invoke('set-model-nsfw', modelId, nsfw),
   openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
+  browseFolder: (defaultPath?: string) => ipcRenderer.invoke('browse-folder', defaultPath),
+  listDirectory: (dirPath?: string) => ipcRenderer.invoke('list-directory', dirPath),
   // Workflows & Webhooks
   scanWorkflows: (folderPaths?: string | string[]) => ipcRenderer.invoke('scan-workflows', folderPaths),
   parseWorkflow: (workflowData: any, workflowName?: string) =>
