@@ -338,11 +338,12 @@ export function setupWebBridgeIfNeeded() {
         return await res.json();
       },
 
-      checkAllUpdates: async () => {
+      checkAllUpdates: async (opts?: { force?: boolean }) => {
         try {
           const res = await fetch(`${API_BASE}/check-all-updates`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: opts?.force === true }),
           });
           return await res.json();
         } catch (e) {

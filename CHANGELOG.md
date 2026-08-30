@@ -90,8 +90,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Custom Node Action-Oriented API Aliases & Recognition**:
   - Added backend route aliases (`/api/download-model`, `/api/resolve-node`, `/api/search-civitai`, `/api/check-huggingface`, `/api/inspect-workflow`) with flexible parameter mapping (camelCase & snake_case support).
   - Integrated `CMMDownloadModel`, `CMMInspectWorkflow`, and `CMMCheckHuggingFace` recognition in `workflowScanner.ts`.
+- **Persistent Download Queue & Downloads Management UI**:
+  - Download queue is now persisted to SQLite and fully restored across app restarts (tasks, progress, `completed_at` timing, and superseding old-version file deletion metadata survive relaunches).
+  - Per-row checkbox selection with **"Delete Selected (N)"** and **"Clear All Finished (N)"** batch actions on the Downloads tab for cleaning up stale queue entries.
+- **Workflow Viewer Map Polish**:
+  - Connection wires are now rendered as bezier curves with hover tooltips showing `source -> target` node types.
+  - One-click expand to fullscreen map with an `X` to shrink back, plus 5% zoom in/out steps (range 0.2x–2.0x).
+  - Switching workflows always resets the zoom to auto-fit the full graph (imperative fit-on-select plus effect re-keyed to the active graph, covering sidebar, dropdown, parse/upload, and fullscreen toggles).
 
 ### 🛡️ Fixed & Improved
+
+- **Hash-Based Update Detection with Sticky Update Flags**:
+  - Update detection now checks the installed file's SHA256 against the hashes CivitAI publishes for the newest version (`versionFileMatchesHash`) on top of the version-id comparison, so already-current files never show a false update banner.
+  - Checks only run when the **"Check Updates"** button is pressed — no network calls on library load. Results are cached in a new `update_checked_at` column and stale-check filtering supports skipping models whose file hasn't changed since the last check (with a `force` option for manual re-checks).
+  - Update badges now persist across library rescans, reloads, and app restarts: the library scanner's `INSERT OR REPLACE` (which previously wiped `has_update`/`update_*`/`ignored_version_id` on every scan) was replaced with an `ON CONFLICT(id) DO UPDATE` that preserves update-check state.
+  - Badges clear only when the flagged update is actually installed locally (library load self-clears rows where `civitai_version_id = update_version_id`) or dismissed via the ignore action.
+- **Library Update Badge Deep-Links to the Exact CivitAI Model**:
+  - Clicking an update badge opens the model's page directly in Browse by its stored CivitAI model **id** (`getModel(id)`), replacing the fuzzy name-string keyword search; unmatched models still fall back to a name query.
 
 - **CivitAI Keyword Search Pagination Fix**:
   - Fixed keyword searches in the Browse tab failing with HTTP 400 (`Cannot use page param with query search. Use cursor-based pagination.`) by no longer sending `page` alongside `query` — keyword searches now use CivitAI's required cursor-based pagination while non-query browsing keeps `page` support.

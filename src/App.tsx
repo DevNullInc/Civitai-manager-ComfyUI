@@ -68,6 +68,7 @@ function AppContent() {
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [browseInitialQuery, setBrowseInitialQuery] = useState<string>('');
+  const [browseInitialModelId, setBrowseInitialModelId] = useState<number | null>(null);
   const [pendingDownloadPrompt, setPendingDownloadPrompt] = useState<{
     model: CivitAIModel;
     version: CivitAIModelVersion;
@@ -239,6 +240,15 @@ function AppContent() {
   };
 
   const handleCheckUpdate = (localModel: LocalModel) => {
+    // Prefer an exact CivitAI model id (from the library record) so Browse opens the
+    // model's page directly. Fall back to a name query when the model was never matched.
+    if (localModel?.civitaiModelId) {
+      setBrowseInitialModelId(localModel.civitaiModelId);
+      setBrowseInitialQuery('');
+      setActiveTab('browse');
+      return;
+    }
+    setBrowseInitialModelId(null);
     const rawName = localModel?.civitaiName || localModel?.fileName || '';
     const query = rawName
       .replace(/\.(safetensors|pt|ckpt|bin)$/i, '')
@@ -453,6 +463,7 @@ function AppContent() {
               <BrowseTab
                 onQueueDownload={handleQueueDownload}
                 initialQuery={browseInitialQuery}
+                initialModelId={browseInitialModelId ?? undefined}
               />
             </div>
             <div style={{ display: activeTab === 'library' ? 'block' : 'none' }}>

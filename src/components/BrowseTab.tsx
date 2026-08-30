@@ -103,9 +103,10 @@ interface BrowseTabProps {
     options?: { deleteOldVersionFile?: string; deleteOldModelId?: string }
   ) => void;
   initialQuery?: string;
+  initialModelId?: number;
 }
 
-export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQuery }) => {
+export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQuery, initialModelId }) => {
   const [models, setModels] = useState<CivitAIModel[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +124,38 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
       fetchModels(1, '', initialQuery);
     }
   }, [initialQuery]);
+
+  // Navigated from a library update badge: open the exact CivitAI model page directly.
+  useEffect(() => {
+    if (typeof initialModelId !== 'number' || Number.isNaN(initialModelId)) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const modelId = initialModelId;
+        const model = await window.civitaiAPI.getModel(modelId);
+        if (cancelled) return;
+        if (!model) {
+          setError(
+            `Model #${modelId} could not be fetched from CivitAI. It may have been removed.`
+          );
+          return;
+        }
+        setModels([model]);
+        setMetadata({ totalItems: 1, currentPage: 1, pageSize: 1, totalPages: 1 });
+        setCurrentPage(1);
+        setPageCursors({});
+      } catch (e: any) {
+        if (!cancelled) setError(`Failed to load model #${initialModelId}: ${e?.message || e}`);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialModelId]);
 
   // Debug Diagnostics
   const [showDebug, setShowDebug] = useState<boolean>(false);

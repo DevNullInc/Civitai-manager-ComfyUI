@@ -27,6 +27,7 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Crosshair,
   HardDrive,
   ExternalLink,
   ChevronRight,
@@ -83,6 +84,7 @@ function resolveNodeTypeLabel(raw: any, subgraphNames: Map<string, string>): str
 
 const CANVAS_NODE_W = 220;
 const CANVAS_NODE_H = 110;
+const ZOOM_STEP = 0.05;
 
 interface NodeCoord {
   x: number;
@@ -265,8 +267,12 @@ function resolveCanvasLayout(
   return { boxes, bounds: computeBounds(boxes) };
 }
 
-function buildEdgePaths(boxes: NodeLayout, links: any[]): { key: string; d: string }[] {
-  const paths: { key: string; d: string }[] = [];
+function buildEdgePaths(
+  boxes: NodeLayout,
+  links: any[],
+  labelOf: (id: string) => string = (id) => id
+): { key: string; d: string; label: string }[] {
+  const paths: { key: string; d: string; label: string }[] = [];
   const seen = new Set<string>();
   for (const l of links) {
     const e = normalizeEdge(l);
@@ -310,7 +316,7 @@ function buildEdgePaths(boxes: NodeLayout, links: any[]): { key: string; d: stri
       d = `M ${sCX} ${aY} C ${sCX} ${my}, ${dCX} ${my}, ${dCX} ${bY}`;
     }
 
-    paths.push({ key, d });
+    paths.push({ key, d, label: `${labelOf(e.srcId)} -> ${labelOf(e.dstId)}` });
   }
   return paths;
 }
@@ -350,16 +356,13 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
   // Canvas pan & zoom state
   const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: y0Offset() });
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isMapExpanded, setIsMapExpanded] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingCanvas = useRef<boolean>(false);
   const dragStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  function y0Offset() {
-    return 0;
-  }
 
   // Sync workflows with sessionStorage whenever they change
   useEffect(() => {
@@ -435,8 +438,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       setWorkflows(nextList);
       setSelectedWorkflowIndex(0);
       setSelectedNodeId(null);
-      setZoomLevel(1);
-      setPanOffset({ x: 0, y: 0 });
+      fitMapToView(found.canvasGraph);
       resolveWorkflowNodes(found);
     }
   };
@@ -448,31 +450,53 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     () => resolveCanvasLayout(activeWorkflow?.canvasGraph),
     [activeWorkflow?.canvasGraph]
   );
-  const edgePaths = useMemo(
-    () => buildEdgePaths(nodeBoxes, activeWorkflow?.canvasGraph?.links || []),
-    [nodeBoxes, activeWorkflow?.canvasGraph?.links]
+  const edgePaths = useMemo(() => {
+    const labelOf = (id: string): string => {
+      const n = activeWorkflow?.canvasGraph?.nodes?.find((x) => String(x.id) === id);
+      return n ? n.type : id;
+    };
+    return buildEdgePaths(nodeBoxes, activeWorkflow?.canvasGraph?.links || [], labelOf);
+  }, [nodeBoxes, activeWorkflow?.canvasGraph?.links]);
+
+  // Fit the whole graph of a given workflow into view. Called imperatively whenever a
+  // workflow is selected so the zoom ALWAYS resets, plus by the effect below for the
+  // initial selection, parse/upload, and expanding the map to fullscreen.
+  const fitMapToView = React.useCallback(
+    (graph?: CanvasGraph) => {
+      const { bounds } = resolveCanvasLayout(graph);
+      const el = canvasContainerRef.current;
+      const viewW = el?.clientWidth || 800;
+      const viewH = el?.clientHeight || 420;
+      const nodeCount = graph?.nodes?.length || 0;
+      if (nodeCount === 0) {
+        setZoomLevel(1);
+        setPanOffset({ x: 0, y: 0 });
+        return;
+      }
+      const pad = 60;
+      const bw = bounds.maxX - bounds.minX;
+      const bh = bounds.maxY - bounds.minY;
+      if (!isFinite(bw) || !isFinite(bh) || bw <= 0 || bh <= 0) {
+        setZoomLevel(1);
+        setPanOffset({ x: 0, y: 0 });
+        return;
+      }
+      const scale = Math.max(0.15, Math.min(1, (viewW - pad) / bw, (viewH - pad) / bh));
+      setZoomLevel(scale);
+      setPanOffset({
+        x: pad / 2 - bounds.minX * scale,
+        y: pad / 2 - bounds.minY * scale,
+      });
+    },
+    []
   );
 
-  // Auto-fit the whole graph into view whenever a workflow is selected/parsed.
+  // Auto-fit the whole graph into view whenever the active workflow's graph changes
+  // (initial selection, parse/upload, switching) or the map expands/collapses.
   useEffect(() => {
-    const graph = activeWorkflow?.canvasGraph;
-    if (!graph?.nodes || graph.nodes.length === 0) return;
-    const el = canvasContainerRef.current;
-    if (!el) return;
-    const viewW = el.clientWidth || 800;
-    const viewH = el.clientHeight || 420;
-    const pad = 60;
-    const bw = graphBounds.maxX - graphBounds.minX;
-    const bh = graphBounds.maxY - graphBounds.minY;
-    if (!isFinite(bw) || !isFinite(bh) || bw <= 0 || bh <= 0) return;
-    const scale = Math.max(0.15, Math.min(1, (viewW - pad) / bw, (viewH - pad) / bh));
-    setZoomLevel(scale);
-    setPanOffset({
-      x: pad / 2 - graphBounds.minX * scale,
-      y: pad / 2 - graphBounds.minY * scale,
-    });
+    fitMapToView(activeWorkflow?.canvasGraph);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeWorkflow]);
+  }, [activeWorkflow?.canvasGraph, isMapExpanded]);
 
   // Resolve custom node classes for the active workflow. Resolution reads the persistent
   // SQLite cache first (so reloading a workflow never re-attempts a node), then checks
@@ -508,8 +532,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   const handleSelectWorkflow = (index: number) => {
     setSelectedWorkflowIndex(index);
     setSelectedNodeId(null);
-    setZoomLevel(1);
-    setPanOffset({ x: 0, y: 0 });
+    fitMapToView(workflows[index]?.canvasGraph);
     resolveWorkflowNodes(workflows[index]);
   };
 
@@ -1123,9 +1146,15 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
       {/* Visual Node Map Canvas */}
       {activeWorkflow && (viewMode === 'both' || viewMode === 'map') && (
-        <div className="glass-panel rounded-3xl border border-slate-800 shadow-2xl overflow-hidden space-y-2">
+        <div
+          className={`${
+            isMapExpanded
+              ? 'fixed inset-0 z-[100] flex flex-col bg-[#0a0d14] border border-slate-800 shadow-2xl'
+              : 'glass-panel rounded-3xl border border-slate-800 shadow-2xl overflow-hidden space-y-2'
+          }`}
+        >
           {/* Map Toolbar */}
-          <div className="px-6 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+          <div className={`px-6 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 ${isMapExpanded ? 'shrink-0' : ''}`}>
             <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
               <Workflow size={16} className="text-cyan-400" />
               <span>Visual Node Map</span>
@@ -1136,7 +1165,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setZoomLevel((z) => Math.max(0.4, z - 0.15))}
+                onClick={() => setZoomLevel((z) => Math.max(0.2, Math.round((z - ZOOM_STEP) * 100) / 100))}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                 title="Zoom Out"
               >
@@ -1146,7 +1175,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                 {Math.round(zoomLevel * 100)}%
               </span>
               <button
-                onClick={() => setZoomLevel((z) => Math.min(2.0, z + 0.15))}
+                onClick={() => setZoomLevel((z) => Math.min(2.0, Math.round((z + ZOOM_STEP) * 100) / 100))}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                 title="Zoom In"
               >
@@ -1160,8 +1189,25 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors ml-1"
                 title="Reset View"
               >
-                <Maximize2 size={14} />
+                <Crosshair size={14} />
               </button>
+              {isMapExpanded ? (
+                <button
+                  onClick={() => setIsMapExpanded(false)}
+                  className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white transition-colors ml-1"
+                  title="Shrink Back From Fullscreen"
+                >
+                  <X size={14} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setIsMapExpanded(true)}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors ml-1"
+                  title="Expand to Fullscreen"
+                >
+                  <Maximize2 size={14} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -1172,7 +1218,9 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
             onMouseMove={handleCanvasMouseMove}
             onMouseUp={handleCanvasMouseUp}
             onMouseLeave={handleCanvasMouseUp}
-            className="relative h-[420px] w-full overflow-hidden bg-[#0a0d14] cursor-grab active:cursor-grabbing select-none"
+            className={`relative overflow-hidden bg-[#0a0d14] cursor-grab active:cursor-grabbing select-none ${
+              isMapExpanded ? 'flex-1 w-full min-h-0' : 'w-full h-[420px]'
+            }`}
             style={{
               backgroundImage:
                 'radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)',
@@ -1271,7 +1319,6 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
               {/* Connection Layer */}
               {edgePaths.length > 0 && (
                 <svg
-                  className="pointer-events-none"
                   style={{
                     position: 'absolute',
                     left: graphBounds.minX - 40,
@@ -1282,17 +1329,21 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                 >
                   {edgePaths.map((p) => (
                     <g key={p.key}>
+                      <title>{p.label}</title>
                       <path
                         d={p.d}
                         fill="none"
                         stroke="rgba(34,211,238,0.18)"
                         strokeWidth={3.5}
+                        pointerEvents="none"
                       />
                       <path
                         d={p.d}
                         fill="none"
-                        stroke="rgba(148,163,184,0.55)"
-                        strokeWidth={1.5}
+                        stroke="rgba(148,163,184,0.7)"
+                        strokeWidth={1.8}
+                        pointerEvents="visibleStroke"
+                        className="cursor-pointer"
                       />
                     </g>
                   ))}

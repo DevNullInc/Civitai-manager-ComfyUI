@@ -53,7 +53,7 @@ const api = {
 
   // Versioning & Backup
   checkUpdate: (localModel: any) => ipcRenderer.invoke('check-update', localModel),
-  checkAllUpdates: () => ipcRenderer.invoke('check-all-updates'),
+  checkAllUpdates: (opts?: { force?: boolean }) => ipcRenderer.invoke('check-all-updates', opts),
   ignoreModelUpdate: (modelId: number, versionId: number) =>
     ipcRenderer.invoke('ignore-model-update', modelId, versionId),
   unignoreModelUpdate: (modelId: number, versionId: number) =>

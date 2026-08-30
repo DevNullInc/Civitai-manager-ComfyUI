@@ -328,6 +328,7 @@ export interface LocalModel {
   updateVersionName?: string;
   updateDownloadUrl?: string;
   ignoredVersionId?: number;
+  updateCheckedAt?: number;
   isDuplicate?: boolean;
   isMissing?: boolean;
 }

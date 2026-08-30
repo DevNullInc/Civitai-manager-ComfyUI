@@ -242,11 +242,25 @@ export class LibraryScanner {
 
         scannedModels.push(localModel);
 
-        // Save/Update in SQLite
+        // Save/Update in SQLite. Uses UPSERT so update-check state (has_update,
+        // update_*, update_checked_at, ignored_version_id) survives rescans unchanged.
         await dbManager.run(
-          `INSERT OR REPLACE INTO local_models 
+          `INSERT INTO local_models 
             (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id, civitai_version_id, civitai_name, scanned_at, preview_url, model_type, nsfw)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             file_path = excluded.file_path,
+             file_name = excluded.file_name,
+             file_size = excluded.file_size,
+             modified_at = excluded.modified_at,
+             sha256 = excluded.sha256,
+             civitai_model_id = COALESCE(excluded.civitai_model_id, local_models.civitai_model_id),
+             civitai_version_id = COALESCE(excluded.civitai_version_id, local_models.civitai_version_id),
+             civitai_name = COALESCE(excluded.civitai_name, local_models.civitai_name),
+             scanned_at = CURRENT_TIMESTAMP,
+             preview_url = COALESCE(excluded.preview_url, local_models.preview_url),
+             model_type = COALESCE(excluded.model_type, local_models.model_type),
+             nsfw = excluded.nsfw`,
           [
             localModel.id,
             localModel.filePath,

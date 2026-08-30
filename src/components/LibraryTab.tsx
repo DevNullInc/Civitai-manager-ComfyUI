@@ -401,7 +401,7 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     setCheckingUpdates(true);
     setUpdateSummary(null);
     try {
-      const result = await window.civitaiAPI.checkAllUpdates();
+      const result = await window.civitaiAPI.checkAllUpdates({ force: true });
       await loadLocalModels();
       if (result?.updatesFound > 0) {
         setUpdateSummary(`Found ${result.updatesFound} update(s) out of ${result.totalChecked} checked models!`);

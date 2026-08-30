@@ -1252,7 +1252,10 @@ function startHttpBridgeServer() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url === '/api/check-all-updates' && req.method === 'POST') {
-        const result = await versionManager.batchCheckAllUpdates();
+        const body = await getBody();
+        const result = await versionManager.batchCheckAllUpdates(undefined, {
+          force: !!body?.force,
+        });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } else if (url === '/api/force-complete-download' && req.method === 'POST') {
@@ -1261,6 +1264,12 @@ function startHttpBridgeServer() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success }));
       } else if (url === '/api/local-models' && req.method === 'GET') {
+        // Flags persist across scans/loads, but self-clear once the flagged update
+        // version is actually installed locally.
+        await dbManager.run(
+          `UPDATE local_models SET has_update = 0, update_version_id = NULL, update_version_name = NULL, update_download_url = NULL
+           WHERE has_update = 1 AND update_version_id IS NOT NULL AND civitai_version_id = update_version_id;`
+        );
         const rows = await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
         const models = rows.map((r: any) => ({
           id: r.id,
@@ -1283,6 +1292,7 @@ function startHttpBridgeServer() {
           updateDownloadUrl: r.update_download_url,
           ignoredVersionId: r.ignored_version_id,
           isDuplicate: !!r.is_duplicate,
+          updateCheckedAt: r.update_checked_at,
         }));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(models));
@@ -1912,6 +1922,12 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('get-local-models', async () => {
+    // Flags persist across scans/loads, but self-clear once the flagged update
+    // version is actually installed locally.
+    await dbManager.run(
+      `UPDATE local_models SET has_update = 0, update_version_id = NULL, update_version_name = NULL, update_download_url = NULL
+       WHERE has_update = 1 AND update_version_id IS NOT NULL AND civitai_version_id = update_version_id;`
+    );
     const rows = await dbManager.all('SELECT * FROM local_models ORDER BY file_name ASC;');
     return rows.map((r: any) => ({
       id: r.id,
@@ -1934,6 +1950,7 @@ function registerIpcHandlers() {
       updateDownloadUrl: r.update_download_url,
       ignoredVersionId: r.ignored_version_id,
       isDuplicate: !!r.is_duplicate,
+      updateCheckedAt: r.update_checked_at,
     }));
   });
 
@@ -2020,12 +2037,15 @@ function registerIpcHandlers() {
     return await versionManager.checkForUpdates(localModel);
   });
 
-  ipcMain.handle('check-all-updates', async () => {
-    return await versionManager.batchCheckAllUpdates((prog) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-check-progress', prog);
-      }
-    });
+  ipcMain.handle('check-all-updates', async (_event: unknown, opts?: { force?: boolean }) => {
+    return await versionManager.batchCheckAllUpdates(
+      (prog) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-check-progress', prog);
+        }
+      },
+      { force: opts?.force === true }
+    );
   });
 
   ipcMain.handle('ignore-model-update', async (_event: unknown, modelId: number, versionId: number) => {

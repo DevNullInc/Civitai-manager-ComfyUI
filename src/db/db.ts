@@ -74,7 +74,8 @@ export class DatabaseManager {
         update_version_id INTEGER,
         update_version_name TEXT,
         update_download_url TEXT,
-        ignored_version_id INTEGER
+        ignored_version_id INTEGER,
+        update_checked_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_local_models_sha256 ON local_models(sha256);
       CREATE INDEX IF NOT EXISTS idx_local_models_civitai_version ON local_models(civitai_version_id);
@@ -178,6 +179,7 @@ export class DatabaseManager {
       'ALTER TABLE local_models ADD COLUMN update_version_name TEXT;',
       'ALTER TABLE local_models ADD COLUMN update_download_url TEXT;',
       'ALTER TABLE local_models ADD COLUMN ignored_version_id INTEGER;',
+      'ALTER TABLE local_models ADD COLUMN update_checked_at INTEGER;',
       'ALTER TABLE downloads ADD COLUMN delete_old_version_file TEXT;',
       'ALTER TABLE downloads ADD COLUMN delete_old_model_id TEXT;',
       'ALTER TABLE downloads ADD COLUMN creator TEXT;',

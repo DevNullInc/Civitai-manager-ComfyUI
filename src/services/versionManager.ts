@@ -47,6 +47,26 @@ export interface BatchUpdateResult {
 }
 
 export class VersionManager {
+  // True when the installed local file hash already matches a file hash the given
+  // CivitAI version publishes. Used to treat a model as up-to-date even when CivitAI
+  // has bumped the version id, so already-current files don't produce update banners.
+  private versionFileMatchesHash(version: CivitAIModelVersion, localHash?: string): boolean {
+    if (!localHash) return false;
+    const target = String(localHash).trim().toUpperCase();
+    if (!target || target.length < 16) return false;
+    if (!version.files || version.files.length === 0) return false;
+    for (const file of version.files) {
+      if (file && file.hashes) {
+        for (const hashValue of Object.values(file.hashes)) {
+          if (hashValue && String(hashValue).trim().toUpperCase() === target) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   async checkForUpdates(localModel: LocalModel): Promise<UpdateInfo | null> {
     if (!localModel.civitaiModelId || !localModel.civitaiVersionId) {
       return null;
@@ -59,20 +79,23 @@ export class VersionManager {
       }
 
       const latestVersion = fullModel.modelVersions[0];
+      const nowChecked = Date.now();
       const isIgnored = await this.isUpdateIgnored(localModel.civitaiModelId, latestVersion.id);
-      const hasUpdate = latestVersion.id !== localModel.civitaiVersionId && !isIgnored;
+      const hashMatchesLatest = this.versionFileMatchesHash(latestVersion, localModel.sha256);
+      const hasUpdate =
+        !hashMatchesLatest && latestVersion.id !== localModel.civitaiVersionId && !isIgnored;
       const downloadUrl = civitaiClient.getDownloadUrl(latestVersion.id);
 
-      // Persist update status to database
+      // Persist update status to database (cached until the file changes via update_checked_at).
       if (hasUpdate) {
         await dbManager.run(
-          `UPDATE local_models SET has_update = 1, update_version_id = ?, update_version_name = ?, update_download_url = ? WHERE id = ?;`,
-          [latestVersion.id, latestVersion.name, downloadUrl, localModel.id]
+          `UPDATE local_models SET has_update = 1, update_version_id = ?, update_version_name = ?, update_download_url = ?, update_checked_at = ? WHERE id = ?;`,
+          [latestVersion.id, latestVersion.name, downloadUrl, nowChecked, localModel.id]
         );
       } else {
         await dbManager.run(
-          `UPDATE local_models SET has_update = 0, update_version_id = NULL, update_version_name = NULL, update_download_url = NULL WHERE id = ?;`,
-          [localModel.id]
+          `UPDATE local_models SET has_update = 0, update_version_id = NULL, update_version_name = NULL, update_download_url = NULL, update_checked_at = ? WHERE id = ?;`,
+          [nowChecked, localModel.id]
         );
       }
 
@@ -92,11 +115,18 @@ export class VersionManager {
   }
 
   async batchCheckAllUpdates(
-    onProgress?: (progress: BatchUpdateProgress) => void
+    onProgress?: (progress: BatchUpdateProgress) => void,
+    options?: { force?: boolean }
   ): Promise<BatchUpdateResult> {
     logger.info('Starting batch check for model updates...');
+    const force = options?.force === true;
+    // Unless forced, skip models already checked since their file last changed - the
+    // result is cached until the local file mtime changes (update_checked_at < modified_at).
     const localRows = await dbManager.all(
-      'SELECT * FROM local_models WHERE civitai_model_id IS NOT NULL AND civitai_version_id IS NOT NULL;'
+      force
+        ? 'SELECT * FROM local_models WHERE civitai_model_id IS NOT NULL AND civitai_version_id IS NOT NULL;'
+        : `SELECT * FROM local_models WHERE civitai_model_id IS NOT NULL AND civitai_version_id IS NOT NULL
+           AND (update_checked_at IS NULL OR update_checked_at < modified_at);`
     );
 
     const total = localRows.length;
@@ -135,16 +165,19 @@ export class VersionManager {
 
         if (fullModel && fullModel.modelVersions && fullModel.modelVersions.length > 0) {
           const latestVersion = fullModel.modelVersions[0];
+          const nowChecked = Date.now();
           const isIgnored = await this.isUpdateIgnored(modelId, latestVersion.id);
-          const hasUpdate = latestVersion.id !== currentVersionId && !isIgnored;
+          const hashMatchesLatest = this.versionFileMatchesHash(latestVersion, row.sha256);
+          const hasUpdate =
+            !hashMatchesLatest && latestVersion.id !== currentVersionId && !isIgnored;
 
           if (hasUpdate) {
             updatesFound++;
             const downloadUrl = civitaiClient.getDownloadUrl(latestVersion.id);
 
             await dbManager.run(
-              `UPDATE local_models SET has_update = 1, update_version_id = ?, update_version_name = ?, update_download_url = ? WHERE id = ?;`,
-              [latestVersion.id, latestVersion.name, downloadUrl, row.id]
+              `UPDATE local_models SET has_update = 1, update_version_id = ?, update_version_name = ?, update_download_url = ?, update_checked_at = ? WHERE id = ?;`,
+              [latestVersion.id, latestVersion.name, downloadUrl, nowChecked, row.id]
             );
 
             modelsWithUpdates.push({
@@ -159,8 +192,8 @@ export class VersionManager {
             });
           } else {
             await dbManager.run(
-              `UPDATE local_models SET has_update = 0, update_version_id = NULL, update_version_name = NULL, update_download_url = NULL WHERE id = ?;`,
-              [row.id]
+              `UPDATE local_models SET has_update = 0, update_version_id = NULL, update_version_name = NULL, update_download_url = NULL, update_checked_at = ? WHERE id = ?;`,
+              [nowChecked, row.id]
             );
           }
         }
