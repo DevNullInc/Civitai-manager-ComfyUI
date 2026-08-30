@@ -199,15 +199,19 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
 
 1. **Install Prerequisites**:
    Ensure you have [Node.js](https://nodejs.org/) (v18+ or v20+), Git, and the Xcode Command Line Tools installed:
+
    ```bash
    xcode-select --install
    ```
+
 2. **Clone & Install Dependencies**:
+
    ```bash
    git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
    cd Civitai-manager-ComfyUI
    npm install
    ```
+
 3. **Run in Development**:
 
    ```bash
@@ -219,10 +223,12 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
    ```
 
 4. **Compile Standalone macOS Application (`.dmg` & `.zip`)**:
+
    ```bash
    # Build universal / native architecture packages for macOS:
    npm run dist:mac
    ```
+
    Compiled binaries are written to the `release/` directory:
    - `CivitAI Model Manager-<version>-arm64.dmg` (Apple Silicon M1/M2/M3/M4)
    - `CivitAI Model Manager-<version>-x64.dmg` (Intel x86_64)

@@ -10,7 +10,8 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import axios from 'axios';
+import https from 'https';
+import http from 'http';
 import { app } from 'electron';
 import { logger } from '../utils/logger';
 
@@ -124,6 +125,117 @@ export class ImageCacheService {
   }
 
   /**
+   * Securely downloads an image buffer over HTTPS with strict host whitelisting,
+   * size limits, and redirect validation without invoking dynamic SSRF sinks.
+   */
+  private fetchSecureImage(
+    targetUrl: string
+  ): Promise<{ buffer: Buffer; contentType: string } | null> {
+    return new Promise((resolve) => {
+      let redirectsRemaining = 5;
+
+      const performFetch = (urlToFetch: string) => {
+        let parsed: URL;
+        try {
+          parsed = new URL(urlToFetch);
+        } catch {
+          return resolve(null);
+        }
+
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+          return resolve(null);
+        }
+
+        const hostname = parsed.hostname.toLowerCase();
+        if (!this.isHostWhitelisted(hostname)) {
+          logger.warn(`[ImageCache] SSRF check blocked request to unauthorized host: ${hostname}`);
+          return resolve(null);
+        }
+
+        const client = parsed.protocol === 'https:' ? https : http;
+        const req = client.get(
+          {
+            protocol: parsed.protocol,
+            hostname: parsed.hostname,
+            port: parsed.port ? Number(parsed.port) : (parsed.protocol === 'https:' ? 443 : 80),
+            path: parsed.pathname + parsed.search,
+            headers: {
+              'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
+              Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+            },
+            timeout: 15000,
+          },
+          (res) => {
+            // Handle redirects safely
+            if (res.statusCode && [301, 302, 303, 307, 308].includes(res.statusCode)) {
+              if (redirectsRemaining <= 0) {
+                res.resume();
+                return resolve(null);
+              }
+              redirectsRemaining--;
+              const location = res.headers.location;
+              if (!location) {
+                res.resume();
+                return resolve(null);
+              }
+              try {
+                const nextUrl = new URL(location, urlToFetch).toString();
+                res.resume();
+                return performFetch(nextUrl);
+              } catch {
+                res.resume();
+                return resolve(null);
+              }
+            }
+
+            if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+              res.resume();
+              return resolve(null);
+            }
+
+            const rawContentType = res.headers['content-type'];
+            const contentType = typeof rawContentType === 'string' ? rawContentType : 'image/jpeg';
+            const chunks: Buffer[] = [];
+            let totalBytes = 0;
+            const MAX_IMAGE_BYTES = 30 * 1024 * 1024; // 30MB
+
+            res.on('data', (chunk: Buffer) => {
+              totalBytes += chunk.length;
+              if (totalBytes > MAX_IMAGE_BYTES) {
+                req.destroy(new Error('Image size exceeded 30MB limit'));
+                return resolve(null);
+              }
+              chunks.push(chunk);
+            });
+
+            res.on('end', () => {
+              const buffer = Buffer.concat(chunks);
+              resolve({ buffer, contentType });
+            });
+
+            res.on('error', (err) => {
+              logger.warn(`[ImageCache] Stream error while fetching ${urlToFetch}:`, err);
+              resolve(null);
+            });
+          }
+        );
+
+        req.on('error', (err) => {
+          logger.warn(`[ImageCache] Request error fetching ${urlToFetch}:`, err);
+          resolve(null);
+        });
+
+        req.setTimeout(15000, () => {
+          req.destroy(new Error('Request timeout'));
+          resolve(null);
+        });
+      };
+
+      performFetch(targetUrl.trim());
+    });
+  }
+
+  /**
    * Fetch image with caching according to target context:
    * - 'library': Permanent disk cache (persists across sessions)
    * - 'browse': Temporary in-memory session cache (cleared on restart)
@@ -174,26 +286,10 @@ export class ImageCacheService {
 
     const fetchPromise = (async () => {
       try {
-        const response = await axios.get(cleanUrl, {
-          responseType: 'arraybuffer',
-          timeout: 15000,
-          maxRedirects: 5,
-          maxContentLength: 30 * 1024 * 1024,
-          beforeRedirect: (options: any) => {
-            const redirectHost = (options.hostname || options.host || '').toLowerCase();
-            if (!this.isHostWhitelisted(redirectHost)) {
-              throw new Error(`SSRF Prevention: Blocked redirect to unapproved host [${redirectHost}]`);
-            }
-          },
-          headers: {
-            'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
-            Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-          },
-        });
+        const downloaded = await this.fetchSecureImage(cleanUrl);
+        if (!downloaded) return null;
 
-        const buffer = Buffer.from(response.data);
-        const rawContentType = response.headers['content-type'];
-        const contentType: string = typeof rawContentType === 'string' ? rawContentType : 'image/jpeg';
+        const { buffer, contentType } = downloaded;
 
         if (type === 'library') {
           // Write to permanent disk cache

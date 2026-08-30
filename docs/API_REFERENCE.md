@@ -9,7 +9,7 @@ This document provides complete documentation and code examples for developers b
 For the protection of the user's local filesystem and machine security, CMM's HTTP Server Bridge is strictly isolated:
 
 - **Binding Address:** `127.0.0.1:<port>` (Default port: **`5174`**).
-- **Settings Toggle:** The API Bridge can be switched **ON** or **OFF** at any time inside the app's **Settings tab** under *Localhost HTTP API Bridge*.
+- **Settings Toggle:** The API Bridge can be switched **ON** or **OFF** at any time inside the app's **Settings tab** under _Localhost HTTP API Bridge_.
 - **Custom Port Selection:** The port can be customized in Settings or on launch to avoid port collisions (e.g. `./cmm.sh start --api-port 5175`, `.\cmm.ps1 start -ApiPort 5175`, or setting `API_PORT=5175`).
 - **Localhost Only:** Any incoming socket whose remote IP address is not `127.0.0.1` or `::1` is immediately rejected with HTTP 403 Forbidden.
 - **CSRF & Origin Protection:** Non-local web origins attempting cross-origin requests from external browser pages are blocked.
@@ -99,9 +99,11 @@ if cmm.is_online():
 ### 1. Health & Server Status
 
 #### `GET /api/health` or `GET /health`
+
 Returns live heartbeat status and process uptime.
 
 - **Response `200 OK`:**
+
 ```json
 {
   "status": "ok",
@@ -111,9 +113,11 @@ Returns live heartbeat status and process uptime.
 ```
 
 #### `GET /api/status`
+
 Checks if CMM is running, whether the API Bridge is enabled, and returns the active port.
 
 - **Response `200 OK` (When Enabled):**
+
 ```json
 {
   "status": "online",
@@ -126,17 +130,20 @@ Checks if CMM is running, whether the API Bridge is enabled, and returns the act
 }
 ```
 
-*(When disabled via Settings toggle, external API endpoints return `503 Service Unavailable` with `{"error": "Local API Bridge is disabled in Settings."}`)*
+_(When disabled via Settings toggle, external API endpoints return `503 Service Unavailable` with `{"error": "Local API Bridge is disabled in Settings."}`)_
 
 ---
 
 ### 2. Workflow Inspection & In-Memory Parsing
 
 #### `POST /api/workflows` or `POST /api/workflow/parse`
+
 Extracts all referenced checkpoints, LoRAs, UNETs, VAEs, CLIP models, custom node classes, and spatial LiteGraph canvas layout directly from **in-memory raw JSON** or scanned disk folders.
 
 ##### Direct Raw JSON In-Memory Payload (Recommended for Custom Nodes)
+
 - **Request Body (Direct Workflow JSON / ComfyUI Canvas Format):**
+
 ```json
 {
   "workflow": {
@@ -160,7 +167,8 @@ Extracts all referenced checkpoints, LoRAs, UNETs, VAEs, CLIP models, custom nod
 }
 ```
 
-*Or pass the ComfyUI API Execution Prompt dictionary:*
+_Or pass the ComfyUI API Execution Prompt dictionary:_
+
 ```json
 {
   "prompt": {
@@ -177,6 +185,7 @@ Extracts all referenced checkpoints, LoRAs, UNETs, VAEs, CLIP models, custom nod
 ```
 
 - **Response `200 OK`:**
+
 ```json
 {
   "fileName": "active_canvas.json",
@@ -192,14 +201,21 @@ Extracts all referenced checkpoints, LoRAs, UNETs, VAEs, CLIP models, custom nod
       "localPath": "/home/user/ComfyUI/models/checkpoints/flux1-dev.safetensors"
     }
   ],
-  "nodeTypes": [
-    "CheckpointLoaderSimple",
-    "ImpactWildcardProcessor"
-  ],
+  "nodeTypes": ["CheckpointLoaderSimple", "ImpactWildcardProcessor"],
   "canvasGraph": {
     "nodes": [
-      { "id": 4, "type": "CheckpointLoaderSimple", "pos": [100, 150], "size": [220, 120] },
-      { "id": 10, "type": "ImpactWildcardProcessor", "pos": [340, 150], "size": [220, 120] }
+      {
+        "id": 4,
+        "type": "CheckpointLoaderSimple",
+        "pos": [100, 150],
+        "size": [220, 120]
+      },
+      {
+        "id": 10,
+        "type": "ImpactWildcardProcessor",
+        "pos": [340, 150],
+        "size": [220, 120]
+      }
     ],
     "links": []
   }
@@ -207,7 +223,9 @@ Extracts all referenced checkpoints, LoRAs, UNETs, VAEs, CLIP models, custom nod
 ```
 
 ##### Disk Folder Scanning
+
 - **Request Body:**
+
 ```json
 {
   "folderPaths": ["/path/to/ComfyUI/workflows"]
@@ -219,9 +237,11 @@ Extracts all referenced checkpoints, LoRAs, UNETs, VAEs, CLIP models, custom nod
 ### 3. Custom Node Dependency Resolution (4-Tier Engine)
 
 #### `GET /api/nodes/resolve?nodeType=<name>` or `POST /api/nodes/resolve`
+
 Resolves a missing node class name across local files, SQLite registry caches, and GitHub fallback.
 
 - **Request Body:**
+
 ```json
 {
   "nodeType": "ImpactWildcardProcessor"
@@ -229,6 +249,7 @@ Resolves a missing node class name across local files, SQLite registry caches, a
 ```
 
 - **Response `200 OK` (When Installed Locally or Matched):**
+
 ```json
 {
   "nodeType": "ImpactWildcardProcessor",
@@ -245,9 +266,11 @@ Resolves a missing node class name across local files, SQLite registry caches, a
 ```
 
 #### `POST /api/nodes/search-github`
+
 Performs rate-limited scoped search on GitHub for ComfyUI custom node repositories.
 
 - **Request Body:**
+
 ```json
 {
   "query": "ComfyUI-LTXTricks",
@@ -256,6 +279,7 @@ Performs rate-limited scoped search on GitHub for ComfyUI custom node repositori
 ```
 
 - **Response `200 OK`:**
+
 ```json
 {
   "query": "ComfyUI-LTXTricks",
@@ -275,9 +299,11 @@ Performs rate-limited scoped search on GitHub for ComfyUI custom node repositori
 ```
 
 #### `POST /api/nodes/clone`
+
 Clones a custom node repository into `custom_nodes/` and checks for install requirements.
 
 - **Request Body:**
+
 ```json
 {
   "gitUrl": "https://github.com/ltdrdata/ComfyUI-Impact-Pack.git",
@@ -286,6 +312,7 @@ Clones a custom node repository into `custom_nodes/` and checks for install requ
 ```
 
 - **Response `200 OK`:**
+
 ```json
 {
   "success": true,
@@ -297,9 +324,11 @@ Clones a custom node repository into `custom_nodes/` and checks for install requ
 ```
 
 #### `POST /api/nodes/install-deps`
+
 Runs `pip install -r requirements.txt` or `python install.py` using ComfyUI's specific Python runtime.
 
 - **Request Body:**
+
 ```json
 {
   "folderPath": "/home/user/ComfyUI/custom_nodes/ComfyUI-Impact-Pack"
@@ -307,6 +336,7 @@ Runs `pip install -r requirements.txt` or `python install.py` using ComfyUI's sp
 ```
 
 - **Response `200 OK`:**
+
 ```json
 {
   "success": true,
@@ -316,9 +346,11 @@ Runs `pip install -r requirements.txt` or `python install.py` using ComfyUI's sp
 ```
 
 #### `GET /api/nodes/installed`
+
 Returns all detected custom node packages in `custom_nodes/` with git remotes and branch metadata.
 
 - **Response `200 OK`:**
+
 ```json
 [
   {
@@ -337,9 +369,11 @@ Returns all detected custom node packages in `custom_nodes/` with git remotes an
 ### 4. Local Library & Model Queries
 
 #### `GET /api/local-models`
+
 Returns all indexed models from SQLite with matching metadata, duplicates status, and file paths.
 
 - **Response `200 OK`:**
+
 ```json
 [
   {
@@ -360,9 +394,11 @@ Returns all indexed models from SQLite with matching metadata, duplicates status
 ```
 
 #### `POST /api/scan-library`
+
 Initiates an asynchronous background scan of a specified directory or configured ComfyUI root.
 
 - **Request Body:**
+
 ```json
 {
   "rootPath": "/path/to/ComfyUI/models"
@@ -370,9 +406,11 @@ Initiates an asynchronous background scan of a specified directory or configured
 ```
 
 #### `GET /api/get-scan-status`
+
 Returns current scanning state.
 
 - **Response `200 OK`:**
+
 ```json
 {
   "isScanning": false,
@@ -384,12 +422,15 @@ Returns current scanning state.
 ```
 
 #### `POST /api/cancel-scan`
+
 Cancels any active library scan.
 
 #### `POST /api/clear-library`
+
 Clears local SQLite model table and model image cache.
 
 #### `POST /api/match-unidentified-models`
+
 Attempts hash-based automatic CivitAI metadata lookup for unmatched local files.
 
 ---
@@ -397,9 +438,11 @@ Attempts hash-based automatic CivitAI metadata lookup for unmatched local files.
 ### 5. CivitAI Queries & Downloads
 
 #### `POST /api/search-models`
+
 Proxy search for CivitAI models.
 
 - **Request Body:**
+
 ```json
 {
   "query": "realism",
@@ -410,18 +453,23 @@ Proxy search for CivitAI models.
 ```
 
 #### `GET /api/model/:id`
+
 Fetches CivitAI model details by model ID.
 
 #### `GET /api/version/:id`
+
 Fetches CivitAI version details and download URLs.
 
 #### `GET /api/enums`
+
 Fetches valid model types and base model categories.
 
 #### `POST /api/add-download`
+
 Queues a model for automatic download and subfolder routing.
 
 - **Request Body:**
+
 ```json
 {
   "fileName": "realism_lora_v2.safetensors",
@@ -434,6 +482,7 @@ Queues a model for automatic download and subfolder routing.
 ```
 
 - **Response `200 OK`:**
+
 ```json
 {
   "id": "dl-uuid-12345",
@@ -446,18 +495,23 @@ Queues a model for automatic download and subfolder routing.
 ```
 
 #### `GET /api/downloads`
+
 Returns the list of all download tasks with real-time speed, bytes downloaded, and status.
 
 #### `POST /api/pause-download`
+
 - **Body:** `{ "id": "<task-id>" }`
 
 #### `POST /api/resume-download`
+
 - **Body:** `{ "id": "<task-id>" }`
 
 #### `POST /api/cancel-download`
+
 - **Body:** `{ "id": "<task-id>" }`
 
 #### `POST /api/force-complete-download`
+
 - **Body:** `{ "id": "<task-id>" }`
 
 ---
@@ -465,9 +519,11 @@ Returns the list of all download tasks with real-time speed, bytes downloaded, a
 ### 6. Hugging Face Integration
 
 #### `POST /api/hf/check`
+
 Inspects a Hugging Face repository and returns file lists, sizes, and `.safetensors` model metadata.
 
 - **Request Body:**
+
 ```json
 {
   "repoId": "black-forest-labs/FLUX.1-dev"
@@ -475,12 +531,15 @@ Inspects a Hugging Face repository and returns file lists, sizes, and `.safetens
 ```
 
 #### `GET /api/hf/whoami`
+
 Returns Hugging Face login authorization state.
 
 #### `POST /api/hf/validate-token`
+
 Validates a Hugging Face User Access Token.
 
 - **Request Body:**
+
 ```json
 {
   "token": "hf_..."
@@ -492,15 +551,19 @@ Validates a Hugging Face User Access Token.
 ### 7. Configuration & Backups
 
 #### `GET /api/config`
+
 Retrieves app configuration, folder paths, and sorting preferences.
 
 #### `POST /api/save-config`
+
 Updates application configuration parameters.
 
 #### `GET /api/export-backup-zip`
+
 Exports a timestamped `.zip` containing SQLite database and application settings.
 
 #### `POST /api/import-backup-zip`
+
 Restores database and configuration from an uploaded backup `.zip` payload.
 
 ---
@@ -508,9 +571,11 @@ Restores database and configuration from an uploaded backup `.zip` payload.
 ### 8. Webhooks & Integrations
 
 #### `POST /api/webhooks/test`
+
 Dispatches a test event (`ping`, `on_download_complete`, `on_update_available`) to verify custom webhook URLs.
 
 - **Request Body:**
+
 ```json
 {
   "url": "http://127.0.0.1:8080/cmm/webhook",
@@ -524,15 +589,15 @@ Dispatches a test event (`ping`, `on_download_complete`, `on_update_available`) 
 
 For clarity and consistent UX across ComfyUI workflows, use the action-oriented verb-noun naming convention:
 
-| Node Class Name | Display Title | Category | Function / Purpose |
-|---|---|---|---|
-| `CMMStatus` | **CMM: Status & Heartbeat** | `CivitAI/Manager` | Verifies connection, API port, and database uptime |
-| `CMMInspectWorkflow` | **CMM: Inspect Workflow** | `CivitAI/Manager` | Scans in-memory graph for missing models and custom nodes |
-| `CMMResolveNode` | **CMM: Resolve Node** | `CivitAI/Manager` | 4-tier query to find install repos for missing node types |
-| `CMMDownloadModel` | **CMM: Download Model** | `CivitAI/Manager` | Enqueues model download into auto-sorted folders |
-| `CMMSearchCivitAI` | **CMM: Search CivitAI** | `CivitAI/Manager` | Queries CivitAI catalog by query, type, and base model |
-| `CMMCheckHuggingFace` | **CMM: Check Hugging Face** | `CivitAI/Manager` | Queries Hugging Face model repository files & metadata |
-| `CMMRawRequest` | **CMM: Raw API Request** | `CivitAI/Manager` | Low-level generic HTTP caller for advanced scripting |
+| Node Class Name       | Display Title               | Category          | Function / Purpose                                        |
+| --------------------- | --------------------------- | ----------------- | --------------------------------------------------------- |
+| `CMMStatus`           | **CMM: Status & Heartbeat** | `CivitAI/Manager` | Verifies connection, API port, and database uptime        |
+| `CMMInspectWorkflow`  | **CMM: Inspect Workflow**   | `CivitAI/Manager` | Scans in-memory graph for missing models and custom nodes |
+| `CMMResolveNode`      | **CMM: Resolve Node**       | `CivitAI/Manager` | 4-tier query to find install repos for missing node types |
+| `CMMDownloadModel`    | **CMM: Download Model**     | `CivitAI/Manager` | Enqueues model download into auto-sorted folders          |
+| `CMMSearchCivitAI`    | **CMM: Search CivitAI**     | `CivitAI/Manager` | Queries CivitAI catalog by query, type, and base model    |
+| `CMMCheckHuggingFace` | **CMM: Check Hugging Face** | `CivitAI/Manager` | Queries Hugging Face model repository files & metadata    |
+| `CMMRawRequest`       | **CMM: Raw API Request**    | `CivitAI/Manager` | Low-level generic HTTP caller for advanced scripting      |
 
 ### Standard `__init__.py` Registration Template
 
@@ -569,4 +634,3 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
 ```
-
