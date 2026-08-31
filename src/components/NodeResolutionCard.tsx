@@ -23,6 +23,7 @@ import {
   FolderSearch,
   Search,
   ChevronDown,
+  MapPin,
 } from 'lucide-react';
 import { NodeResolutionResult, NodeCloneResult, CustomNodePackage } from '../types/app';
 
@@ -30,12 +31,14 @@ interface NodeResolutionCardProps {
   nodeType: string;
   resolution?: NodeResolutionResult | null;
   onInstalled?: (folderName: string) => void;
+  onLocateInWorkflow?: (nodeType: string) => void;
 }
 
 export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
   nodeType,
   resolution,
   onInstalled,
+  onLocateInWorkflow,
 }) => {
   const [customGitUrl, setCustomGitUrl] = useState('');
   const [isCloning, setIsCloning] = useState<string | null>(null);
@@ -125,7 +128,10 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
     if (!window.civitaiAPI?.openExternal) return;
     // Open GitHub repository search in the user's browser instead of the API so we
     // never trip the unauthenticated Search API rate limit.
-    const searchUrl = `https://github.com/search?q=${encodeURIComponent(`comfyui ${nodeType}`)}&type=repositories`;
+    const packName = resolution?.managerMatch?.title || null;
+    const searchUrl = `https://github.com/search?q=${encodeURIComponent(
+      `comfyui ${nodeType}${packName ? ` ${packName}` : ''}`
+    )}&type=repositories`;
     window.civitaiAPI.openExternal(searchUrl);
   };
 
@@ -173,15 +179,31 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
 
   const candidates = resolution?.githubCandidates || [];
 
+  // The extension/pack that hosts this node — e.g. "ComfyUI-Easy-Use" for the
+  // "EasyNegative" class. When the registry match knows the repo it wins; otherwise
+  // the installed folder name is the best signal (missing-node cards get the pack
+  // name only when the registry identified it).
+  const packName =
+    resolution?.managerMatch?.title ||
+    (resolution?.isInstalled ? resolution.installedFolder : undefined) ||
+    null;
+
   return (
     <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Package className="text-cyan-400" size={18} />
-          <h3 className="text-sm font-bold text-slate-100 font-mono">
-            {nodeType}
-          </h3>
+        <div className="flex items-center gap-2 min-w-0">
+          <Package className="text-cyan-400 shrink-0" size={18} />
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-slate-100 truncate">
+              {packName ?? nodeType}
+            </h3>
+            {packName && (
+              <p className="text-[11px] font-mono text-slate-400 truncate">
+                {nodeType}
+              </p>
+            )}
+          </div>
         </div>
 
         {resolution?.isInstalled ? (
@@ -207,6 +229,16 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
             <ExternalLink size={13} />
             <span>Search GitHub</span>
           </button>
+          {onLocateInWorkflow && (
+            <button
+              onClick={() => onLocateInWorkflow(nodeType)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 rounded-xl text-xs font-bold transition-all shadow cursor-pointer"
+              title="Pans and zooms the node map to this node"
+            >
+              <MapPin size={13} />
+              <span>Show in Workflow</span>
+            </button>
+          )}
           <span className="text-[11px] text-slate-500 pt-1">
             Opens GitHub in your browser, then paste the repo URL below to install.
           </span>

@@ -35,6 +35,7 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import { FallbackImage } from './FallbackImage';
 import { CivitAIModel, CivitAIModelVersion, ModelType, SearchParams } from '../types/civitai';
@@ -535,6 +536,15 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
     fetchModels(1, '');
   };
 
+  const handleClearFilters = () => {
+    setQuery('');
+    setSelectedType('All');
+    setSelectedBaseModel('All');
+    setCurrentPage(1);
+    setPageCursors({});
+    fetchModels(1, '', '');
+  };
+
   const handlePageChange = (newPage: number) => {
     if (newPage < 1) return;
     setCurrentPage(newPage);
@@ -664,6 +674,16 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
               <option value="Most Liked" className="bg-slate-900">Most Liked</option>
             </select>
           </div>
+
+          {/* Clear Filters */}
+          <button
+            onClick={handleClearFilters}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-950/40 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300 hover:text-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+            title="Reset Type and Base to All and clear the search term"
+          >
+            <RotateCcw size={14} />
+            <span>Clear Filters</span>
+          </button>
         </div>
 
         {/* NSFW Controls */}

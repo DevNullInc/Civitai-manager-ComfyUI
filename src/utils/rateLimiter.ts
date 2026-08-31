@@ -79,8 +79,17 @@ export class RateLimiter {
         attempt++;
         const status = err?.response?.status;
         const isRateLimited = status === 429 || status === 503;
+        // Node's http client marks a response stream cut short as "aborted"
+        // (code ECONNABORTED). CivitAI/Cloudflare occasionally reset a large body
+        // after sending the 200 headers, which logs as "GET /models failed
+        // (status 200): aborted". Treat it as transient like a rate limit instead of
+        // letting one bad response wipe the entire browse grid.
+        const isAborted =
+          err?.code === 'ECONNABORTED' ||
+          (typeof err?.message === 'string' && /aborted/i.test(err.message));
+        const retryable = isRateLimited || isAborted;
 
-        if (!isRateLimited || attempt > maxRetries) {
+        if (!retryable || attempt > maxRetries) {
           throw err;
         }
 

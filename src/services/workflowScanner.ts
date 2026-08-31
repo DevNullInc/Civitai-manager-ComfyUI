@@ -434,7 +434,13 @@ const promptNodes = normalized.prompt ? normalized.prompt : normalized;
     if (uiWorkflow && Array.isArray(uiWorkflow.nodes)) {
       for (const node of uiWorkflow.nodes) {
         if (node && typeof node === 'object') {
-          const t = this.resolveNodeTypeLabel(node.type || node.class_type, subgraphNames);
+          const rawType = node.type || node.class_type;
+          // Subgraph/component references carry a UUID "type" pointing at a definition
+          // embedded IN this workflow file (e.g. an "Easy Negative" embedding component).
+          // They are self-contained, never external extensions, so they must not surface
+          // as "missing node" resolution candidates.
+          if (typeof rawType === 'string' && WorkflowScanner.UUID_TYPE_RE.test(rawType.trim())) continue;
+          const t = this.resolveNodeTypeLabel(rawType, subgraphNames);
           if (t) types.add(t);
         }
       }
@@ -445,7 +451,9 @@ const promptNodes = normalized.prompt ? normalized.prompt : normalized;
     if (rootNodes && typeof rootNodes === 'object' && !Array.isArray(rootNodes)) {
       for (const node of Object.values<any>(rootNodes)) {
         if (node && typeof node === 'object') {
-          const t = this.resolveNodeTypeLabel(node.class_type || node.type, subgraphNames);
+          const rawType = node.class_type || node.type;
+          if (typeof rawType === 'string' && WorkflowScanner.UUID_TYPE_RE.test(rawType.trim())) continue;
+          const t = this.resolveNodeTypeLabel(rawType, subgraphNames);
           if (t) types.add(t);
         }
       }

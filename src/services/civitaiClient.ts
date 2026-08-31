@@ -111,7 +111,15 @@ export class CivitAIClient {
         const status = err.response?.status;
         const errDetails = err.response?.data?.message || err.response?.data?.error || err.message;
         logger.error(`[CivitAI API] GET /models failed (status ${status}):`, errDetails);
-        throw new Error(typeof errDetails === 'string' ? errDetails : JSON.stringify(errDetails));
+        // Re-throw a plain Error for the renderer, but carry the axios code/status so
+        // RateLimiter's retry logic can still classify ECONNABORTED ("aborted" — CivitAI
+        // reset the body stream after sending headers) as a transient, retryable failure.
+        const wrapped: Error & { code?: string; status?: number } = new Error(
+          typeof errDetails === 'string' ? errDetails : JSON.stringify(errDetails)
+        );
+        wrapped.code = err?.code;
+        wrapped.status = status;
+        throw wrapped;
       }
     });
   }

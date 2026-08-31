@@ -105,6 +105,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Added [`docs/APISecurity.md`](docs/APISecurity.md) documenting exactly how the CivitAI API key and HuggingFace token are encrypted, stored, transmitted, and their real-world trust boundaries (with an honest note that at-rest encryption currently relies on a static embedded key, not an OS keychain — plus a roadmap to close that gap).
 - **F5 / Ctrl+R Hard Refresh**:
   - The Electron frontend re-enables a hard refresh via `F5`, `Ctrl+R`, or `Cmd+R` (intercepting the key and calling `window.location.reload()`), which re-mounts the active tab so it re-fetches its data after a network drop — previously the removed default menu left no way to refresh the app.
+- **Browse Tab: "Clear Filters" Action**:
+  - A **Clear Filters** button in the browse filter toolbar resets the Model **Type** and **Base** selectors back to `All` and clears the search box with one click, then reloads page 1.
+- **Resolution Cards: Hosting Extension / Pack Names**:
+  - Missing-node cards now lead with the extension that hosts the node class (from the ComfyUI-Manager registry match — e.g. `EasyNegative` → **ComfyUI-Easy-Use**), with the node class beneath it in mono; installed cards show their folder as the pack.
+  - "Search GitHub" now appends the pack name to the query for more targeted repository results.
+- **"Show in Workflow" Locate Button on Resolution Cards**:
+  - Missing-node cards gain a **Show in Workflow** action that pans and zooms the LiteGraph node map to the first node of that type in the viewport.
 
 ### 🔄 Changed
 
@@ -115,6 +122,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Toolbar keeps zoom in/out (0.2x–2.0x), **Fit to View**, and one-click fullscreen expand/shrink.
   - Rendering is read-only for now; full LiteGraph editing mode is tracked for v1.6.0 (see ROADMAP).
   - Added LiteGraph.js copyright notice + full MIT license text to the top-level `LICENSE`.
+- **Workflow Map Zoom Anchors at the Cursor**:
+  - Replaced LiteGraph's wheel handlers (which zoom around the canvas center or raw document coordinates) with a pointer-anchored zoom so touchpad pinch and mouse-wheel scrolling zoom toward the cursor instead of jumping away.
 
 - **Project Rebranded → Renegade Core Model Manager (RenegadeCMM)**:
   - Display name is now **Renegade Core Model Manager**; the short technical/project identifier is **RenegadeCMM** (repo, `productName`, app id, npm package, binary/installer artifacts). The `ComfyUI Edition` tagline and all legacy "CivitAI Model Manager"-style names were dropped.
@@ -174,3 +183,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - The expanded fullscreen map can now be collapsed with the existing **X** button or the **Escape** key; the expand toggle uses a functional state update so rapid toggling can't get stuck.
 - **Launcher Banner Box Centering**:
   - Centered the `cmm.sh` / `cmm-mac.sh` / `cmm.ps1` ASCII box title/subtitle: the box was 47 chars wide while the title spanned fewer, leaving the right pipe lopsided, and the macOS subtitle overflowed the box by a character. The box is now 39 chars with symmetric padding, and the macOS subtitle aligns to the same content width.
+- **Workflow Map Mousedown Crash (`Cannot read properties of null (reading 'focus')`)**:
+  - LiteGraph 0.7.18 cannot remove its own capture-phase listeners: `bindEvents` registers `mousedown`/`mouseup`/`keydown` with `capture=true`, but `unbindEvents` removes them with the default `false` (and passes the wrong callback for `mousemove`). A torn-down `LGraphCanvas` therefore kept its `mousedown` capture listener, whose now-nulled `this.canvas` threw on **every** canvas click — React StrictMode's dev double-mount leaked this immediately. The node map's teardown now removes the exact bound callbacks with matching capture flags (and the pre-existing `setCanvas(null, true)` skip-events detach was replaced with the unbinding variant).
+- **Browse Resilient to Aborted API Responses**:
+  - CivitAI responses whose body stream is reset after the 200 headers ("GET /models failed (status 200): aborted", Node `ECONNABORTED`) are now classified as transient and retried by the rate limiter instead of one bad response wiping the entire browse grid. `fetchModels` keeps the axios error code/status on the re-wrapped error so the retry classifier can still see it.
+- **Embedded Subgraph / Component Nodes No Longer Flagged as Missing Extensions**:
+  - Workflow nodes whose `type` is a UUID (component/subgraph references embedded in the workflow file — e.g. an "Easy Negative" component) are skipped when collecting custom node classes, so they never surface as missing extensions to install; the map still shows their friendly titles.

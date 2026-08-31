@@ -7,7 +7,7 @@
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { LGraph, LGraphCanvas, LGraphNode } from 'litegraph.js';
 import 'litegraph.js/css/litegraph.css';
 import { ZoomIn, ZoomOut, Maximize2, Crosshair, X, Workflow } from 'lucide-react';
@@ -15,6 +15,11 @@ import { CanvasGraph, CanvasNode } from '../types/app';
 
 export type NodeStatus = 'ready' | 'missing-model' | 'missing-node';
 export type WorkflowViewMode = 'both' | 'map' | 'matrix';
+
+export interface WorkflowNodeMapHandle {
+  /** Pans and zooms the map so the first node of the given type fills the viewport. */
+  zoomToNodeType: (nodeType: string | number | null) => void;
+}
 
 const STATUS_COLORS: Record<NodeStatus, { color: string; bgcolor: string }> = {
   ready: { color: '#10b981', bgcolor: '#0b1220' },
@@ -51,14 +56,11 @@ interface WorkflowNodeMapProps {
  * for v1.6.0 (see ROADMAP) — to enable editing later, flip `read_only`/`allow_dragnodes`
  * below and set whole-graph moved/connect callbacks back into the app.
  */
-export default function WorkflowNodeMap({
-  graph,
-  getNodeStatus,
-  onFocusNode,
-  viewMode,
-  isMapExpanded,
-  onToggleExpand,
-}: WorkflowNodeMapProps) {
+export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMapProps>(
+  function WorkflowNodeMap(
+    { graph, getNodeStatus, onFocusNode, viewMode, isMapExpanded, onToggleExpand },
+    ref
+  ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasElRef = useRef<HTMLCanvasElement | null>(null);
   const graphRef = useRef<LGraph | null>(null);
@@ -99,13 +101,65 @@ export default function WorkflowNodeMap({
       }
     };
 
+    // LiteGraph's own wheel handlers zoom around the canvas CENTER (DragAndScale.onMouse)
+    // or raw client coordinates (processMouseWheel) — neither tracks the pointer inside a
+    // nested panel, so touchpad pinch / scroll visibly jumps away from the cursor. Replace
+    // the canvas wheel listeners with one anchored at the pointer's canvas-relative point.
+    const onWheel = (e: WheelEvent) => {
+      if (!c.graph || !c.allow_dragcanvas || !c.canvas) return;
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16; // line-based scrolling
+      else if (e.deltaMode === 2) dy *= 100; // page-based scrolling
+      if (dy === 0) return;
+      const rect = c.canvas.getBoundingClientRect();
+      const zoomCenter: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
+      const k = Math.pow(1.2, -dy / 120);
+      const next = Math.max(c.ds.min_scale, Math.min(c.ds.max_scale, c.ds.scale * k));
+      if (next === c.ds.scale) return;
+      c.ds.changeScale(next, zoomCenter);
+      setZoomPercent(Math.round(c.ds.scale * 100));
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const wheelCallback = (c as any)._mousewheel_callback as ((e: Event) => void) | undefined;
+    const canvasEl = canvasElRef.current;
+    const wheelListener = onWheel as unknown as EventListener;
+    const elAny = canvasEl as any;
+    if (wheelCallback) {
+      elAny.removeEventListener('mousewheel', wheelCallback);
+      elAny.removeEventListener('DOMMouseScroll', wheelCallback);
+    }
+    elAny.addEventListener('wheel', onWheel, { passive: false });
+    elAny.addEventListener('mousewheel', wheelListener, { passive: false });
+    elAny.addEventListener('DOMMouseScroll', wheelListener);
+
     graphRef.current = g;
     canvasRef.current = c;
 
     return () => {
       try {
         c.stopRendering();
-        c.setCanvas(null, true);
+        const el = canvasEl as any;
+        el.removeEventListener('wheel', onWheel);
+        el.removeEventListener('mousewheel', wheelListener);
+        el.removeEventListener('DOMMouseScroll', wheelListener);
+        // LiteGraph's own unbindEvents() cannot remove its capture-phase listeners:
+        // bindEvents registers "down"/"up"/"keydown" with capture=true, but
+        // pointerListenerRemove()/removeEventListener default the capture flag to
+        // false (and it even passes _mousedown_callback when clearing "move"). A torn
+        // down LGraphCanvas therefore keeps its "mousedown" capture listener alive,
+        // and with this.canvas nulled it throws "Cannot read properties of null
+        // (reading 'focus')" on every canvas click (React StrictMode's dev double
+        // mount leaks exactly this). Remove the exact bound callbacks ourselves.
+        const anyC = c as any;
+        if (anyC._mousedown_callback) el.removeEventListener('mousedown', anyC._mousedown_callback, true);
+        if (anyC._mouseup_callback) el.removeEventListener('mouseup', anyC._mouseup_callback, true);
+        if (anyC._mousemove_callback) el.removeEventListener('mousemove', anyC._mousemove_callback);
+        if (anyC._key_callback) {
+          el.removeEventListener('keydown', anyC._key_callback, true);
+          document.removeEventListener('keyup', anyC._key_callback, true);
+        }
+        c.setCanvas(null, false);
       } catch {
         /* ignore teardown errors */
       }
@@ -263,6 +317,48 @@ export default function WorkflowNodeMap({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [isMapExpanded, onToggleExpand]);
 
+  // Center the first node of the requested type in the viewport so the user can see
+  // exactly which section of the workflow a resolution card refers to.
+  const zoomToNodeType = useCallback(
+    (nodeType: string | number | null) => {
+      const c = canvasRef.current;
+      const g = graphRef.current;
+      const host = hostRef.current;
+      if (!c || !g || !host || nodeType == null) return;
+      const want = String(nodeType);
+      const nodes = (g as any)._nodes as LGraphNode[];
+      const target = nodes.find((n) => String(n.type) === want);
+      if (!target) return;
+
+      let hostW = host.clientWidth || 0;
+      let hostH = host.clientHeight || 0;
+      if (hostW > 0 && hostH > 0) {
+        try {
+          c.resize();
+        } catch {
+          /* ignore resize errors */
+        }
+      }
+      const vw = hostW || c.canvas.width || 600;
+      const vh = hostH || c.canvas.height || 400;
+
+      const w = target.size && target.size[0] ? target.size[0] : NODE_WIDTH;
+      const h = target.size && target.size[1] ? target.size[1] : NODE_HEIGHT;
+      const [x, y] = target.pos || [0, 0];
+      const scale = Math.max(
+        c.ds.min_scale,
+        Math.min(2, (vw * 0.8) / (w || 1), (vh * 0.8) / (h || 1), 1.25)
+      );
+      c.ds.scale = scale;
+      c.ds.offset = [vw / 2 - (x + w / 2) * scale, vh / 2 - (y + h / 2) * scale];
+      setZoomPercent(Math.round(scale * 100));
+      forceDraw();
+    },
+    [forceDraw]
+  );
+
+  useImperativeHandle(ref, () => ({ zoomToNodeType }), [zoomToNodeType]);
+
   const zoomBy = (delta: number) => {
     const c = canvasRef.current;
     const host = hostRef.current;
@@ -362,7 +458,9 @@ export default function WorkflowNodeMap({
       </div>
     </div>
   );
-}
+});
+
+export default WorkflowNodeMap;
 
 function normalizeLink(
   link: any

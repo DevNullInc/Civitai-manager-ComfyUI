@@ -42,7 +42,7 @@ import {
   DownloadTask,
 } from '../types/app';
 import { NodeResolutionCard } from './NodeResolutionCard';
-import WorkflowNodeMap, { NodeStatus } from './WorkflowNodeMap';
+import WorkflowNodeMap, { NodeStatus, WorkflowNodeMapHandle } from './WorkflowNodeMap';
 
 // ComfyUI component/subgraph references use UUIDs as canvas node "type" values.
 const UUID_TYPE_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -114,6 +114,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   const [activeTasks, setActiveTasks] = useState<Record<string, DownloadTask>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nodeMapRef = useRef<WorkflowNodeMapHandle>(null);
 
   // Sync workflows with sessionStorage whenever they change
   useEffect(() => {
@@ -157,9 +158,15 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           if (results.length > 0) {
             setWorkflows(results);
             setSelectedWorkflowIndex(0);
-            resolveWorkflowNodes(results[0]);
           }
         }
+        // Always re-resolve the active workflow's nodes after a scan. Previously this
+        // only ran when the queue was empty, so a queue restored from sessionStorage
+        // kept nodeResolutions empty — the Custom Node Extensions panel read
+        // "0 installed • 0 missing" and every map node defaulted to "ready" (green)
+        // even when its extension (e.g. TIPO, MXReroute) isn't installed.
+        const active = workflows.length > 0 ? workflows[selectedWorkflowIndex] : results[0];
+        if (active) resolveWorkflowNodes(active);
       }
     } catch (err) {
       console.error('Failed to scan workflows:', err);
@@ -828,6 +835,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       {/* Visual Node Map Canvas */}
       {activeWorkflow && (
         <WorkflowNodeMap
+          ref={nodeMapRef}
           graph={activeWorkflow.canvasGraph}
           getNodeStatus={getNodeStatus}
           onFocusNode={setSelectedNodeId}
@@ -970,6 +978,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                       <NodeResolutionCard
                         nodeType={nodeType}
                         resolution={resolution}
+                        onLocateInWorkflow={(type) => {
+                          setSelectedNodeId(type);
+                          nodeMapRef.current?.zoomToNodeType(type);
+                        }}
                         onInstalled={(folderName) => {
                           // Update resolution locally
                           setNodeResolutions((prev) => ({
