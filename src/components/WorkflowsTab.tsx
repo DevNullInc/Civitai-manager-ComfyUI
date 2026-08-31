@@ -7,7 +7,7 @@
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  */
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Workflow,
   Upload,
@@ -24,10 +24,6 @@ import {
   LayoutGrid,
   FileJson,
   Image as ImageIcon,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Crosshair,
   HardDrive,
   ExternalLink,
   ChevronRight,
@@ -46,6 +42,7 @@ import {
   DownloadTask,
 } from '../types/app';
 import { NodeResolutionCard } from './NodeResolutionCard';
+import WorkflowNodeMap, { NodeStatus } from './WorkflowNodeMap';
 
 // ComfyUI component/subgraph references use UUIDs as canvas node "type" values.
 const UUID_TYPE_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -82,245 +79,6 @@ function resolveNodeTypeLabel(raw: any, subgraphNames: Map<string, string>): str
   return t;
 }
 
-const CANVAS_NODE_W = 220;
-const CANVAS_NODE_H = 110;
-const ZOOM_STEP = 0.05;
-
-interface NodeCoord {
-  x: number;
-  y: number;
-}
-
-interface CanvasBounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
-
-type NodeLayout = Map<string, NodeCoord>;
-
-/** Normalize a ComfyUI link entry (array form or object form) into an edge reference. */
-function normalizeEdge(link: any): { srcId: string; dstId: string } | null {
-  if (!link) return null;
-  if (Array.isArray(link)) {
-    // ComfyUI link array: [linkId, origin_id, origin_slot, target_id, target_slot, type]
-    const [, src, , dst] = link;
-    if (src == null || dst == null) return null;
-    return { srcId: String(src), dstId: String(dst) };
-  }
-  if (typeof link === 'object') {
-    const src = link.origin_id ?? link.source_id ?? link.source;
-    const dst = link.target_id ?? link.target;
-    if (src == null || dst == null) return null;
-    return { srcId: String(src), dstId: String(dst) };
-  }
-  return null;
-}
-
-/**
- * Layered (longest-path) layout synthesized from the link DAG. Each node is placed in a
- * horizontal column matching its execution depth (sources on the left), with nodes of the
- * same depth stacked vertically. Used whenever the workflow file has no usable coordinates,
- * or when those coordinates are missing/duplicated and would collapse nodes together.
- */
-function buildLayeredLayout(nodes: CanvasNode[], links: any[]): NodeLayout {
-  const out = new Map<string, string[]>();
-  const indeg = new Map<string, number>();
-  for (const n of nodes) {
-    const id = String(n.id);
-    out.set(id, []);
-    indeg.set(id, 0);
-  }
-
-  for (const l of links) {
-    const e = normalizeEdge(l);
-    if (!e || e.srcId === e.dstId) continue;
-    if (!out.has(e.srcId) || !out.has(e.dstId)) continue;
-    out.get(e.srcId)!.push(e.dstId);
-    indeg.set(e.dstId, (indeg.get(e.dstId) || 0) + 1);
-  }
-
-  // Longest-path layering via Kahn's algorithm.
-  const level = new Map<string, number>();
-  const queue: string[] = [];
-  for (const n of nodes) {
-    const id = String(n.id);
-    if (indeg.get(id) === 0) {
-      level.set(id, 0);
-      queue.push(id);
-    }
-  }
-  while (queue.length) {
-    const cur = queue.shift()!;
-    const cl = level.get(cur) ?? 0;
-    for (const nxt of out.get(cur) || []) {
-      level.set(nxt, Math.max(level.get(nxt) ?? -1, cl + 1));
-      const d = indeg.get(nxt)! - 1;
-      indeg.set(nxt, d);
-      if (d <= 0) queue.push(nxt);
-    }
-  }
-
-  // Leftover nodes (e.g. cycles) get pushed into fresh columns so they never overlap.
-  let nextLevel = 0;
-  for (const n of nodes) {
-    const lv = level.get(String(n.id));
-    if (lv != null) nextLevel = Math.max(nextLevel, lv + 1);
-  }
-  for (const n of nodes) {
-    const id = String(n.id);
-    if (!level.has(id)) level.set(id, nextLevel++);
-  }
-
-  const cols = new Map<number, number[]>();
-  nodes.forEach((n, i) => {
-    const lv = level.get(String(n.id)) ?? 0;
-    if (!cols.has(lv)) cols.set(lv, []);
-    cols.get(lv)!.push(i);
-  });
-
-  const margin = 120;
-  const layout: NodeLayout = new Map();
-  for (const [lv, indices] of cols) {
-    indices.forEach((nodeIdx, row) => {
-      const id = String(nodes[nodeIdx].id);
-      layout.set(id, {
-        x: margin + lv * (CANVAS_NODE_W + 160),
-        y: margin + row * (CANVAS_NODE_H + 190),
-      });
-    });
-  }
-  return layout;
-}
-
-function computeBounds(boxes: NodeLayout): CanvasBounds {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const box of boxes.values()) {
-    minX = Math.min(minX, box.x);
-    minY = Math.min(minY, box.y);
-    maxX = Math.max(maxX, box.x);
-    maxY = Math.max(maxY, box.y);
-  }
-  if (!isFinite(minX) || !isFinite(minY)) {
-    minX = 100;
-    minY = 100;
-    maxX = 100 + CANVAS_NODE_W;
-    maxY = 100 + CANVAS_NODE_H;
-  }
-  return { minX, minY, maxX: maxX + CANVAS_NODE_W, maxY: maxY + CANVAS_NODE_H };
-}
-
-/**
- * Produces node coordinates for the visual map. Embedded canvas positions are honored when
- * they are present, distinct, and actually spread out. Otherwise (missing, all-identical, or
- * collapsed into a tiny cluster) a layered layout is synthesized so nodes never overlap.
- */
-function resolveCanvasLayout(
-  graph: CanvasGraph | undefined
-): { boxes: NodeLayout; bounds: CanvasBounds } {
-  const nodes = graph?.nodes || [];
-  const links = graph?.links || [];
-
-  const positions: (NodeCoord | null)[] = nodes.map((n) => {
-    const p = n.pos;
-    return Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number'
-      ? { x: p[0], y: p[1] }
-      : null;
-  });
-
-  const anyPos = positions.some((p) => p !== null);
-  const distinct = new Set(
-    positions.map((p) => (p ? `${p.x},${p.y}` : 'null'))
-  ).size;
-  let spread = 0;
-  if (anyPos) {
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    positions.forEach((p) => {
-      if (!p) return;
-      minX = Math.min(minX, p.x);
-      minY = Math.min(minY, p.y);
-      maxX = Math.max(maxX, p.x);
-      maxY = Math.max(maxY, p.y);
-    });
-    spread = maxX - minX + (maxY - minY);
-  }
-  const usable = anyPos && nodes.length > 0 && distinct === nodes.length && spread > 60;
-
-  let boxes: NodeLayout;
-  if (usable) {
-    boxes = new Map();
-    nodes.forEach((n, i) => {
-      const p = positions[i];
-      if (p) boxes.set(String(n.id), p);
-    });
-  } else {
-    boxes = buildLayeredLayout(nodes, links);
-  }
-
-  return { boxes, bounds: computeBounds(boxes) };
-}
-
-function buildEdgePaths(
-  boxes: NodeLayout,
-  links: any[],
-  labelOf: (id: string) => string = (id) => id
-): { key: string; d: string; label: string }[] {
-  const paths: { key: string; d: string; label: string }[] = [];
-  const seen = new Set<string>();
-  for (const l of links) {
-    const e = normalizeEdge(l);
-    if (!e) continue;
-    const src = boxes.get(e.srcId);
-    const dst = boxes.get(e.dstId);
-    if (!src || !dst) continue;
-    const key = `${e.srcId}->${e.dstId}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const sCX = src.x + CANVAS_NODE_W / 2;
-    const sCY = src.y + CANVAS_NODE_H / 2;
-    const dCX = dst.x + CANVAS_NODE_W / 2;
-    const dCY = dst.y + CANVAS_NODE_H / 2;
-    const dx = dCX - sCX;
-    const dy = dCY - sCY;
-    let d: string;
-
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      // Mostly horizontal edge: leave the source's right/left side and enter the target's.
-      const rightward = dx >= 0;
-      let aX = src.x + (rightward ? CANVAS_NODE_W : 0);
-      let bX = dst.x + (rightward ? 0 : CANVAS_NODE_W);
-      if (rightward && bX <= aX) {
-        aX = sCX;
-        bX = dCX;
-      }
-      const mx = (aX + bX) / 2;
-      d = `M ${aX} ${sCY} C ${mx} ${sCY}, ${mx} ${dCY}, ${bX} ${dCY}`;
-    } else {
-      // Mostly vertical edge: leave the source's bottom/top and enter the target's.
-      const downward = dy >= 0;
-      let aY = src.y + (downward ? CANVAS_NODE_H : 0);
-      let bY = dst.y + (downward ? 0 : CANVAS_NODE_H);
-      if (downward && bY <= aY) {
-        aY = sCY;
-        bY = dCY;
-      }
-      const my = (aY + bY) / 2;
-      d = `M ${sCX} ${aY} C ${sCX} ${my}, ${dCX} ${my}, ${dCX} ${bY}`;
-    }
-
-    paths.push({ key, d, label: `${labelOf(e.srcId)} -> ${labelOf(e.dstId)}` });
-  }
-  return paths;
-}
-
 interface WorkflowsTabProps {
   onSearchModel?: (query: string) => void;
   onNavigateToDownloads?: () => void;
@@ -346,6 +104,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'both' | 'map' | 'matrix'>('both');
   const [selectedNodeId, setSelectedNodeId] = useState<string | number | null>(null);
+  const [isMapExpanded, setIsMapExpanded] = useState<boolean>(false);
 
   // Resolution states for custom node classes
   const [nodeResolutions, setNodeResolutions] = useState<Record<string, NodeResolutionResult>>({});
@@ -354,15 +113,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   // Active download tracking for inline progress
   const [activeTasks, setActiveTasks] = useState<Record<string, DownloadTask>>({});
 
-  // Canvas pan & zoom state
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [isMapExpanded, setIsMapExpanded] = useState<boolean>(false);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const isDraggingCanvas = useRef<boolean>(false);
-  const dragStartPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Sync workflows with sessionStorage whenever they change
   useEffect(() => {
@@ -438,65 +189,11 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       setWorkflows(nextList);
       setSelectedWorkflowIndex(0);
       setSelectedNodeId(null);
-      fitMapToView(found.canvasGraph);
       resolveWorkflowNodes(found);
     }
   };
 
   const activeWorkflow: WorkflowInfo | undefined = workflows[selectedWorkflowIndex];
-
-  // Visual-map geometry: node coordinates (embedded or synthesized) and connection paths.
-  const { boxes: nodeBoxes, bounds: graphBounds } = useMemo(
-    () => resolveCanvasLayout(activeWorkflow?.canvasGraph),
-    [activeWorkflow?.canvasGraph]
-  );
-  const edgePaths = useMemo(() => {
-    const labelOf = (id: string): string => {
-      const n = activeWorkflow?.canvasGraph?.nodes?.find((x) => String(x.id) === id);
-      return n ? n.type : id;
-    };
-    return buildEdgePaths(nodeBoxes, activeWorkflow?.canvasGraph?.links || [], labelOf);
-  }, [nodeBoxes, activeWorkflow?.canvasGraph?.links]);
-
-  // Fit the whole graph of a given workflow into view. Called imperatively whenever a
-  // workflow is selected so the zoom ALWAYS resets, plus by the effect below for the
-  // initial selection, parse/upload, and expanding the map to fullscreen.
-  const fitMapToView = React.useCallback(
-    (graph?: CanvasGraph) => {
-      const { bounds } = resolveCanvasLayout(graph);
-      const el = canvasContainerRef.current;
-      const viewW = el?.clientWidth || 800;
-      const viewH = el?.clientHeight || 420;
-      const nodeCount = graph?.nodes?.length || 0;
-      if (nodeCount === 0) {
-        setZoomLevel(1);
-        setPanOffset({ x: 0, y: 0 });
-        return;
-      }
-      const pad = 60;
-      const bw = bounds.maxX - bounds.minX;
-      const bh = bounds.maxY - bounds.minY;
-      if (!isFinite(bw) || !isFinite(bh) || bw <= 0 || bh <= 0) {
-        setZoomLevel(1);
-        setPanOffset({ x: 0, y: 0 });
-        return;
-      }
-      const scale = Math.max(0.15, Math.min(1, (viewW - pad) / bw, (viewH - pad) / bh));
-      setZoomLevel(scale);
-      setPanOffset({
-        x: pad / 2 - bounds.minX * scale,
-        y: pad / 2 - bounds.minY * scale,
-      });
-    },
-    []
-  );
-
-  // Auto-fit the whole graph into view whenever the active workflow's graph changes
-  // (initial selection, parse/upload, switching) or the map expands/collapses.
-  useEffect(() => {
-    fitMapToView(activeWorkflow?.canvasGraph);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeWorkflow?.canvasGraph, isMapExpanded]);
 
   // Resolve custom node classes for the active workflow. Resolution reads the persistent
   // SQLite cache first (so reloading a workflow never re-attempts a node), then checks
@@ -532,7 +229,6 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   const handleSelectWorkflow = (index: number) => {
     setSelectedWorkflowIndex(index);
     setSelectedNodeId(null);
-    fitMapToView(workflows[index]?.canvasGraph);
     resolveWorkflowNodes(workflows[index]);
   };
 
@@ -811,45 +507,30 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     return null;
   };
 
-  // Canvas drag & pan handlers
-  const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    isDraggingCanvas.current = true;
-    dragStartPos.current = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
-  };
-
-  const handleCanvasMouseMove = (e: React.MouseEvent) => {
-    if (!isDraggingCanvas.current) return;
-    setPanOffset({
-      x: e.clientX - dragStartPos.current.x,
-      y: e.clientY - dragStartPos.current.y,
-    });
-  };
-
-  const handleCanvasMouseUp = () => {
-    isDraggingCanvas.current = false;
-  };
-
   // Compute node readiness status
-  const getNodeStatus = (node: CanvasNode): 'ready' | 'missing-model' | 'missing-node' => {
-    const nodeType = node.type;
-    const res = nodeResolutions[nodeType];
-    if (res && !res.isInstalled) {
-      return 'missing-node';
-    }
-
-    // Check if any widget value references a missing model
-    if (activeWorkflow?.models) {
-      const nodeModels = activeWorkflow.models.filter(
-        (m) => String(m.nodeId) === String(node.id) || m.nodeType === node.type
-      );
-      if (nodeModels.some((m) => !m.isInstalled)) {
-        return 'missing-model';
+  const getNodeStatus = useCallback(
+    (node: CanvasNode): NodeStatus => {
+      const nodeType = node.type;
+      const res = nodeResolutions[nodeType];
+      if (res && !res.isInstalled) {
+        return 'missing-node';
       }
-    }
 
-    return 'ready';
-  };
+      // Check if any widget value references a missing model
+      if (activeWorkflow?.models) {
+        const nodeModels = activeWorkflow.models.filter(
+          (m) => String(m.nodeId) === String(node.id) || m.nodeType === node.type
+        );
+        if (nodeModels.some((m) => !m.isInstalled)) {
+          return 'missing-model';
+        }
+      }
+
+      return 'ready';
+    },
+    [nodeResolutions, activeWorkflow]
+  );
+
 
   // Computed summary metrics
   const totalModelsCount = activeWorkflow?.models?.length || 0;
@@ -1145,213 +826,15 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       )}
 
       {/* Visual Node Map Canvas */}
-      {activeWorkflow && (viewMode === 'both' || viewMode === 'map') && (
-        <div
-          className={`${
-            isMapExpanded
-              ? 'fixed inset-0 z-[100] flex flex-col bg-[#0a0d14] border border-slate-800 shadow-2xl'
-              : 'glass-panel rounded-3xl border border-slate-800 shadow-2xl overflow-hidden space-y-2'
-          }`}
-        >
-          {/* Map Toolbar */}
-          <div className={`px-6 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 ${isMapExpanded ? 'shrink-0' : ''}`}>
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-              <Workflow size={16} className="text-cyan-400" />
-              <span>Visual Node Map</span>
-              <span className="text-[11px] text-slate-500 font-normal">
-                (Click nodes to focus resolution cards)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setZoomLevel((z) => Math.max(0.2, Math.round((z - ZOOM_STEP) * 100) / 100))}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                title="Zoom Out"
-              >
-                <ZoomOut size={14} />
-              </button>
-              <span className="text-xs font-mono text-slate-400 min-w-[45px] text-center">
-                {Math.round(zoomLevel * 100)}%
-              </span>
-              <button
-                onClick={() => setZoomLevel((z) => Math.min(2.0, Math.round((z + ZOOM_STEP) * 100) / 100))}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                title="Zoom In"
-              >
-                <ZoomIn size={14} />
-              </button>
-              <button
-                onClick={() => {
-                  setZoomLevel(1);
-                  setPanOffset({ x: 0, y: 0 });
-                }}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors ml-1"
-                title="Reset View"
-              >
-                <Crosshair size={14} />
-              </button>
-              {isMapExpanded ? (
-                <button
-                  onClick={() => setIsMapExpanded(false)}
-                  className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white transition-colors ml-1"
-                  title="Shrink Back From Fullscreen"
-                >
-                  <X size={14} />
-                </button>
-              ) : (
-                <button
-                  onClick={() => setIsMapExpanded(true)}
-                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors ml-1"
-                  title="Expand to Fullscreen"
-                >
-                  <Maximize2 size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Interactive Graph Viewport */}
-          <div
-            ref={canvasContainerRef}
-            onMouseDown={handleCanvasMouseDown}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            onMouseLeave={handleCanvasMouseUp}
-            className={`relative overflow-hidden bg-[#0a0d14] cursor-grab active:cursor-grabbing select-none ${
-              isMapExpanded ? 'flex-1 w-full min-h-0' : 'w-full h-[420px]'
-            }`}
-            style={{
-              backgroundImage:
-                'radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)',
-              backgroundSize: '24px 24px',
-            }}
-          >
-            <div
-              className="absolute transition-transform duration-75"
-              style={{
-                transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
-                transformOrigin: '0 0',
-              }}
-            >
-              {/* Render Node Blocks */}
-              {activeWorkflow.canvasGraph?.nodes && activeWorkflow.canvasGraph.nodes.length > 0 ? (
-                activeWorkflow.canvasGraph.nodes.map((node) => {
-                  const status = getNodeStatus(node);
-                  const isSelected = selectedNodeId === node.id || selectedNodeId === node.type;
-                  const coord = nodeBoxes.get(String(node.id));
-                  const pos: [number, number] = coord ? [coord.x, coord.y] : [100, 100];
-
-                  return (
-                    <div
-                      key={node.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedNodeId(node.type);
-                      }}
-                      style={{
-                        position: 'absolute',
-                        left: `${pos[0]}px`,
-                        top: `${pos[1]}px`,
-                        minWidth: `${CANVAS_NODE_W}px`,
-                      }}
-                      className={`p-3 rounded-2xl border transition-all shadow-xl cursor-pointer ${
-                        isSelected
-                          ? 'ring-2 ring-cyan-400 bg-slate-900 border-cyan-500 z-30 scale-105'
-                          : status === 'ready'
-                          ? 'bg-slate-900/90 border-slate-700/80 hover:border-slate-600'
-                          : status === 'missing-model'
-                          ? 'bg-amber-950/30 border-amber-500/60 hover:border-amber-400'
-                          : 'bg-rose-950/30 border-rose-500/60 hover:border-rose-400'
-                      }`}
-                    >
-                      {/* Node Header */}
-                      <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-800">
-                        <span className="text-xs font-bold text-slate-100 font-mono truncate">
-                          {node.type}
-                        </span>
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                            status === 'ready'
-                              ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
-                              : status === 'missing-model'
-                              ? 'bg-amber-400 shadow-sm shadow-amber-400/50'
-                              : 'bg-rose-400 shadow-sm shadow-rose-400/50'
-                          }`}
-                          title={
-                            status === 'ready'
-                              ? 'Ready'
-                              : status === 'missing-model'
-                              ? 'Missing Model File'
-                              : 'Missing Custom Node Extension'
-                          }
-                        />
-                      </div>
-
-                      {/* Node Inputs / Outputs count */}
-                      <div className="pt-2 text-[10px] text-slate-400 flex items-center justify-between">
-                        <span>ID #{node.id}</span>
-                        <span
-                          className={`font-semibold ${
-                            status === 'ready'
-                              ? 'text-emerald-400'
-                              : status === 'missing-model'
-                              ? 'text-amber-400'
-                              : 'text-rose-400'
-                          }`}
-                        >
-                          {status === 'ready'
-                            ? 'Ready'
-                            : status === 'missing-model'
-                            ? 'Missing Model'
-                            : 'Missing Extension'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="p-12 text-center text-slate-500 text-xs">
-                  No visual canvas coordinates embedded. Synthesized execution layout will appear here.
-                </div>
-              )}
-
-              {/* Connection Layer */}
-              {edgePaths.length > 0 && (
-                <svg
-                  style={{
-                    position: 'absolute',
-                    left: graphBounds.minX - 40,
-                    top: graphBounds.minY - 40,
-                    width: graphBounds.maxX - graphBounds.minX + 80,
-                    height: graphBounds.maxY - graphBounds.minY + 80,
-                  }}
-                >
-                  {edgePaths.map((p) => (
-                    <g key={p.key}>
-                      <title>{p.label}</title>
-                      <path
-                        d={p.d}
-                        fill="none"
-                        stroke="rgba(34,211,238,0.18)"
-                        strokeWidth={3.5}
-                        pointerEvents="none"
-                      />
-                      <path
-                        d={p.d}
-                        fill="none"
-                        stroke="rgba(148,163,184,0.7)"
-                        strokeWidth={1.8}
-                        pointerEvents="visibleStroke"
-                        className="cursor-pointer"
-                      />
-                    </g>
-                  ))}
-                </svg>
-              )}
-            </div>
-          </div>
-        </div>
+      {activeWorkflow && (
+        <WorkflowNodeMap
+          graph={activeWorkflow.canvasGraph}
+          getNodeStatus={getNodeStatus}
+          onFocusNode={setSelectedNodeId}
+          viewMode={viewMode}
+          isMapExpanded={isMapExpanded}
+          onToggleExpand={() => setIsMapExpanded(!isMapExpanded)}
+        />
       )}
 
       {/* Dependency Matrix & Resolution Cards */}
