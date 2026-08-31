@@ -544,9 +544,9 @@ function Invoke-AppPackage {
 # -- Banner ----------------------------------------------------------------
 
 Write-Host ''
-Write-Host '  +----------------------------------------------+' -ForegroundColor Magenta
-Write-Host '  |   Renegade Core Model Manager   |' -ForegroundColor Magenta
-Write-Host '  +----------------------------------------------+' -ForegroundColor Magenta
+Write-Host '  +-------------------------------------+' -ForegroundColor Magenta
+Write-Host '  |     Renegade Core Model Manager     |' -ForegroundColor Magenta
+Write-Host '  +-------------------------------------+' -ForegroundColor Magenta
 Write-Host ''
 
 # -- Dispatch --------------------------------------------------------------

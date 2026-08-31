@@ -421,10 +421,10 @@ update_app() {
 
 # Print Banner
 echo ""
-echo -e "  ${C_MAGENTA}+----------------------------------------------+${C_RESET}"
-echo -e "  ${C_MAGENTA}|   Renegade Core Model Manager   |${C_RESET}"
-echo -e "  ${C_MAGENTA}|                macOS Launcher                |${C_RESET}"
-echo -e "  ${C_MAGENTA}+----------------------------------------------+${C_RESET}"
+echo -e "  ${C_MAGENTA}+-------------------------------------+${C_RESET}"
+echo -e "  ${C_MAGENTA}|     Renegade Core Model Manager     |${C_RESET}"
+echo -e "  ${C_MAGENTA}|           macOS Launcher            |${C_RESET}"
+echo -e "  ${C_MAGENTA}+-------------------------------------+${C_RESET}"
 echo ""
 
 # Dispatch Command
