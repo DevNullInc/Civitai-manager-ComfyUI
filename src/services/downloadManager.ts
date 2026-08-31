@@ -311,9 +311,13 @@ export class DownloadManager {
   }
 
   private async removePersistedRecord(id: string): Promise<void> {
-    if (!this.dbReady) return;
+    if (!this.dbReady) {
+      logger.warn(`[DownloadManager] removePersistedRecord skipped — DB not ready for ${id}`);
+      return;
+    }
     try {
-      await dbManager.run('DELETE FROM downloads WHERE id = ?;', [id]);
+      const res = await dbManager.run('DELETE FROM downloads WHERE id = ?;', [id]);
+      logger.info(`[DownloadManager] Deleted persisted download ${id} (changes=${res.changes})`);
     } catch (err) {
       logger.warn(`Failed to delete persisted download record ${id}:`, err);
     }

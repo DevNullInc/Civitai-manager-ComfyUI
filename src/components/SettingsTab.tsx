@@ -383,17 +383,43 @@ export const SettingsTab: React.FC = () => {
         setSaving(false);
         return;
       }
-      const normalizedFolders = config.comfyui_folders.map(normalizeFolderPath).filter(Boolean);
-      const primaryRoot = normalizedFolders[0] || normalizeFolderPath(config.comfyui_root || '');
+      // If install_dir was just typed (onChange with commitFolders=false), folders may
+      // still be stale — ensure they reflect the current install_dir before persisting.
+      let foldersForSave = config.comfyui_folders.map(normalizeFolderPath).filter(Boolean);
+      const installTrimmed = (config.comfyui_install_dir || '').trim();
+      if (installTrimmed) {
+        const derived = deriveModelsFolder(installTrimmed);
+        const hasDerived = foldersForSave.some((f) => f.toLowerCase() === derived.toLowerCase());
+        if (foldersForSave.length === 0 || !hasDerived) {
+          // Preserve non-derived extra folders, but ensure derived models folder is present
+          const nonDerived = foldersForSave.filter((f) => !/[\\/]models[\\/]?$/i.test(f));
+          if (foldersForSave.length === 0 || /[\\/]models[\\/]?$/i.test(foldersForSave[0] || '')) {
+            foldersForSave = [derived, ...nonDerived];
+          } else if (!hasDerived) {
+            foldersForSave = [derived, ...foldersForSave];
+          }
+        }
+      }
+      const primaryRoot = foldersForSave[0] || normalizeFolderPath(config.comfyui_root || '');
       const payload = {
         ...config,
-        comfyui_folders: normalizedFolders,
+        comfyui_folders: foldersForSave,
         comfyui_root: primaryRoot,
       };
       await window.civitaiAPI.saveConfig(payload);
       setConfig(payload);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
+      // Verify what actually persisted (catch cache/DB divergence)
+      try {
+        const verify = await window.civitaiAPI.getConfig();
+        const mismatch =
+          (verify.comfyui_install_dir || '') !== (payload.comfyui_install_dir || '') ||
+          JSON.stringify(verify.comfyui_folders || []) !== JSON.stringify(payload.comfyui_folders || []);
+        if (mismatch) {
+          console.warn('[Settings] Persisted config mismatch — expected', payload, 'got', verify);
+        }
+      } catch {}
     } catch (err: any) {
       console.error('Failed to save configuration:', err);
       alert(`Failed to save settings: ${err?.message || err}`);

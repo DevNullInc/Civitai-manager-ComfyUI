@@ -858,20 +858,32 @@ function resolveWorkflowScanPaths(config: AppConfig, customPaths?: string | stri
   }
 
   const candidateDirs = new Set<string>();
-  const baseRoots = new Set<string>();
+  // Prefer the explicit install dir — stale model-folder entries (e.g. a previous
+  // ComfyUI on F:\) must not pollute the scan when the user has switched to D:\....
+  const primaryRoots = new Set<string>();
+  if (config.comfyui_install_dir && config.comfyui_install_dir.trim()) {
+    primaryRoots.add(config.comfyui_install_dir.trim());
+  }
 
-  if (config.comfyui_install_dir) baseRoots.add(config.comfyui_install_dir);
-  if (config.comfyui_root) baseRoots.add(config.comfyui_root);
-  if (config.comfyui_folders && config.comfyui_folders.length > 0) {
-    for (const f of config.comfyui_folders) {
-      if (f) {
-        baseRoots.add(f);
-        const parent = path.dirname(f);
-        if (parent && parent !== f) {
-          baseRoots.add(parent);
+  // Only fall back to root/folders if install_dir is not set or does not exist
+  const hasUsablePrimary = Array.from(primaryRoots).some((p) => p && fs.existsSync(p));
+  const baseRoots = hasUsablePrimary ? primaryRoots : new Set<string>();
+
+  if (!hasUsablePrimary) {
+    if (config.comfyui_root) baseRoots.add(config.comfyui_root);
+    if (config.comfyui_folders && config.comfyui_folders.length > 0) {
+      for (const f of config.comfyui_folders) {
+        if (f) {
+          baseRoots.add(f);
+          const parent = path.dirname(f);
+          if (parent && parent !== f) {
+            baseRoots.add(parent);
+          }
         }
       }
     }
+    // Still include install_dir even if it didn't exist, for diagnostics
+    for (const p of primaryRoots) baseRoots.add(p);
   }
 
   for (const root of baseRoots) {

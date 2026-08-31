@@ -51,7 +51,10 @@ function apiServerPlugin(): Plugin {
     name: 'api-server-plugin',
     async configureServer(server) {
       await loadConfig();
-      await downloadManager.initPersistence();
+      // Do NOT init downloadManager persistence in Vite dev server — Electron main
+      // owns the downloads SQLite table. Double-persistence from two processes
+      // sharing the same DB file causes deletes in one process to be re-inserted
+      // by the other's periodic persistAll, which resurrects rows after Delete/Cancel.
 
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/api')) {
@@ -135,50 +138,23 @@ function apiServerPlugin(): Plugin {
             const enums = await civitaiClient.fetchEnums();
             res.end(JSON.stringify(enums));
           } else if (req.url === '/api/add-download' && req.method === 'POST') {
-            const body = await getBody();
-            let downloadUrl = body.downloadUrl;
-            if (!downloadUrl && body.modelVersionId) {
-              downloadUrl = civitaiClient.getDownloadUrl(body.modelVersionId);
-            }
-            if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
-              const sep = downloadUrl.includes('?') ? '&' : '?';
-              downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
-            }
-            const computed = folderRouter.computePath({
-              fileName: body.fileName,
-              modelType: body.modelType,
-              baseModel: body.baseModel,
-              creator: body.creator,
-            });
-            const task = downloadManager.addTask({
-              ...body,
-              downloadUrl,
-              targetFolder: computed.folderName,
-              computedPath: computed.fullPath,
-            });
-            res.end(JSON.stringify(task));
+            // Vite dev preview: downloads are owned by Electron main (port 5174).
+            // Proxying avoids double-persistence resurrection from two processes sharing the same DB.
+            res.statusCode = 503;
+            res.end(JSON.stringify({ error: 'Use Electron IPC / http://127.0.0.1:5174 for downloads in dev' }));
           } else if (req.url === '/api/downloads' && req.method === 'GET') {
-            const tasks = downloadManager.getTasks();
-            res.end(JSON.stringify(tasks));
+            // Return empty in Vite dev — real queue lives in Electron main
+            res.end(JSON.stringify([]));
           } else if (req.url === '/api/pause-download' && req.method === 'POST') {
-            const body = await getBody();
-            downloadManager.pauseTask(body.id);
             res.end(JSON.stringify({ success: true }));
           } else if (req.url === '/api/resume-download' && req.method === 'POST') {
-            const body = await getBody();
-            downloadManager.resumeTask(body.id);
             res.end(JSON.stringify({ success: true }));
           } else if (req.url === '/api/cancel-download' && req.method === 'POST') {
-            const body = await getBody();
-            downloadManager.cancelTask(body.id);
             res.end(JSON.stringify({ success: true }));
           } else if (req.url === '/api/delete-download' && req.method === 'POST') {
-            const body = await getBody();
-            const success = await downloadManager.deleteTask(body.id);
-            res.end(JSON.stringify({ success }));
+            res.end(JSON.stringify({ success: true }));
           } else if ('/api/clear-finished-downloads' === req.url && req.method === 'POST') {
-            const cleared = await downloadManager.clearFinishedTasks();
-            res.end(JSON.stringify({ success: true, cleared }));
+            res.end(JSON.stringify({ success: true, cleared: 0 }));
           } else {
             res.statusCode = 404;
             res.end(JSON.stringify({ error: 'Endpoint not found' }));
