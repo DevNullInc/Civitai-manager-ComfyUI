@@ -8,6 +8,7 @@
  * (at your option) any later version.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LGraph, LGraphCanvas, LGraphNode } from 'litegraph.js';
 import 'litegraph.js/css/litegraph.css';
 import { ZoomIn, ZoomOut, Maximize2, Crosshair, X, Workflow } from 'lucide-react';
@@ -66,6 +67,11 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
   const graphRef = useRef<LGraph | null>(null);
   const canvasRef = useRef<LGraphCanvas | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
+  // Whether the map is allowed to capture pointer/wheel input. The inline (non-expanded)
+  // map must NOT swallow wheel/mouse events that the user intends for scrolling the page:
+  // it only becomes interactive after an explicit click inside, and releases when the user
+  // clicks anywhere outside. The expanded fullscreen map is always interactive.
+  const [inputActive, setInputActive] = useState(false);
 
   const visible = viewMode === 'both' || viewMode === 'map';
 
@@ -348,6 +354,22 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [isMapExpanded, onToggleExpand]);
 
+  // Input gating for the inline map: activating on an explicit click inside the map, and
+  // releasing the grab as soon as the user clicks anywhere outside of it (so scrolling the
+  // surrounding workflow page is never blocked by the LiteGraph canvas).
+  useEffect(() => {
+    if (isMapExpanded) {
+      setInputActive(true);
+      return;
+    }
+    const onDocDown = (e: MouseEvent) => {
+      const host = hostRef.current;
+      if (host && !host.contains(e.target as Node)) setInputActive(false);
+    };
+    document.addEventListener('mousedown', onDocDown, true);
+    return () => document.removeEventListener('mousedown', onDocDown, true);
+  }, [isMapExpanded]);
+
   // Center the first node of the requested type in the viewport so the user can see
   // exactly which section of the workflow a resolution card refers to.
   const zoomToNodeType = useCallback(
@@ -407,11 +429,13 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
 
   const showButtons = visible;
 
-  return (
+  const root = (
     <div
       className={`${
         isMapExpanded
-          ? 'fixed inset-0 z-[100] flex flex-col bg-[#0a0d14] border border-slate-800 shadow-2xl'
+          // Portaled to document.body (below) so its z-index is compared against the root
+          // stacking context: [#] > sticky footer (z-40) and scroll-to-top (z-[100]).
+          ? 'fixed inset-0 z-[150] flex flex-col bg-[#0a0d14] border border-slate-800 shadow-2xl'
           : 'glass-panel rounded-3xl border border-slate-800 shadow-2xl overflow-hidden space-y-2'
       } ${showButtons ? '' : 'hidden'}`}
     >
@@ -484,8 +508,25 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
         <canvas
           ref={canvasElRef}
           className="block w-full h-full"
-          style={{ width: '100%', height: '100%', display: 'block' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'block',
+            // Until the user explicitly clicks into the inline map, keep the LiteGraph
+            // canvas out of the event path so the page scrolls freely over it.
+            pointerEvents: isMapExpanded || inputActive ? 'auto' : 'none',
+          }}
         />
+
+        {/* Click-catcher shown only over the inactive inline map: clicking activates the
+            map (and hides this overlay), so input is never grabbed without an explicit click. */}
+        {!isMapExpanded && !inputActive && (
+          <div
+            className="absolute inset-0 z-10 cursor-crosshair bg-transparent"
+            onMouseDown={() => setInputActive(true)}
+            title="Click to interact with the map"
+          />
+        )}
 
         {/* Expanded (fullscreen) overlay controls. These sit ON the canvas so zoom / fit /
             close are always reachable even when the top toolbar isn't. */}
@@ -501,7 +542,7 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
             </button>
 
             {/* Zoom / Fit cluster (bottom-center) */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2 py-1.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 shadow-2xl backdrop-blur">
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2 py-1.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 shadow-2xl backdrop-blur">
               <button
                 onClick={() => zoomBy(-0.1)}
                 className="p-2 rounded-lg bg-slate-800 hover:bg-slate-600 text-slate-200 transition-colors"
@@ -533,6 +574,11 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
       </div>
     </div>
   );
+
+  // When expanded fullscreen, portal the overlay to <body> so it sits above the app's
+  // persistent sticky footer (which otherwise, living at a higher root z-index, paints
+  // over the map's bottom controls).
+  return isMapExpanded ? createPortal(root, document.body) : root;
 });
 
 export default WorkflowNodeMap;

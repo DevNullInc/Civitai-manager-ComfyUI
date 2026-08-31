@@ -124,13 +124,24 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
     }
   };
 
+  // The extension/pack that hosts this node — e.g. "ComfyUI-Easy-Use" for the
+  // "EasyNegative" class. When the registry match knows the repo it wins; otherwise
+  // the installed folder name is the best signal (missing-node cards get the pack
+  // name only when the registry identified it).
+  const packName =
+    resolution?.managerMatch?.title ||
+    (resolution?.isInstalled ? resolution.installedFolder : undefined) ||
+    null;
+
   const handleSearchGitHub = () => {
     if (!window.civitaiAPI?.openExternal) return;
     // Open GitHub repository search in the user's browser instead of the API so we
-    // never trip the unauthenticated Search API rate limit.
-    const packName = resolution?.managerMatch?.title || null;
+    // never trip the unauthenticated Search API rate limit. Lead with the hosting
+    // pack/repo name alone (e.g. "ComfyUI Easy Use") rather than a noisy concatenation
+    // of the node class + pack; a repo-title search is what returns the extension.
+    const term = packName || `comfyui ${nodeType}`;
     const searchUrl = `https://github.com/search?q=${encodeURIComponent(
-      `comfyui ${nodeType}${packName ? ` ${packName}` : ''}`
+      term
     )}&type=repositories`;
     window.civitaiAPI.openExternal(searchUrl);
   };
@@ -178,15 +189,6 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
   );
 
   const candidates = resolution?.githubCandidates || [];
-
-  // The extension/pack that hosts this node — e.g. "ComfyUI-Easy-Use" for the
-  // "EasyNegative" class. When the registry match knows the repo it wins; otherwise
-  // the installed folder name is the best signal (missing-node cards get the pack
-  // name only when the registry identified it).
-  const packName =
-    resolution?.managerMatch?.title ||
-    (resolution?.isInstalled ? resolution.installedFolder : undefined) ||
-    null;
 
   return (
     <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4 shadow-xl">

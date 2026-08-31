@@ -32,6 +32,10 @@ const MANAGER_NODE_LIST_URL =
 
 const REGISTRY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
 
+// ComfyUI Official Registry (registry.comfy.org) — authoritative node-to-repo mapping
+// used as a fallback when the ComfyUI-Manager community registry misses a node class.
+const COMFY_REGISTRY_SEARCH_URL = 'https://api.comfy.org/nodes/search';
+
 // Persistent node-resolution cache TTLs (SQLite). Missing results refresh sooner so
 // newly-installed nodes get picked up; installed/registry results are long-lived but
 // installed entries are re-validated against disk before being trusted.
@@ -608,6 +612,7 @@ export class NodeResolverService {
    * Node Resolution:
    * Tier 1: Local package & NODE_CLASS_MAPPINGS inspection
    * Tier 2: ComfyUI-Manager curated database lookup
+   * Tier 2.5: ComfyUI Official Registry (registry.comfy.org) fallback
    * Tier 3 (opt-in): Rate-limited GitHub Search API fallback (top 3 candidates).
    *   Tier 3 only runs when opts.searchGitHub is true — i.e. for a specifically
    *   requested node in an active workflow — never for bulk workflow scans.
@@ -691,6 +696,18 @@ export class NodeResolverService {
         gitUrl,
         description: `Registered ComfyUI extension supplying [${cleanType}]`,
       };
+      await this.storeResolution(cleanType, result, customNodesDir);
+      return result;
+    }
+
+    // Tier 2.5: ComfyUI Official Registry (registry.comfy.org) Fallback
+    // The community extension-node-map may not list every published node; the official
+    // registry maintains its own node-to-repo index and is authoritative for packages
+    // published through its pipeline. Query it before falling through to a broad GitHub
+    // search so the missing-node card can show the correct pack name and repo link.
+    const comfyRegistryMatch = await this.searchComfyRegistry(cleanType);
+    if (comfyRegistryMatch) {
+      result.managerMatch = comfyRegistryMatch;
       await this.storeResolution(cleanType, result, customNodesDir);
       return result;
     }
@@ -1146,6 +1163,130 @@ export class NodeResolverService {
         req.destroy(new Error('Request timeout'));
       });
     });
+  }
+
+  /**
+   * Simple HTTPS GET returning the response body as a string, or null on any error.
+   */
+  private httpGet(urlStr: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      https
+        .get(urlStr, { headers: { 'User-Agent': 'RenegadeCMM/1.3.0' } }, (res) => {
+          if (res.statusCode !== 200) {
+            res.resume();
+            return resolve(null);
+          }
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => resolve(body));
+        })
+        .on('error', () => resolve(null));
+    });
+  }
+
+  /**
+   * Queries the ComfyUI Official Registry (registry.comfy.org) for a node class name
+   * and returns the hosting extension's repo URL, display name, and author when found.
+   * Results are cached in SQLite with a 24h TTL; negative (not-found) results are also
+   * cached so the same workflow won't re-query the API every load.
+   */
+  private async searchComfyRegistry(
+    nodeType: string
+  ): Promise<{ title: string; author: string; gitUrl: string; description: string } | null> {
+    const cleanType = nodeType.trim();
+    if (!cleanType) return null;
+
+    const cacheKey = `comfy_registry_cache_${cleanType.toLowerCase()}`;
+    const metaKey = `comfy_registry_meta_${cleanType.toLowerCase()}`;
+
+    // Check cache (24h TTL; negative results cached as null)
+    try {
+      const row: any = await dbManager.get(
+        'SELECT value FROM app_config WHERE key = ?;',
+        [cacheKey]
+      );
+      const metaRow: any = await dbManager.get(
+        'SELECT value FROM app_config WHERE key = ?;',
+        [metaKey]
+      );
+      if (row?.value && metaRow?.value) {
+        const meta = JSON.parse(metaRow.value);
+        if (Date.now() - (meta.timestamp || 0) < REGISTRY_CACHE_TTL_MS) {
+          const cached = JSON.parse(row.value);
+          return cached; // null = negative cache
+        }
+      }
+    } catch {}
+
+    // Query the official ComfyUI Registry
+    const url = `${COMFY_REGISTRY_SEARCH_URL}?comfy_node_search=${encodeURIComponent(cleanType)}&limit=5`;
+    try {
+      const body = await this.httpGet(url);
+      if (!body) {
+        await this.cacheComfyRegistryResult(cacheKey, metaKey, null);
+        return null;
+      }
+
+      const data = JSON.parse(body);
+      const nodes = data?.nodes;
+      if (!Array.isArray(nodes) || nodes.length === 0) {
+        await this.cacheComfyRegistryResult(cacheKey, metaKey, null);
+        return null;
+      }
+
+      // Find best match: prefer an exact comfy_node_names hit, then a name match.
+      const lower = cleanType.toLowerCase();
+      let best: any = null;
+      for (const n of nodes) {
+        const names: string[] = Array.isArray(n.names) ? n.names : [];
+        if (names.some((nm) => nm.toLowerCase() === lower)) {
+          best = n;
+          break;
+        }
+      }
+      if (!best) {
+        best = nodes.find((n: any) => n.name?.toLowerCase() === lower);
+      }
+      if (!best) {
+        // Fallback: first Active-status node
+        best = nodes.find((n: any) => n.status === 'NodeStatusActive') || nodes[0];
+      }
+
+      if (!best?.repository) {
+        await this.cacheComfyRegistryResult(cacheKey, metaKey, null);
+        return null;
+      }
+
+      const result = {
+        title: best.name || path.basename(best.repository),
+        author: best.author || best.publisher?.id || 'Community',
+        gitUrl: best.repository,
+        description: best.description || `ComfyUI Official Registry entry for [${cleanType}]`,
+      };
+
+      await this.cacheComfyRegistryResult(cacheKey, metaKey, result);
+      return result;
+    } catch (err) {
+      logger.debug('ComfyUI Official Registry search failed:', err);
+      return null;
+    }
+  }
+
+  private async cacheComfyRegistryResult(
+    cacheKey: string,
+    metaKey: string,
+    result: any
+  ): Promise<void> {
+    try {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        [cacheKey, JSON.stringify(result)]
+      );
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        [metaKey, JSON.stringify({ timestamp: Date.now() })]
+      );
+    } catch {}
   }
 
   private fetchJsonWithETag(urlStr: string, cachePrefix: string): Promise<any> {
