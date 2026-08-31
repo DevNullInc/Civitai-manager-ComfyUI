@@ -313,10 +313,37 @@ export class NodeResolverService {
   }
 
   /**
-   * Fetches and caches the ComfyUI-Manager node registry with SQLite ETag and 24h TTL.
+   * The ComfyUI-Manager extension-node-map.json is keyed by **repository URL**, not node
+   * class name: `{ "<repo-url>": [[ "NodeClassA", "NodeClassB", ... ], { "title_aux": "PackName" }] }`.
+   * Building a reverse index (className -> pack) lets resolveMissingNode answer "which
+   * extension supplies this node?" so missing-node cards can lead with the pack name.
+   */
+  private buildNodeReverseMap(
+    nodeMap: Record<string, [string[], { title_aux?: string; author?: string }]>
+  ): Map<string, { gitUrl: string; title_aux?: string; author?: string }> {
+    const reverse = new Map<string, { gitUrl: string; title_aux?: string; author?: string }>();
+    for (const [gitUrl, entry] of Object.entries(nodeMap)) {
+      const classes = Array.isArray(entry) && Array.isArray(entry[0]) ? entry[0] : [];
+      const meta = Array.isArray(entry) && entry[1] ? entry[1] : {};
+      for (const cls of classes) {
+        if (typeof cls !== 'string' || !cls.trim()) continue;
+        const key = cls.trim().toLowerCase();
+        // First occurrence wins; later (duplicate) class registrations are ignored.
+        if (!reverse.has(key)) {
+          reverse.set(key, { gitUrl, title_aux: meta.title_aux, author: meta.author });
+        }
+      }
+    }
+    return reverse;
+  }
+
+  /**
+   * Fetches and caches the ComfyUI-Manager node registry with SQLite ETag and 24h TTL,
+   * returning both the raw URL-keyed map and a class-name reverse index.
    */
   async getManagerRegistry(): Promise<{
-    nodeMap: Record<string, [string[], { title_aux?: string }]>;
+    nodeMap: Record<string, [string[], { title_aux?: string; author?: string }]>;
+    reverseMap: Map<string, { gitUrl: string; title_aux?: string; author?: string }>;
     customNodeList: any[];
   }> {
     let cachedMap: any = null;
@@ -341,7 +368,11 @@ export class NodeResolverService {
     }
 
     if (cachedMap) {
-      return { nodeMap: cachedMap, customNodeList: cachedList || [] };
+      return {
+        nodeMap: cachedMap,
+        reverseMap: this.buildNodeReverseMap(cachedMap),
+        customNodeList: cachedList || [],
+      };
     }
 
     // Download fresh registry JSON with fallback
@@ -362,7 +393,11 @@ export class NodeResolverService {
       logger.warn('Failed to fetch latest ComfyUI-Manager node map:', err);
     }
 
-    return { nodeMap: cachedMap || {}, customNodeList: [] };
+    return {
+      nodeMap: cachedMap || {},
+      reverseMap: this.buildNodeReverseMap(cachedMap || {}),
+      customNodeList: [],
+    };
   }
 
   /**
@@ -644,14 +679,15 @@ export class NodeResolverService {
     }
 
     // Tier 2: ComfyUI-Manager Registry Database Check
-    const { nodeMap } = await this.getManagerRegistry();
-    const mapEntry = nodeMap[cleanType] || nodeMap[cleanType.toLowerCase()];
-    if (mapEntry && Array.isArray(mapEntry[0]) && mapEntry[0].length > 0) {
-      const gitUrl = mapEntry[0][0];
-      const title = mapEntry[1]?.title_aux || path.basename(gitUrl);
+    const { reverseMap } = await this.getManagerRegistry();
+    // The registry is keyed by repo URL; reverseMap indexes it by node class (lowercased).
+    const entry = reverseMap.get(cleanType.toLowerCase());
+    if (entry) {
+      const gitUrl = entry.gitUrl;
+      const title = entry.title_aux || path.basename(gitUrl);
       result.managerMatch = {
         title,
-        author: gitUrl.split('/')[3] || 'Community',
+        author: entry.author || gitUrl.split('/')[3] || 'Community',
         gitUrl,
         description: `Registered ComfyUI extension supplying [${cleanType}]`,
       };

@@ -145,6 +145,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🛡️ Fixed & Improved
 
+- **Missing-Node Cards Now Show the Hosting Pack Name (registry lookup fixed)**:
+  - The ComfyUI-Manager `extension-node-map.json` is keyed by **repository URL**, but `resolveMissingNode` was probing it by node class name (e.g. `nodeMap["TIPO"]`), so it never matched and no node ever got a `managerMatch`. Every missing node therefore fell back to showing its raw class name.
+  - Added a **reverse index** (class name → `{ gitUrl, title_aux }`) built from the registry, so missing-node cards now lead with the supplying extension's name — e.g. `TIPO` → **TIPO-extension**, `VHS_VideoCombine` → **VideoHelperSuite**, `ShowText|pysssss` → **ComfyUI-Custom-Scripts** — with the node class beneath it and the pack name fed into the GitHub search.
+  - Stale `status='missing'` resolution-cache rows (which had no pack info) are dropped so the next workflow scan re-resolves them against the fixed registry lookup.
+- **"Show In Workflow" Works From Every View Mode**:
+  - In **Dependency Matrix** view the map container is hidden, so clicking a resolution card's "Show in Workflow" panned/zoomed an invisible (zero-size) canvas — nothing moved. The button now switches to **Split view**, waits a frame, pans/zooms to the node, and scrolls the map into view.
+- **Expanded (Fullscreen) Map Has On-Canvas Controls**:
+  - The fullscreen map now renders a floating **zoom in/out + zoom % + Fit to View** cluster at the bottom-center and a prominent **close** button at the top-right, directly over the canvas, so controls are always reachable (Esc closes too).
 - **Date-Aware Update Detection (no more false "updates")**:
   - Update checks now compare a version's **upload/publish date** (`publishedAt`, falling back to `createdAt`) rather than a raw version-id mismatch. A model is updatable only when a remote version was uploaded strictly after the installed one; the installed version is located by id and dated directly. This stops older uploads that merely sit lower in the CivitAI list (or carry a different id) from being flagged as updates when the installed file is already the newest-dated version.
   - Browse tab's "Update Available" badge and per-version "✦ [Update]" dropdown tag were updated with the same date-aware logic, so only versions genuinely newer than the newest installed upload are marked.

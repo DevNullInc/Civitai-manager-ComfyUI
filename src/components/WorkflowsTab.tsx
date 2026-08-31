@@ -115,6 +115,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nodeMapRef = useRef<WorkflowNodeMapHandle>(null);
+  const mapSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Sync workflows with sessionStorage whenever they change
   useEffect(() => {
@@ -238,6 +239,25 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     setSelectedNodeId(null);
     resolveWorkflowNodes(workflows[index]);
   };
+
+  // "Show in Workflow": make sure the map is actually VISIBLE before zooming to a node.
+  // In Matrix view the map container is hidden (display:none), so zooming a zero-size
+  // canvas did nothing visible. Switch to Split view to reveal it, then wait a frame for
+  // the map to re-layout/re-fit before panning/zooming to the requested node type, and
+  // scroll the map into view.
+  const handleLocateInWorkflow = useCallback(
+    (type: string) => {
+      setSelectedNodeId(type);
+      if (viewMode === 'matrix') {
+        setViewMode('both');
+      }
+      requestAnimationFrame(() => {
+        nodeMapRef.current?.zoomToNodeType(type);
+        mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    },
+    [viewMode]
+  );
 
   // Handle workflow removal from list
   const handleRemoveWorkflow = (e: React.MouseEvent, removeIdx: number) => {
@@ -833,17 +853,19 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       )}
 
       {/* Visual Node Map Canvas */}
-      {activeWorkflow && (
-        <WorkflowNodeMap
-          ref={nodeMapRef}
-          graph={activeWorkflow.canvasGraph}
-          getNodeStatus={getNodeStatus}
-          onFocusNode={setSelectedNodeId}
-          viewMode={viewMode}
-          isMapExpanded={isMapExpanded}
-          onToggleExpand={() => setIsMapExpanded((prev) => !prev)}
-        />
-      )}
+      <div ref={mapSectionRef}>
+        {activeWorkflow && (
+          <WorkflowNodeMap
+            ref={nodeMapRef}
+            graph={activeWorkflow.canvasGraph}
+            getNodeStatus={getNodeStatus}
+            onFocusNode={setSelectedNodeId}
+            viewMode={viewMode}
+            isMapExpanded={isMapExpanded}
+            onToggleExpand={() => setIsMapExpanded((prev) => !prev)}
+          />
+        )}
+      </div>
 
       {/* Dependency Matrix & Resolution Cards */}
       {activeWorkflow && (viewMode === 'both' || viewMode === 'matrix') && (
@@ -979,8 +1001,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                         nodeType={nodeType}
                         resolution={resolution}
                         onLocateInWorkflow={(type) => {
-                          setSelectedNodeId(type);
-                          nodeMapRef.current?.zoomToNodeType(type);
+                          handleLocateInWorkflow(type);
                         }}
                         onInstalled={(folderName) => {
                           // Update resolution locally

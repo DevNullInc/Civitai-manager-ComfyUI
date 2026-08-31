@@ -486,6 +486,50 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
           className="block w-full h-full"
           style={{ width: '100%', height: '100%', display: 'block' }}
         />
+
+        {/* Expanded (fullscreen) overlay controls. These sit ON the canvas so zoom / fit /
+            close are always reachable even when the top toolbar isn't. */}
+        {isMapExpanded && (
+          <>
+            {/* Close (top-right) */}
+            <button
+              onClick={onToggleExpand}
+              className="absolute top-3 right-3 z-20 p-2.5 rounded-xl bg-slate-900/90 hover:bg-rose-600 text-slate-200 hover:text-white border border-slate-700/80 hover:border-rose-500 shadow-xl transition-all"
+              title="Close Fullscreen Map (Esc)"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Zoom / Fit cluster (bottom-center) */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-2 py-1.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 shadow-2xl backdrop-blur">
+              <button
+                onClick={() => zoomBy(-0.1)}
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-600 text-slate-200 transition-colors"
+                title="Zoom Out"
+              >
+                <ZoomOut size={16} />
+              </button>
+              <span className="text-xs font-mono text-slate-200 min-w-[46px] text-center select-none">
+                {zoomPercent}%
+              </span>
+              <button
+                onClick={() => zoomBy(0.1)}
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-600 text-slate-200 transition-colors"
+                title="Zoom In"
+              >
+                <ZoomIn size={16} />
+              </button>
+              <div className="w-px h-5 bg-slate-700 mx-1" />
+              <button
+                onClick={fitToView}
+                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-600 text-cyan-300 transition-colors"
+                title="Fit Workflow to View"
+              >
+                <Crosshair size={16} />
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
