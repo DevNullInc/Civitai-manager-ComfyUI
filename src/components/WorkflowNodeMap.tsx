@@ -126,14 +126,21 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
         return;
       }
       lastZoomAppliedAt = now;
-      const dy = pendingDeltaY;
-      const zoomCenter = pendingCenter;
-      pendingDeltaY = 0;
-      const k = Math.pow(1.2, -dy / 120);
+      // A swipe can pile hundreds of px of delta between two frames; applying it as
+      // one changeScale(double) is what made the anchored zoom feel like it "catches
+      // up" in coarse jumps instead of gliding. Apply at most a 120px-equivalent
+      // chunk per frame (~1.2x per 120px) and carry the remainder forward, so the
+      // scale still moves in LiteGraph-like micro-steps across frames.
+      const ZOOM_CHUNK_PX = 120;
+      const dy = Math.max(-ZOOM_CHUNK_PX, Math.min(ZOOM_CHUNK_PX, pendingDeltaY));
+      pendingDeltaY -= dy;
+      const k = Math.pow(1.2, -dy / ZOOM_CHUNK_PX);
       const next = Math.max(c.ds.min_scale, Math.min(c.ds.max_scale, c.ds.scale * k));
-      if (next === c.ds.scale) return;
-      c.ds.changeScale(next, zoomCenter);
-      setZoomPercent(Math.round(c.ds.scale * 100));
+      if (next !== c.ds.scale) {
+        c.ds.changeScale(next, pendingCenter);
+        setZoomPercent(Math.round(c.ds.scale * 100));
+      }
+      if (pendingDeltaY !== 0) zoomRafId = requestAnimationFrame(flushZoom);
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -151,15 +158,16 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
     };
     const wheelCallback = (c as any)._mousewheel_callback as ((e: Event) => void) | undefined;
     const canvasEl = canvasElRef.current;
-    const wheelListener = onWheel as unknown as EventListener;
     const elAny = canvasEl as any;
     if (wheelCallback) {
       elAny.removeEventListener('mousewheel', wheelCallback);
       elAny.removeEventListener('DOMMouseScroll', wheelCallback);
     }
+    // Bind only the standard "wheel" event. LiteGraph's old handlers listen on the
+    // legacy "mousewheel"/"DOMMouseScroll" too, and in Chromium those can fire in
+    // addition to "wheel", double-applying a touchpad gesture; Firefox and Chromium
+    // both deliver touchpad/pinch via "wheel", so the legacy listeners are dead weight.
     elAny.addEventListener('wheel', onWheel, { passive: false });
-    elAny.addEventListener('mousewheel', wheelListener, { passive: false });
-    elAny.addEventListener('DOMMouseScroll', wheelListener);
 
     graphRef.current = g;
     canvasRef.current = c;
@@ -170,8 +178,6 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
         c.stopRendering();
         const el = canvasEl as any;
         el.removeEventListener('wheel', onWheel);
-        el.removeEventListener('mousewheel', wheelListener);
-        el.removeEventListener('DOMMouseScroll', wheelListener);
         // LiteGraph's own unbindEvents() cannot remove its capture-phase listeners:
         // bindEvents registers "down"/"up"/"keydown" with capture=true, but
         // pointerListenerRemove()/removeEventListener default the capture flag to
