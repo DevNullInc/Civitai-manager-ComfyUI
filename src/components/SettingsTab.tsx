@@ -2062,8 +2062,8 @@ export const SettingsTab: React.FC = () => {
 
       {/* Paste JSON Modal */}
       {showPasteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-          <div className="glass-panel bg-slate-950 border border-purple-500/40 p-6 rounded-3xl max-w-xl w-full space-y-4 shadow-2xl glow-purple">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn" onClick={() => setShowPasteModal(false)}>
+          <div className="glass-panel bg-slate-950 border border-purple-500/40 p-6 rounded-3xl max-w-xl w-full space-y-4 shadow-2xl glow-purple" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-bold text-sm text-slate-100">
                 <Code size={18} className="text-purple-400" />

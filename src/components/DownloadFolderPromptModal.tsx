@@ -35,8 +35,8 @@ export const DownloadFolderPromptModal: React.FC<DownloadFolderPromptModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn" onClick={onCancel}>
+      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scaleUp" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">

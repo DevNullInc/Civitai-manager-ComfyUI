@@ -1372,8 +1372,11 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
 
       {/* Delete / Remove Options Modal */}
       {modelToDelete && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4 animate-fadeIn">
-          <div className="glass-panel w-full max-w-md rounded-3xl overflow-hidden flex flex-col border border-slate-700/70 shadow-2xl animate-scaleUp">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4 animate-fadeIn" onClick={() => !isDeleting && setModelToDelete(null)}>
+          <div
+            className="glass-panel w-full max-w-md rounded-3xl overflow-hidden flex flex-col border border-slate-700/70 shadow-2xl animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="p-5 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/60">
               <div className="flex items-center gap-3">

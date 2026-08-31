@@ -873,8 +873,11 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
 
       {/* Model Detail Modal */}
       {activeModel && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-3xl rounded-3xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-700/60 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4" onClick={() => setActiveModel(null)}>
+          <div
+            className="glass-panel w-full max-w-3xl rounded-3xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-700/60 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/50">
               <div>
