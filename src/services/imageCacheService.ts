@@ -197,12 +197,12 @@ export class ImageCacheService {
             const contentType = typeof rawContentType === 'string' ? rawContentType : 'image/jpeg';
             const chunks: Buffer[] = [];
             let totalBytes = 0;
-            const MAX_IMAGE_BYTES = 30 * 1024 * 1024; // 30MB
+            const MAX_IMAGE_BYTES = 50 * 1024 * 1024; // 50MB
 
             res.on('data', (chunk: Buffer) => {
               totalBytes += chunk.length;
               if (totalBytes > MAX_IMAGE_BYTES) {
-                req.destroy(new Error('Image size exceeded 30MB limit'));
+                req.destroy(new Error('Image size exceeded 50MB limit'));
                 return resolve(null);
               }
               chunks.push(chunk);
