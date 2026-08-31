@@ -67,7 +67,9 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **Resume support**: Interrupted downloads resume where they left off
 - **Hash verification**: SHA256 verification ensures file integrity
 - **Queue system**: Download multiple models with priority management
-- **API key support**: Higher rate limits and access to gated content
+- **Persistent queue & auto-library**: The download queue is saved to SQLite and restored after a restart; finished downloads auto-register into the Library (with SHA-256 + CivitAI metadata) and the Downloads card controls (Pause/Resume/Cancel) sync instantly
+- **Date-aware update detection**: Updates are flagged by comparing actual upload/publish dates (plus a SHA-256 cross-check), so older uploads never show as false "update available" badges when you already have the newest file
+- **API key support**: Higher rate limits, gated/NSFW/private content access — with clear guidance when a download needs a CivitAI token
 
 ### 📁 Library Management & Persistent Scanner
 
@@ -349,7 +351,9 @@ The model automatically routes to the correct folder (e.g., `checkpoints/`, `lor
 
 ### Folder Mappings
 
-Edit `config.json` to customize where model types are saved:
+Folder routing is managed from **Settings → Folder Mappings** (with optional filename pattern rules under **Advanced Mappings**) and is stored in the app's local SQLite database (`app_config` table) — there is no `config.json` to hand-edit. A backup/export snapshot exports these settings as `config.json`, but the live source of truth is the database.
+
+The equivalent mapping structure looks like this:
 
 ```json
 {
@@ -451,7 +455,7 @@ CMM recognizes and manages models in these ComfyUI folders:
 2. Search terms or filter by Base Model, Model Type, and NSFW preferences.
 3. **Instant Installed / Update Badges**:
    - **`Installed`** (Emerald badge): Indicates this model is already present in your local library.
-   - **`Update Available`** (Amber badge): Indicates a newer version of an installed model is available on CivitAI.
+   - **`Update Available`** (Amber badge): Indicates a **newer-dated** version of an installed model exists on CivitAI. Detection is date-aware (compares actual upload/publish dates plus a SHA-256 cross-check), so an older upload that simply appears elsewhere in CivitAI's version list won't show a false "update" when you already have the newest file.
 4. **Selective Update Ignoring**: Click on a model with an update available to view version details. If the new upload is for a different base model (e.g. SDXL vs SD 1.5), click **Ignore This Update** to prevent it from flagging as an update.
 
 ### Downloading & Safe Version Updating
@@ -460,6 +464,7 @@ CMM recognizes and manages models in these ComfyUI folders:
 2. Select your desired version from the version selector dropdown.
 3. **Destination Selection**: If multiple ComfyUI root paths are configured, CMM prompts you to choose the target folder, with an option to remember your choice.
 4. **Safe Old Version Cleanup**: When downloading an update, check **"Delete previous version upon completion"**. The superseded old file will _only_ be deleted after the update has completed downloading 100% and verified its SHA256 integrity hash.
+5. **Auto-Library on Completion**: Once a download finishes it is registered straight into the **Library** (with its SHA-256 and CivitAI metadata) — no manual re-scan needed. Downloads also **survive restarts** (the queue is persisted to SQLite), and the **Downloads** tab's Pause/Resume/Cancel/Force-Complete respond instantly.
 
 ### Managing & Deleting Library Models
 
@@ -512,6 +517,8 @@ CMM recognizes and manages models in these ComfyUI folders:
 4. Click **Add API Key**
 5. Copy the key (starts with `civitai_...`)
 
+> ℹ️ **Browser note:** The "Account Settings / API Keys" helper in CMM opens the page in your **real system browser** (which also lets you verify the HTTPS URL/certificate yourself) rather than an embedded in-app window. There is no separate "paste key" step in CMM beyond the one above; the key is stored AES-256-GCM encrypted in the local database (see the security note below).
+
 ### Adding to CMM
 
 ```
@@ -534,6 +541,7 @@ Settings → API Sources → CivitAI → Paste Key → Test Connection
 ### Downloads Failing
 
 - **Check API Key**: Unauthenticated users have stricter rate limits
+- **401 / "Requires a CivitAI account"**: Gated, NSFW, or private models need a CivitAI API token. Add yours in **Settings → CivitAI API Token**, then retry — the download card shows this exact message instead of a raw error.
 - **Check Disk Space**: Large checkpoints (6-7GB) require sufficient space
 - **Check Permissions**: Ensure CMM has write access to model folders
 
