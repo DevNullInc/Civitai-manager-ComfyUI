@@ -127,23 +127,47 @@ export const DownloadsTab: React.FC = () => {
   };
 
   const handlePause = async (id: string) => {
-    if (window.civitaiAPI) await window.civitaiAPI.pauseDownload(id);
+    if (window.civitaiAPI) {
+      try {
+        await window.civitaiAPI.pauseDownload(id);
+      } catch (err) {
+        console.error('Failed to pause download:', id, err);
+      }
+    }
+    await refresh();
   };
 
   const handleResume = async (id: string) => {
-    if (window.civitaiAPI) await window.civitaiAPI.resumeDownload(id);
+    if (window.civitaiAPI) {
+      try {
+        await window.civitaiAPI.resumeDownload(id);
+      } catch (err) {
+        console.error('Failed to resume download:', id, err);
+      }
+    }
+    await refresh();
   };
 
-  const handleCancel = (id: string) => {
+  const handleCancel = async (id: string) => {
     if (window.civitaiAPI) {
-      window.civitaiAPI.cancelDownload(id);
+      try {
+        await window.civitaiAPI.cancelDownload(id);
+      } catch (err) {
+        console.error('Failed to cancel download:', id, err);
+      }
     }
+    await refresh();
   };
 
   const handleForceComplete = async (id: string) => {
     if (window.civitaiAPI && typeof window.civitaiAPI.forceCompleteDownload === 'function') {
-      await window.civitaiAPI.forceCompleteDownload(id);
+      try {
+        await window.civitaiAPI.forceCompleteDownload(id);
+      } catch (err) {
+        console.error('Failed to force-complete download:', id, err);
+      }
     }
+    await refresh();
   };
 
   const formatSpeed = (bytesPerSec: number): string => {

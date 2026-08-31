@@ -67,6 +67,51 @@ export class VersionManager {
     return false;
   }
 
+  // Best-effort upload/publish date for a version, used to decide which upload is newer.
+  // Prefers the explicit publishedAt (upload date) and falls back to createdAt.
+  private getVersionDate(version: CivitAIModelVersion): number {
+    const raw = version?.publishedAt || version?.createdAt;
+    if (!raw) return 0;
+    const ts = new Date(raw).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+  }
+
+  // Decides whether a newer upload exists, comparing by upload/publish DATE rather than a
+  // raw version-id mismatch. This prevents older uploads from being reported as updates
+  // when the installed file is already the newest-dated version but sits lower in the
+  // CivitAI version list (or carries a different version id).
+  private evaluateUpdate(
+    modelVersions: CivitAIModelVersion[],
+    currentVersionId: number,
+    localHash?: string
+  ): { hasUpdate: boolean; latestVersion: CivitAIModelVersion; installedVersion?: CivitAIModelVersion } {
+    let latestVersion = modelVersions[0];
+    let installedVersion: CivitAIModelVersion | undefined;
+    for (const v of modelVersions) {
+      if (this.getVersionDate(v) > this.getVersionDate(latestVersion)) {
+        latestVersion = v;
+      }
+      if (v.id === currentVersionId) {
+        installedVersion = v;
+      }
+    }
+
+    const hashMatchesLatest = this.versionFileMatchesHash(latestVersion, localHash);
+
+    // If the installed version isn't published on this model anymore, we have no date to
+    // compare against, so fall back to the previous version-id comparison.
+    if (!installedVersion) {
+      const hasUpdate = !hashMatchesLatest && latestVersion.id !== currentVersionId;
+      return { hasUpdate, latestVersion };
+    }
+
+    // Only an update when a remote version was uploaded strictly AFTER the installed one.
+    const newerExists = this.getVersionDate(latestVersion) > this.getVersionDate(installedVersion)
+      && latestVersion.id !== currentVersionId;
+    const hasUpdate = newerExists && !hashMatchesLatest;
+    return { hasUpdate, latestVersion, installedVersion };
+  }
+
   async checkForUpdates(localModel: LocalModel): Promise<UpdateInfo | null> {
     if (!localModel.civitaiModelId || !localModel.civitaiVersionId) {
       return null;
@@ -78,12 +123,14 @@ export class VersionManager {
         return null;
       }
 
-      const latestVersion = fullModel.modelVersions[0];
       const nowChecked = Date.now();
+      const { hasUpdate: newerExists, latestVersion } = this.evaluateUpdate(
+        fullModel.modelVersions,
+        localModel.civitaiVersionId,
+        localModel.sha256
+      );
       const isIgnored = await this.isUpdateIgnored(localModel.civitaiModelId, latestVersion.id);
-      const hashMatchesLatest = this.versionFileMatchesHash(latestVersion, localModel.sha256);
-      const hasUpdate =
-        !hashMatchesLatest && latestVersion.id !== localModel.civitaiVersionId && !isIgnored;
+      const hasUpdate = newerExists && !isIgnored;
       const downloadUrl = civitaiClient.getDownloadUrl(latestVersion.id);
 
       // Persist update status to database (cached until the file changes via update_checked_at).
@@ -164,12 +211,14 @@ export class VersionManager {
         }
 
         if (fullModel && fullModel.modelVersions && fullModel.modelVersions.length > 0) {
-          const latestVersion = fullModel.modelVersions[0];
           const nowChecked = Date.now();
+          const { hasUpdate: newerExists, latestVersion } = this.evaluateUpdate(
+            fullModel.modelVersions,
+            currentVersionId,
+            row.sha256
+          );
           const isIgnored = await this.isUpdateIgnored(modelId, latestVersion.id);
-          const hashMatchesLatest = this.versionFileMatchesHash(latestVersion, row.sha256);
-          const hasUpdate =
-            !hashMatchesLatest && latestVersion.id !== currentVersionId && !isIgnored;
+          const hasUpdate = newerExists && !isIgnored;
 
           if (hasUpdate) {
             updatesFound++;

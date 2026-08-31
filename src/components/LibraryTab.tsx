@@ -155,6 +155,25 @@ export const LibraryTab: React.FC<LibraryTabProps> = ({ onCheckUpdate }) => {
     loadIgnoredDuplicates();
   }, [lastCompletedAt]);
 
+  // Auto-refresh the library when a download completes, so a model downloaded through
+  // the app shows up immediately — no manual re-scan required.
+  useEffect(() => {
+    if (!window.civitaiAPI || typeof window.civitaiAPI.onDownloadProgress !== 'function') return;
+    const seenCompleted = new Set<string>();
+    window.civitaiAPI.onDownloadProgress((tasks: any[]) => {
+      const completed = (Array.isArray(tasks) ? tasks : []).filter(
+        (t) => t && t.status === 'completed' && t.computedPath
+      );
+      const hasNew = completed.some((t) => !seenCompleted.has(t.id));
+      for (const t of completed) seenCompleted.add(t.id);
+      if (hasNew) {
+        // Brief delay so the completed file is fully flushed before it is indexed.
+        setTimeout(() => loadLocalModels(), 1500);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleIgnoreDuplicateSet = async (sha256: string, count: number) => {
     if (!window.civitaiAPI || typeof window.civitaiAPI.ignoreDuplicateSet !== 'function') return;
     try {

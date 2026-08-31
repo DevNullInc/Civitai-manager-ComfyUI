@@ -1488,7 +1488,21 @@ export const SettingsTab: React.FC = () => {
               className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Get an API key from CivitAI: Account Settings → API Keys.
+              Get an API key from{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.civitaiAPI && typeof window.civitaiAPI.openExternal === 'function') {
+                    window.civitaiAPI.openExternal('https://civitai.com/');
+                  } else {
+                    window.open('https://civitai.com/', '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="text-indigo-400 hover:text-indigo-300 hover:underline cursor-pointer"
+              >
+                CivitAI
+              </button>
+              : Account Settings → API Keys.
             </p>
           </div>
 
@@ -1583,7 +1597,21 @@ export const SettingsTab: React.FC = () => {
               className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-yellow-500 font-mono"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Get an access token at <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer" className="text-yellow-400 hover:underline">huggingface.co/settings/tokens</a>. Required for gated models.
+              Get an access token at{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.civitaiAPI && typeof window.civitaiAPI.openExternal === 'function') {
+                    window.civitaiAPI.openExternal('https://huggingface.co/settings/tokens');
+                  } else {
+                    window.open('https://huggingface.co/settings/tokens', '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="text-yellow-400 hover:text-yellow-300 hover:underline cursor-pointer"
+              >
+                huggingface.co/settings/tokens
+              </button>
+              . Required for gated models.
             </p>
           </div>
 

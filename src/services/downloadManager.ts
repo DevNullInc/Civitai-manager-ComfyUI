@@ -368,6 +368,7 @@ export class DownloadManager {
       task.progress = 100;
       task.completedAt = task.completedAt || new Date().toISOString();
       this.persistTask(id).catch(() => {});
+      this.registerCompletedFile(task).catch(() => {});
       this.processQueue();
       return;
     }
@@ -553,6 +554,7 @@ export class DownloadManager {
       task.completedAt = task.completedAt || new Date().toISOString();
       this.persistTask(id).catch(() => {});
       logger.info(`Successfully completed download: ${task.fileName} -> ${resolvedPath}`);
+      this.registerCompletedFile(task).catch(() => {});
       webhookService.triggerDownloadComplete(task).catch((err) => {
         logger.warn('Error triggering download complete webhook:', err);
       });
@@ -562,13 +564,75 @@ export class DownloadManager {
         logger.info(`Download task cancelled/paused: ${task.fileName}`);
       } else {
         task.status = 'failed';
-        task.error = err.message || 'Unknown download error';
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          task.requiresAuth = true;
+          task.error =
+            'This download requires a CivitAI account. Add your API token in Settings (CivitAI API Token) to download NSFW or creator-restricted models.';
+        } else {
+          task.error = err.message || 'Unknown download error';
+        }
         logger.error(`Download failed for task ${task.fileName}:`, err);
         this.persistTask(id).catch(() => {});
       }
     }
 
     this.processQueue();
+  }
+
+  /**
+   * Registers a just-completed download file into the local library (SQLite `local_models`)
+   * so it appears in the Library tab immediately — no full directory scan required, since the
+   * file came through the app and the task already carries its SHA256 + CivitAI metadata.
+   */
+  private async registerCompletedFile(task: DownloadTask): Promise<void> {
+    if (!this.dbReady || !task.computedPath) return;
+    try {
+      if (!fs.existsSync(task.computedPath)) return;
+      const stats = fs.statSync(task.computedPath);
+      const fileSize = stats.size;
+      const modifiedAt = Math.floor(stats.mtimeMs);
+
+      const existing: any = await dbManager.get(
+        'SELECT id FROM local_models WHERE file_path = ? COLLATE NOCASE',
+        [task.computedPath]
+      );
+      const localId = existing?.id || `loc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+      await dbManager.run(
+        `INSERT INTO local_models
+          (id, file_path, file_name, file_size, modified_at, sha256, civitai_model_id,
+           civitai_version_id, civitai_name, scanned_at, model_type, nsfw)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 0)
+         ON CONFLICT(id) DO UPDATE SET
+           file_path = excluded.file_path,
+           file_name = excluded.file_name,
+           file_size = excluded.file_size,
+           modified_at = excluded.modified_at,
+           sha256 = excluded.sha256,
+           civitai_model_id = COALESCE(excluded.civitai_model_id, local_models.civitai_model_id),
+           civitai_version_id = COALESCE(excluded.civitai_version_id, local_models.civitai_version_id),
+           civitai_name = COALESCE(excluded.civitai_name, local_models.civitai_name),
+           scanned_at = CURRENT_TIMESTAMP,
+           model_type = COALESCE(excluded.model_type, local_models.model_type),
+           nsfw = local_models.nsfw`,
+        [
+          localId,
+          task.computedPath,
+          path.basename(task.computedPath),
+          fileSize,
+          modifiedAt,
+          task.sha256 || null,
+          task.modelId || null,
+          task.modelVersionId || null,
+          task.modelName || null,
+          task.modelType || null,
+        ]
+      );
+      logger.info(`Registered completed download in library: ${task.computedPath}`);
+    } catch (err) {
+      logger.warn(`Failed to register completed download into library: ${task.computedPath}`, err);
+    }
   }
 
   async forceCompleteTask(id: string): Promise<boolean> {
@@ -595,6 +659,7 @@ export class DownloadManager {
       task.completedAt = task.completedAt || new Date().toISOString();
       logger.info(`Manually forced download completion for: ${task.fileName} -> ${task.computedPath}`);
       this.persistTask(id).catch(() => {});
+      this.registerCompletedFile(task).catch(() => {});
       return true;
     } catch (err: any) {
       logger.error(`Failed to force complete download task ${task.fileName}:`, err);

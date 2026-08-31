@@ -127,6 +127,7 @@ Civitai-manager-ComfyUI/
 │   └── utils/                # Web bridge, logger, formatters, and helpers
 ├── tests/                    # Vitest unit and integration test suite
 ├── docs/                     # Technical documentation & API references
+│   └── APISecurity.md        # API key / token encryption & storage security
 ├── ROADMAP.md                # Product milestones and development roadmap
 └── CHANGELOG.md              # Historical log of notable changes
 ```

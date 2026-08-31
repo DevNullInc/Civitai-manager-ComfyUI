@@ -1328,9 +1328,10 @@ function startHttpBridgeServer() {
         const modelVersionId = body.modelVersionId || body.model_version_id || body.versionId || body.version_id;
 
         let downloadUrl = body.downloadUrl || body.download_url;
-        if (modelVersionId) {
+        if (!downloadUrl && modelVersionId) {
           downloadUrl = civitaiClient.getDownloadUrl(modelVersionId);
-        } else if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
+        }
+        if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
           const sep = downloadUrl.includes('?') ? '&' : '?';
           downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
         }
@@ -1961,9 +1962,14 @@ function registerIpcHandlers() {
   // Download Handlers
   ipcMain.handle('add-download', async (_event: unknown, taskParams: any) => {
     let downloadUrl = taskParams.downloadUrl;
-    if (taskParams.modelVersionId) {
+    // Prefer the caller-supplied URL (which may already carry a token) and only build one
+    // from the version id when none was provided.
+    if (!downloadUrl && taskParams.modelVersionId) {
       downloadUrl = civitaiClient.getDownloadUrl(taskParams.modelVersionId);
-    } else if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
+    }
+    // Always append the configured API token to the download URL when a key exists and the
+    // URL lacks one, so auth-gated (NSFW/creator-restricted) downloads succeed.
+    if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
       const sep = downloadUrl.includes('?') ? '&' : '?';
       downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
     }
@@ -2316,10 +2322,7 @@ function performFullShutdown() {
 // Timer to send download progress updates to renderer UI
 setInterval(() => {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    const tasks = downloadManager.getTasks();
-    if (tasks.length > 0) {
-      mainWindow.webContents.send('download-progress', tasks);
-    }
+    mainWindow.webContents.send('download-progress', downloadManager.getTasks());
   }
 }, 500);
 

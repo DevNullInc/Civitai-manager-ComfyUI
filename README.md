@@ -525,6 +525,8 @@ Settings → API Sources → CivitAI → Paste Key → Test Connection
 - Download gated/private models you have access to
 - Better download speeds
 
+> 🔐 **Security note:** Your API key and HuggingFace token are the only genuine login credentials CMM stores. See the **[API & Secret Storage Security](docs/APISecurity.md)** doc for exactly how they're encrypted, stored, transmitted, and what the real-world trust boundaries are.
+
 ---
 
 ## 🛠️ Troubleshooting

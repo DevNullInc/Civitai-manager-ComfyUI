@@ -167,15 +167,17 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
     apiUrl: 'https://civitai.com/api/v1/models',
   });
 
-  // Settings & Filters with LocalStorage Persistence
+  // Settings & Filters — revert to defaults on app launch. They persist automatically
+  // across tab switches (tabs stay mounted), but are intentionally NOT restored from
+  // localStorage so a fresh start always shows the stock filters.
   const [maxNsfwLevel, setMaxNsfwLevel] = useState<number>(5);
-  const [query, setQuery] = useState<string>(() => localStorage.getItem('civitai_browse_query') || '');
-  const [selectedType, setSelectedType] = useState<string>(() => localStorage.getItem('civitai_browse_type') || 'All');
-  const [selectedBaseModel, setSelectedBaseModel] = useState<string>(() => localStorage.getItem('civitai_browse_base_model') || 'All');
-  const [sort, setSort] = useState<'Most Downloaded' | 'Highest Rated' | 'Newest' | 'Most Liked'>(() => (localStorage.getItem('civitai_browse_sort') as any) || 'Most Downloaded');
-  const [period, setPeriod] = useState<'AllTime' | 'Year' | 'Month' | 'Week' | 'Day'>(() => (localStorage.getItem('civitai_browse_period') as any) || 'AllTime');
-  const [nsfwBlur, setNsfwBlur] = useState<boolean>(() => localStorage.getItem('civitai_browse_nsfw_blur') !== 'false');
-  const [includeNsfw, setIncludeNsfw] = useState<boolean>(() => localStorage.getItem('civitai_browse_include_nsfw') === 'true');
+  const [query, setQuery] = useState<string>('');
+  const [selectedType, setSelectedType] = useState<string>('All');
+  const [selectedBaseModel, setSelectedBaseModel] = useState<string>('All');
+  const [sort, setSort] = useState<'Most Downloaded' | 'Highest Rated' | 'Newest' | 'Most Liked'>('Most Downloaded');
+  const [period, setPeriod] = useState<'AllTime' | 'Year' | 'Month' | 'Week' | 'Day'>('AllTime');
+  const [nsfwBlur, setNsfwBlur] = useState<boolean>(true);
+  const [includeNsfw, setIncludeNsfw] = useState<boolean>(false);
 
   // Dynamic Base Models with localStorage Cache & Loading State
   const [baseModels, setBaseModels] = useState<string[]>(() => {
@@ -193,10 +195,7 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
   const [loadingBases, setLoadingBases] = useState<boolean>(false);
 
   // Pagination State
-  const [currentPage, setCurrentPage] = useState<number>(() => {
-    const saved = localStorage.getItem('civitai_browse_page');
-    return saved ? Math.max(1, parseInt(saved, 10)) : 1;
-  });
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageCursors, setPageCursors] = useState<{ [page: number]: string }>({});
   const [metadata, setMetadata] = useState<{
     totalItems?: number;
@@ -382,38 +381,6 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
     loadBaseModels();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_query', query);
-  }, [query]);
-
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_type', selectedType);
-  }, [selectedType]);
-
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_base_model', selectedBaseModel);
-  }, [selectedBaseModel]);
-
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_sort', sort);
-  }, [sort]);
-
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_period', period);
-  }, [period]);
-
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_nsfw_blur', String(nsfwBlur));
-  }, [nsfwBlur]);
-
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_include_nsfw', String(includeNsfw));
-  }, [includeNsfw]);
-
-  useEffect(() => {
-    localStorage.setItem('civitai_browse_page', String(currentPage));
-  }, [currentPage]);
-
   // Load configuration for NSFW visibility levels
   useEffect(() => {
     if (window.civitaiAPI) {
@@ -497,13 +464,21 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
     let latestUnignoredVersion: CivitAIModelVersion | undefined;
 
     if (model.modelVersions && model.modelVersions.length > 0) {
-      const latestVer = model.modelVersions[0];
-      const isLatestInstalled = installedVersions.has(latestVer.id);
-      const isLatestIgnored = ignoredSet.has(`${model.id}_${latestVer.id}`);
-
-      if (!isLatestInstalled && !isLatestIgnored) {
-        hasUninstalledNewer = true;
-        latestUnignoredVersion = latestVer;
+      // Sort by upload/publish date (newest first) so the "latest" is a date decision and
+      // older uploads that happen to sit at index 0 are never reported as an update.
+      const byDate = [...model.modelVersions].sort((a, b) => {
+        const da = new Date(a.publishedAt || a.createdAt || 0).getTime();
+        const db = new Date(b.publishedAt || b.createdAt || 0).getTime();
+        return db - da;
+      });
+      for (const ver of byDate) {
+        const isInstalled = installedVersions.has(ver.id);
+        const isIgnored = ignoredSet.has(`${model.id}_${ver.id}`);
+        if (!isInstalled && !isIgnored) {
+          hasUninstalledNewer = true;
+          latestUnignoredVersion = ver;
+          break;
+        }
       }
     }
 
@@ -944,20 +919,36 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
                   }}
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-sm text-slate-100 focus:border-purple-500 focus:outline-none font-medium cursor-pointer"
                 >
-                  {activeModel.modelVersions.map((v) => {
-                    const isInstalled = installedMap.get(activeModel.id)?.has(v.id);
-                    const isIgnored = ignoredSet.has(`${activeModel.id}_${v.id}`);
-                    let tag = '';
-                    if (isInstalled) tag = ' ✓ [Installed]';
-                    else if (isIgnored) tag = ' ⊘ [Ignored Update]';
-                    else if ((installedMap.get(activeModel.id)?.size || 0) > 0) tag = ' ✦ [Update]';
+                  {(() => {
+                    // Newest upload date among installed versions for this model, used so an
+                    // "Update" tag only appears on versions genuinely newer than what is installed.
+                    const activeInstalled = installedMap.get(activeModel.id);
+                    let newestInstalledDate = 0;
+                    if (activeInstalled && activeInstalled.size > 0) {
+                      for (const v of activeModel.modelVersions) {
+                        if (activeInstalled.has(v.id)) {
+                          const d = new Date(v.publishedAt || v.createdAt || 0).getTime();
+                          if (Number.isFinite(d) && d > newestInstalledDate) newestInstalledDate = d;
+                        }
+                      }
+                    }
+                    return activeModel.modelVersions.map((v) => {
+                      const isInstalled = activeInstalled?.has(v.id);
+                      const isIgnored = ignoredSet.has(`${activeModel.id}_${v.id}`);
+                      const vDate = new Date(v.publishedAt || v.createdAt || 0).getTime();
+                      const isNewer = Number.isFinite(vDate) && vDate > newestInstalledDate;
+                      let tag = '';
+                      if (isInstalled) tag = ' ✓ [Installed]';
+                      else if (isIgnored) tag = ' ⊘ [Ignored Update]';
+                      else if ((activeInstalled?.size || 0) > 0 && isNewer) tag = ' ✦ [Update]';
 
-                    return (
-                      <option key={v.id} value={v.id} className="bg-slate-900">
-                        {v.name} ({v.baseModel}){tag} {v.publishedAt ? `- ${new Date(v.publishedAt).toLocaleDateString()}` : ''}
-                      </option>
-                    );
-                  })}
+                      return (
+                        <option key={v.id} value={v.id} className="bg-slate-900">
+                          {v.name} ({v.baseModel}){tag} {v.publishedAt ? `- ${new Date(v.publishedAt).toLocaleDateString()}` : ''}
+                        </option>
+                      );
+                    });
+                  })()}
                 </select>
 
                 {/* Selective Update Ignore / Notice Card */}

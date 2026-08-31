@@ -137,9 +137,10 @@ function apiServerPlugin(): Plugin {
           } else if (req.url === '/api/add-download' && req.method === 'POST') {
             const body = await getBody();
             let downloadUrl = body.downloadUrl;
-            if (body.modelVersionId) {
+            if (!downloadUrl && body.modelVersionId) {
               downloadUrl = civitaiClient.getDownloadUrl(body.modelVersionId);
-            } else if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
+            }
+            if (currentConfig.civitai_api_key && downloadUrl && !downloadUrl.includes('token=')) {
               const sep = downloadUrl.includes('?') ? '&' : '?';
               downloadUrl = `${downloadUrl}${sep}token=${encodeURIComponent(currentConfig.civitai_api_key)}`;
             }

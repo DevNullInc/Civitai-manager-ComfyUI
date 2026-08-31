@@ -124,6 +124,25 @@ function AppContent() {
     };
   }, [activeTab]);
 
+  // F5 / Ctrl+R refresh support. The app runs without the default Chromium/Electron
+  // menu (and its reload accelerator), so a hard refresh of the currently displayed tab
+  // is not available out of the box. Intercept the keys and reload the page so the app
+  // re-mounts the active tab and re-fetches its data (fixes stale UI after a network drop).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const code = e.key || '';
+      const isF5 = code === 'F5';
+      const isCtrlR = (e.ctrlKey || e.metaKey) && code.toLowerCase() === 'r';
+      const isF5Mac = code === 'r' && e.metaKey;
+      if (isF5 || isCtrlR || isF5Mac) {
+        e.preventDefault();
+        window.location.reload();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   useEffect(() => {
     if (window.civitaiAPI) {
       window.civitaiAPI.onDownloadProgress((tasks) => {
