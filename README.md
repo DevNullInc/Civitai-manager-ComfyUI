@@ -26,6 +26,10 @@
 | :-----------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------: |
 | <a href="docs/screenshots/downloads-tab.png"><img src="docs/screenshots/downloads-tab.png" alt="Downloads Manager" width="460" /></a> | <a href="docs/screenshots/settings-tab.png"><img src="docs/screenshots/settings-tab.png" alt="Settings & Backup" width="460" /></a> |
 
+|                                            **Workflow & Missing Node Resolver**                                             |                                                  **About & Project Info**                                                  |
+| :--------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
+| <a href="docs/screenshots/workflows-tab.png"><img src="docs/screenshots/workflows-tab.png" alt="Workflow & Missing Node Resolver" width="460" /></a> | <a href="docs/screenshots/about-tab.png"><img src="docs/screenshots/about-tab.png" alt="About & Project Info" width="460" /></a> |
+
 ---
 
 ## 🎯 Why CMM?
