@@ -384,20 +384,15 @@ export const SettingsTab: React.FC = () => {
         return;
       }
       // If install_dir was just typed (onChange with commitFolders=false), folders may
-      // still be stale — ensure they reflect the current install_dir before persisting.
+      // still be stale — ensure the derived <install>\models folder is present without
+      // dropping user-added extra model dirs (including ones that also end with \Models).
       let foldersForSave = config.comfyui_folders.map(normalizeFolderPath).filter(Boolean);
       const installTrimmed = (config.comfyui_install_dir || '').trim();
       if (installTrimmed) {
         const derived = deriveModelsFolder(installTrimmed);
         const hasDerived = foldersForSave.some((f) => f.toLowerCase() === derived.toLowerCase());
-        if (foldersForSave.length === 0 || !hasDerived) {
-          // Preserve non-derived extra folders, but ensure derived models folder is present
-          const nonDerived = foldersForSave.filter((f) => !/[\\/]models[\\/]?$/i.test(f));
-          if (foldersForSave.length === 0 || /[\\/]models[\\/]?$/i.test(foldersForSave[0] || '')) {
-            foldersForSave = [derived, ...nonDerived];
-          } else if (!hasDerived) {
-            foldersForSave = [derived, ...foldersForSave];
-          }
+        if (!hasDerived) {
+          foldersForSave = [derived, ...foldersForSave];
         }
       }
       const primaryRoot = foldersForSave[0] || normalizeFolderPath(config.comfyui_root || '');
