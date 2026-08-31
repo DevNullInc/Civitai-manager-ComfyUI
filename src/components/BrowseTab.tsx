@@ -1061,6 +1061,9 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
               {/* Version Specs Grid */}
               {selectedVersion && (
                 <div className="space-y-5">
+                  {(() => {
+                    const pf = selectedVersion.files?.find((f) => f.primary) ?? selectedVersion.files?.[0];
+                    return (
                   <div className="grid grid-cols-2 gap-4 bg-slate-900/80 p-4 rounded-2xl border border-slate-800 text-xs">
                     <div>
                       <span className="text-slate-400 block font-medium">Base Architecture:</span>
@@ -1069,24 +1072,26 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
                     <div>
                       <span className="text-slate-400 block font-medium">Primary File:</span>
                       <span className="font-semibold text-slate-200 truncate block mt-0.5">
-                        {selectedVersion.files?.[0]?.name || 'N/A'}
+                        {pf?.name || 'N/A'}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">Download Size:</span>
                       <span className="font-semibold text-slate-200 mt-0.5 block">
-                        {selectedVersion.files?.[0]?.sizeKB
-                          ? `${(selectedVersion.files[0].sizeKB / 1024 / 1024).toFixed(2)} GB`
+                        {pf?.sizeKB
+                          ? `${(pf.sizeKB / 1024 / 1024).toFixed(2)} GB`
                           : 'Unknown'}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-400 block font-medium">SHA256 Checksum:</span>
                       <span className="font-mono text-[10px] text-purple-300 truncate block mt-0.5">
-                        {selectedVersion.files?.[0]?.hashes?.SHA256 || 'Not available'}
+                        {pf?.hashes?.SHA256 || 'Not available'}
                       </span>
                     </div>
                   </div>
+                    );
+                  })()}
 
                   {/* Gallery */}
                   {selectedVersion.images && selectedVersion.images.length > 0 && (

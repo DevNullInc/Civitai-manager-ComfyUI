@@ -185,7 +185,7 @@ function AppContent() {
     version: CivitAIModelVersion,
     options?: { deleteOldVersionFile?: string; deleteOldModelId?: string }
   ) => {
-    const primaryFile = version.files?.[0];
+    const primaryFile = version.files?.find((f) => f.primary) ?? version.files?.[0];
     const fileName = primaryFile?.name || `${model.name}_${version.name}.safetensors`;
 
     const taskParams = {
@@ -197,7 +197,7 @@ function AppContent() {
       baseModel: version.baseModel,
       creator: model.creator?.username,
       fileName,
-      downloadUrl: version.downloadUrl || `https://civitai.com/api/download/models/${version.id}`,
+      downloadUrl: primaryFile?.downloadUrl || version.downloadUrl || `https://civitai.com/api/download/models/${version.id}`,
       sizeKB: primaryFile?.sizeKB || 0,
       sha256: primaryFile?.hashes?.SHA256,
       deleteOldVersionFile: options?.deleteOldVersionFile,
