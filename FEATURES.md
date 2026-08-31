@@ -9,6 +9,8 @@
 * **Desktop App & Web UI in One**: Run as a native Electron desktop window or open `http://127.0.0.1:5173` in any browser.
 * **100% Cross-Platform**: Works natively on **Linux**, **Windows**, and **macOS** (Apple Silicon & Intel).
 * **Zero Cloud Lock-In**: Stores everything in a lightning-fast local SQLite database.
+* **API Keys Stored Encrypted & Opened in Your Real Browser**: CivitAI/HuggingFace keys are AES-256-GCM encrypted at rest (see [`docs/APISecurity.md`](docs/APISecurity.md)), and login-required pages always open in your system browser so you can verify the HTTPS URL/cert yourself.
+* **F5 / Ctrl+R Hard Refresh**: Refresh the active tab any time (same keys as a browser) to clear stale UI after a network hiccup.
 
 ---
 
@@ -29,6 +31,8 @@
 * **Custom Filename Regex Patterns**: Map custom keywords (e.g. `ip-adapter`, `pulid`, `gguf`, `unet`) to specific custom folders.
 * **Duplicate Conflict Handling**: Choose how to handle filename collisions (Rename, Replace, Skip, or Prompt).
 * **SHA-256 Hash Verification**: Compares downloaded checksums against CivitAI for tamper protection.
+* **Persistent Queue Across Restarts**: The download queue (with progress and superseded-file metadata) is saved to SQLite and fully restored on relaunch.
+* **Auto-Library on Completion**: A finished download is registered into the Library immediately — no manual re-scan — and Downloads-tab Pause/Resume/Cancel always reflect instantly.
 
 ---
 
@@ -46,6 +50,7 @@
 ## 🔄 4. Automated Updates & Version Tracking
 
 * **1-Click Update Checker**: Compares all local models against CivitAI API for newer revisions, bugfixes, and v2 releases.
+* **Date-Aware "Newer" Detection**: Updates are flagged by comparing actual upload/publish dates (plus a SHA-256 hash cross-check), so older uploads never show as false "updates" when you already have the newest file.
 * **Update Badging**: Shows update tags on model cards with changelogs and download buttons.
 * **Ignore List**: Mute updates for specific model versions you don't want to change.
 
