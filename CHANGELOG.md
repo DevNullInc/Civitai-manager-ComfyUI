@@ -97,8 +97,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Connection wires are now rendered as bezier curves with hover tooltips showing `source -> target` node types.
   - One-click expand to fullscreen map with an `X` to shrink back, plus 5% zoom in/out steps (range 0.2x–2.0x).
   - Switching workflows always resets the zoom to auto-fit the full graph (imperative fit-on-select plus effect re-keyed to the active graph, covering sidebar, dropdown, parse/upload, and fullscreen toggles).
+- **Auto-Library Update on Download Completion**:
+  - A completed download is now registered straight into the Library immediately after it finishes (`registerCompletedFile` upserts the file with its SHA256 + CivitAI metadata at normal, skip-conflict, and force-complete paths) — no manual library re-scan required.
+  - LibraryTab watches `download-progress` for newly-completed tasks and reloads the local-models list once the file is flushed to disk.
+- **Auth & Secrets Links Open in the User's Real Browser**:
+  - The Settings "CivitAI" API-key helper and the "huggingface.co/settings/tokens" helper now open via `shell.openExternal` (the system default browser, with a `window.open` fallback) instead of an embedded in-app window, so users can verify the HTTPS URL/certificate themselves rather than trusting an in-app clone they can't inspect.
+  - Added [`docs/APISecurity.md`](docs/APISecurity.md) documenting exactly how the CivitAI API key and HuggingFace token are encrypted, stored, transmitted, and their real-world trust boundaries (with an honest note that at-rest encryption currently relies on a static embedded key, not an OS keychain — plus a roadmap to close that gap).
+- **F5 / Ctrl+R Hard Refresh**:
+  - The Electron frontend re-enables a hard refresh via `F5`, `Ctrl+R`, or `Cmd+R` (intercepting the key and calling `window.location.reload()`), which re-mounts the active tab so it re-fetches its data after a network drop — previously the removed default menu left no way to refresh the app.
 
 ### 🛡️ Fixed & Improved
+
+- **Date-Aware Update Detection (no more false "updates")**:
+  - Update checks now compare a version's **upload/publish date** (`publishedAt`, falling back to `createdAt`) rather than a raw version-id mismatch. A model is updatable only when a remote version was uploaded strictly after the installed one; the installed version is located by id and dated directly. This stops older uploads that merely sit lower in the CivitAI list (or carry a different id) from being flagged as updates when the installed file is already the newest-dated version.
+  - Browse tab's "Update Available" badge and per-version "✦ [Update]" dropdown tag were updated with the same date-aware logic, so only versions genuinely newer than the newest installed upload are marked.
+- **Download Queue Persistence Fix (schema migration)**:
+  - Older builds shipped a `downloads` table with a drifted column set (`civitai_version_id`/`civitai_model_id`, `local_path`, `downloaded_at`, no `progress`/`computed_path`). `CREATE TABLE IF NOT EXISTS` never rewrote it, so the manager's `INSERT OR REPLACE ... (model_version_id, progress, ...)` silently failed and completed downloads never survived a restart. `db.ts` now reconciles the table to the canonical schema at startup (renames the legacy table, recreates it, migrates surviving rows via a dynamic column map, then drops the legacy table), so persistence actually works.
+- **Download Card Controls Actually Respond**:
+  - Pause/Resume/Cancel/Force-Complete on the Downloads tab now re-fetch the queue after the backend call (with error handling), so the UI updates immediately instead of waiting for the progress push.
+  - The main process no longer suppresses the `download-progress` push when the queue is empty, so cancelling the last download clears its card from the list.
+- **Auth-Gated Downloads (CivitAI 401) & Token Preservation**:
+  - All `add-download` paths (main IPC, main HTTP `/api/add-download`, vite dev route) now prefer the caller-supplied download URL (preserving any embedded `?token=`) and only build one from the version id when no URL is given, then always append the configured `civitai_api_key` when present. Previously the version-id branch discarded the URL (and its token), so updating auth-gated models could 401.
+  - A failed download now shows an actionable message on HTTP 401/403 ("Add your API token in Settings...") instead of a raw Axios error.
 
 - **Hash-Based Update Detection with Sticky Update Flags**:
   - Update detection now checks the installed file's SHA256 against the hashes CivitAI publishes for the newest version (`versionFileMatchesHash`) on top of the version-id comparison, so already-current files never show a false update banner.
