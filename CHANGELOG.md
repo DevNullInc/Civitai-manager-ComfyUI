@@ -125,6 +125,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Workflow Map Zoom Anchors at the Cursor, Throttled to 60fps**:
   - Replaced LiteGraph's wheel handlers (which zoom around the canvas center or raw document coordinates) with a pointer-anchored zoom so touchpad pinch and mouse-wheel scrolling zoom toward the cursor instead of jumping away.
   - Touchpad gestures emit many wheel events per frame, so zoom now accumulates `deltaY` into a running balance and one `requestAnimationFrame` flush applies the whole balance at once (never per hardware tick), capped at ~60 applies/second with an interval guard for ≥120 Hz displays. The balance is fully drained each flush so zoom never "coasts" after the fingers stop, and only the standard `wheel` event is listened to (the legacy `mousewheel`/`DOMMouseScroll` bindings were removed — Chromium can fire them in addition to `wheel`, double-applying a gesture).
+- **Launcher Script (cmm.ps1) Start/Restart/Stop Speed**:
+  - `start`/`restart` now build the renderer (Vite) and main process (TypeScript) **in parallel** (with a sequential fallback for Windows PowerShell 5.1), cutting build wall-clock roughly in half on multi-core machines.
+  - The GitHub `git ls-remote` update check only contacts the remote if the last check is **> 1h old** and is hard-capped at 4 seconds — flaky DNS/network can no longer stall a launch for many seconds.
+  - The C# `Add-Type` window-helper is compiled **lazily on first window focus** instead of on every invocation, so `status`/`stop`/`update`/etc. no longer pay a ~1s compiler round-trip.
+  - Waiting for the Vite dev server now **polls the TCP port** until it accepts connections instead of a fixed 2-second sleep (usually ready well before that); restart's settle sleep was cut from 1s to 500ms.
+  - `Get-RunningProcs`/`Stop-App` fetch all candidate command lines in a **single unfiltered WMI query** (~1s total) instead of one ~1s per-PID query — `status` went from ~6s to ~2s. (The `Win32_Process ... IN(...)` filter silently returns no rows on some machines, hence the unfiltered table scan.)
 
 - **Project Rebranded → Renegade Core Model Manager (RenegadeCMM)**:
   - Display name is now **Renegade Core Model Manager**; the short technical/project identifier is **RenegadeCMM** (repo, `productName`, app id, npm package, binary/installer artifacts). The `ComfyUI Edition` tagline and all legacy "CivitAI Model Manager"-style names were dropped.

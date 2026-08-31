@@ -53,7 +53,12 @@ if ($ApiPort -lt 1024 -or $ApiPort -gt 65535) {
 }
 
 # -- Window Helper for Bringing Existing Window to Foreground -------------
-Add-Type -TypeDefinition @"
+# Compiled LAZILY on first use: 'Add-Type' shells out to the C# compiler, which costs
+# 0.5-1.5s on every script invocation. 'status' / 'stop' / 'update' never touch a
+# window and shouldn't pay that bill.
+function Add-WindowHelperType {
+  if ('WindowHelper' -as [type]) { return }
+  Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class WindowHelper {
@@ -70,6 +75,7 @@ public class WindowHelper {
     public static extern bool IsIconic(IntPtr hWnd);
 }
 "@ -ErrorAction SilentlyContinue
+}
 
 function Write-Status {
   param([string]$Icon, [string]$Msg, [string]$Color = 'Cyan')
@@ -79,6 +85,7 @@ function Write-Status {
 
 function Set-ProcessWindowFocus {
   param([System.Diagnostics.Process]$Proc)
+  Add-WindowHelperType
   if ($Proc -and $Proc.MainWindowHandle -and $Proc.MainWindowHandle -ne [IntPtr]::Zero) {
     try {
       # SW_RESTORE = 9, SW_SHOW = 5
@@ -94,6 +101,24 @@ function Set-ProcessWindowFocus {
   return $false
 }
 
+function Wait-TcpPortReady {
+  param([int]$Port, [int]$MaxWaitMs = 8000)
+  $deadline = [Environment]::TickCount64 + $MaxWaitMs
+  while ([Environment]::TickCount64 -lt $deadline) {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+      $async = $client.BeginConnect('127.0.0.1', $Port, $null, $null)
+      if ($async.AsyncWaitHandle.WaitOne(150)) {
+        $client.EndConnect($async)
+        return $true
+      }
+    } catch { }
+    finally { try { $client.Close() } catch { } }
+    Start-Sleep -Milliseconds 100
+  }
+  return $false
+}
+
 $ProtectedBrowsers = @(
   'firefox', 'firefox-bin', 'chrome', 'googlechrome', 'chromium',
   'brave', 'opera', 'msedge', 'safari', 'vivaldi', 'zen', 'librewolf',
@@ -101,7 +126,7 @@ $ProtectedBrowsers = @(
   'windowsterminal', 'system', 'svchost', 'taskmgr', 'csrss', 'lsass'
 )
 
-function Test-IsSafeToKill([System.Diagnostics.Process]$Proc) {
+function Test-IsSafeToKill([System.Diagnostics.Process]$Proc, [hashtable]$CmdLines = @{}) {
   if (-not $Proc -or $Proc.HasExited) { return $false }
   if ($Proc.Id -le 4 -or $Proc.Id -eq $PID) { return $false }
 
@@ -119,9 +144,14 @@ function Test-IsSafeToKill([System.Diagnostics.Process]$Proc) {
 
   # Must be node or electron
   if ($name -eq 'electron' -or $name -eq 'node' -or $name -like '*civitai*') {
-    # Check if CommandLine or arguments contain protected browser names
+    # Check if CommandLine or arguments contain protected browser names. The caller
+    # passes a pre-fetched PID -> command-line map (one batched CIM round trip instead
+    # of ~1s per PID); a direct query is the fallback for a cache miss.
     try {
-      $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($Proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+      $cmd = $CmdLines[$Proc.Id]
+      if ([string]::IsNullOrWhiteSpace($cmd)) {
+        $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($Proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+      }
       if ($cmd) {
         $cmdLower = $cmd.ToLower()
         foreach ($prot in $ProtectedBrowsers) {
@@ -135,9 +165,27 @@ function Test-IsSafeToKill([System.Diagnostics.Process]$Proc) {
   return $false
 }
 
+function Get-CommandLineCache([int[]]$ProcessIds) {
+  $cache = @{}
+  $unique = @($ProcessIds | Where-Object { $_ -gt 4 } | Select-Object -Unique)
+  if ($unique.Count -gt 0) {
+    try {
+      # The Win32_Process IN(...) filter silently returns no rows on some machines, and
+      # a per-PID query costs ~1s each. One unfiltered WMI round trip for the whole
+      # process table (~1s regardless of size) is the reliable way to cover every
+      # candidate in a single call.
+      Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { $unique -contains [int]$_.ProcessId } |
+        ForEach-Object { $cache[[int]$_.ProcessId] = [string]$_.CommandLine }
+    } catch { }
+  }
+  return $cache
+}
+
 function Get-RunningProcs {
   $running = @()
   $seenPids = [System.Collections.Generic.HashSet[int]]::new()
+  $candidates = [System.Collections.Generic.List[object]]::new()
 
   # 1. Check stored PID file with strict verification
   if (Test-Path $PidFile) {
@@ -145,9 +193,7 @@ function Get-RunningProcs {
     foreach ($procId in $storedPids) {
       if ($procId -gt 4 -and $seenPids.Add($procId)) {
         $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
-        if ($proc -and (Test-IsSafeToKill $proc)) {
-          $running += $proc
-        }
+        if ($proc) { $candidates.Add([pscustomobject]@{ Pid = $proc.Id; Proc = $proc }) }
       }
     }
   }
@@ -158,9 +204,7 @@ function Get-RunningProcs {
     foreach ($ph in $portHolders) {
       if ($ph -gt 4 -and $seenPids.Add($ph)) {
         $proc = Get-Process -Id $ph -ErrorAction SilentlyContinue
-        if ($proc -and (Test-IsSafeToKill $proc)) {
-          $running += $proc
-        }
+        if ($proc) { $candidates.Add([pscustomobject]@{ Pid = $proc.Id; Proc = $proc }) }
       }
     }
   }
@@ -170,11 +214,21 @@ function Get-RunningProcs {
   foreach ($ep in $electronProcs) {
     try {
       if ($ep.Path -like "*$ProjectRoot*" -or $ep.Path -like "*node_modules\electron*") {
-        if ($seenPids.Add($ep.Id) -and (Test-IsSafeToKill $ep)) {
-          $running += $ep
-        }
+        if ($seenPids.Add($ep.Id)) { $candidates.Add([pscustomobject]@{ Pid = $ep.Id; Proc = $ep }) }
       }
     } catch { }
+  }
+
+  if ($candidates.Count -eq 0) { return $running }
+
+  # Fetch every candidate's command line in ONE batched CIM query (a per-PID filter
+  # costs ~1s each, so this trims a 4-process app from ~4s of WMI time to ~1s).
+  $cmdCache = Get-CommandLineCache @($candidates | ForEach-Object { $_.Pid })
+
+  foreach ($cand in $candidates) {
+    if (Test-IsSafeToKill $cand.Proc $cmdCache) {
+      $running += $cand.Proc
+    }
   }
 
   return $running
@@ -188,9 +242,11 @@ function Stop-App {
   }
 
   Write-Status 'x' "Stopping $($procs.Count) process(es)..." 'Red'
+  # Pre-fetch command lines once so the safety re-check doesn't repeat the per-PID CIM tax.
+  $cmdCache = Get-CommandLineCache @($procs | ForEach-Object { $_.Id })
   foreach ($p in $procs) {
     try {
-      if (Test-IsSafeToKill $p) {
+      if (Test-IsSafeToKill $p $cmdCache) {
         Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
         Write-Status 'ok' "Killed PID $($p.Id) ($($p.ProcessName))" 'DarkGray'
       }
@@ -298,21 +354,54 @@ function Check-GitUpdates {
   }
 
   if (Test-Path (Join-Path $ProjectRoot '.git')) {
+    # Never stall a launch on GitHub. Flaky DNS/network can hang 'git ls-remote' for
+    # many seconds, so only contact the remote if the last check is > 1h old, and cap
+    # that single lookup at 4 seconds regardless of network state.
+    $updateStamp = Join-Path $ProjectRoot '.cmm-update-check'
+    $stampAge = [DateTime]::MinValue
+    if (Test-Path $updateStamp) {
+      try { $stampAge = [System.IO.File]::GetLastWriteTimeUtc($updateStamp) } catch { }
+    }
+    if ([DateTime]::UtcNow - $stampAge -lt [TimeSpan]::FromHours(1)) {
+      return
+    }
+
     try {
       $localSha = (git rev-parse --short HEAD 2>$null)
-      $remoteOutput = (git ls-remote --heads origin main 2>$null)
-      if ($remoteOutput) {
-        $fullSha = ($remoteOutput.Split("`t")[0]).Trim()
-        $remoteSha = if ($fullSha.Length -ge 7) { $fullSha.Substring(0, 7) } else { $fullSha }
-        if ($remoteSha -and $localSha -and ($remoteSha -ne $localSha)) {
-          Write-Host ''
-          Write-Status '!' "DEVELOPMENT UPDATE: Newer commit available on GitHub ($remoteSha)!" 'Yellow'
-          Write-Host "      Current Local Commit : $localSha" -ForegroundColor Cyan
-          Write-Host "      Latest GitHub Commit : $remoteSha (main branch)" -ForegroundColor Green
-          Write-Host '      Note: You are running an active development version (not a tagged release).' -ForegroundColor Yellow
-          Write-Host '      Run .\cmm.ps1 update or git pull to update your development copy.' -ForegroundColor Yellow
-          Write-Host ''
+      $remoteSha = $null
+      if ($localSha) {
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = 'git'
+        $psi.Arguments = 'ls-remote --heads origin main'
+        $psi.WorkingDirectory = $ProjectRoot
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $gitProc = [System.Diagnostics.Process]::Start($psi)
+        if ($gitProc.WaitForExit(4000)) {
+          $remoteOutput = $gitProc.StandardOutput.ReadToEnd().Trim()
+          if ($remoteOutput) {
+            $fullSha = ($remoteOutput.Split("`t")[0]).Trim()
+            $remoteSha = if ($fullSha.Length -ge 7) { $fullSha.Substring(0, 7) } else { $fullSha }
+          }
+        } else {
+          try { $gitProc.Kill() } catch { }
         }
+      }
+      # Stamp the check even on failure so a flaky connection doesn't re-hit the remote
+      # for another hour.
+      try {
+        $null = New-Item -Path $updateStamp -ItemType File -Force
+        [System.IO.File]::SetLastWriteTimeUtc($updateStamp, [DateTime]::UtcNow)
+      } catch { }
+
+      if ($remoteSha -and $localSha -and ($remoteSha -ne $localSha)) {
+        Write-Host ''
+        Write-Status '!' "DEVELOPMENT UPDATE: Newer commit available on GitHub ($remoteSha)!" 'Yellow'
+        Write-Host "      Current Local Commit : $localSha" -ForegroundColor Cyan
+        Write-Host "      Latest GitHub Commit : $remoteSha (main branch)" -ForegroundColor Green
+        Write-Host '      Note: You are running an active development version (not a tagged release).' -ForegroundColor Yellow
+        Write-Host '      Run .\cmm.ps1 update or git pull to update your development copy.' -ForegroundColor Yellow
+        Write-Host ''
       }
     } catch { }
   }
@@ -374,33 +463,57 @@ function Start-App {
   Push-Location $ProjectRoot
 
   try {
-    # 1) Build renderer with Vite first
-    Write-Status '>>' 'Building renderer process with Vite...' 'DarkGray'
-    $rendererBuild = npx vite build --base ./ --emptyOutDir false 2>&1
-    $rendererExitCode = $LASTEXITCODE
-    
-    if ($rendererExitCode -ne 0) {
+    Write-Status '>>' 'Building renderer (Vite) + main process (TypeScript) in parallel...' 'Cyan'
+    if ($PSVersionTable.PSEdition -eq 'Core') {
+      # Renderer and main write to disjoint dist/ subtrees, so build them concurrently.
+      $buildResults = 1..2 | ForEach-Object -Parallel {
+        Push-Location $using:ProjectRoot
+        try {
+          if ($_ -eq 1) {
+            $out = npx vite build --base ./ --emptyOutDir false 2>&1
+          } else {
+            $out = npx tsc --project tsconfig.main.json --listEmittedFiles 2>&1
+          }
+          [pscustomobject]@{
+            Name    = if ($_ -eq 1) { 'renderer' } else { 'main' }
+            Success = $LASTEXITCODE -eq 0
+            Output  = ($out -join "`n")
+          }
+        } finally {
+          Pop-Location
+        }
+      } -ThrottleLimit 2
+    } else {
+      $rendererOut = npx vite build --base ./ --emptyOutDir false 2>&1
+      $rendererOk = $LASTEXITCODE -eq 0
+      $mainOut = npx tsc --project tsconfig.main.json --listEmittedFiles 2>&1
+      $mainOk = $LASTEXITCODE -eq 0
+      $buildResults = @(
+        [pscustomobject]@{ Name = 'renderer'; Success = $rendererOk; Output = ($rendererOut -join "`n") }
+        [pscustomobject]@{ Name = 'main'; Success = $mainOk; Output = ($mainOut -join "`n") }
+      )
+    }
+
+    $renderer = $buildResults | Where-Object { $_.Name -eq 'renderer' } | Select-Object -First 1
+    $main = $buildResults | Where-Object { $_.Name -eq 'main' } | Select-Object -First 1
+
+    if (-not $renderer.Success) {
       Write-Status '!!' 'Renderer build failed!' 'Red'
       Write-Host ''
       Write-Host '  Vite output:' -ForegroundColor Yellow
       Write-Host '  ' -NoNewline
-      Write-Host ($rendererBuild -join "`n  ") -ForegroundColor Red
+      Write-Host $renderer.Output -ForegroundColor Red
       Pop-Location
       return
     }
     Write-Status 'ok' 'Renderer built successfully.' 'Green'
 
-    # 2) Build main process (Electron entry point) after Vite
-    Write-Status '>>' 'Building Electron main process...' 'DarkGray'
-    $mainBuildOutput = npx tsc --project tsconfig.main.json --listEmittedFiles 2>&1
-    $mainBuildExitCode = $LASTEXITCODE
-    
-    if ($mainBuildExitCode -ne 0) {
+    if (-not $main.Success) {
       Write-Status '!!' 'Main process TypeScript compilation FAILED!' 'Red'
       Write-Host ''
       Write-Host '  TypeScript errors:' -ForegroundColor Yellow
       Write-Host '  ' -NoNewline
-      Write-Host ($mainBuildOutput -join "`n  ") -ForegroundColor Red
+      Write-Host $main.Output -ForegroundColor Red
       Pop-Location
       return
     }
@@ -435,7 +548,13 @@ function Start-App {
     -WorkingDirectory $ProjectRoot `
     -PassThru -WindowStyle Hidden
 
-  Start-Sleep -Seconds 2
+  # Poll until Vite actually accepts connections instead of sleeping a fixed 2s
+  # (usually ready well before that).
+  if (Wait-TcpPortReady -Port $Port -MaxWaitMs 10000) {
+    Write-Status 'ok' "Vite dev server ready on port $Port (http://localhost:$Port)." 'Green'
+  } else {
+    Write-Status '!' 'Vite server is still starting up; launching Electron anyway.' 'Yellow'
+  }
 
   # 3) Start Electron App (or run headless)
   $localElectron = Join-Path $ProjectRoot "node_modules\electron\dist\electron.exe"
@@ -561,7 +680,7 @@ switch ($Action) {
   'restart' {
     Write-Status '>>' 'Restarting application...' 'Cyan'
     Stop-App | Out-Null
-    Start-Sleep -Seconds 1
+    Start-Sleep -Milliseconds 500
     Start-App
   }
   'status' {
