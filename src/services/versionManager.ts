@@ -82,34 +82,56 @@ export class VersionManager {
   // CivitAI version list (or carries a different version id).
   private evaluateUpdate(
     modelVersions: CivitAIModelVersion[],
-    currentVersionId: number,
+    installedVersionIds: Set<number>,
     localHash?: string
   ): { hasUpdate: boolean; latestVersion: CivitAIModelVersion; installedVersion?: CivitAIModelVersion } {
+    // Newest-dated remote version (a date decision, not array index) so an older upload that
+    // happens to sit at index 0 is never treated as the "latest".
     let latestVersion = modelVersions[0];
-    let installedVersion: CivitAIModelVersion | undefined;
     for (const v of modelVersions) {
       if (this.getVersionDate(v) > this.getVersionDate(latestVersion)) {
         latestVersion = v;
       }
-      if (v.id === currentVersionId) {
-        installedVersion = v;
+    }
+
+    // Newest-dated version among EVERY installed local file for this model. When the model is
+    // installed for multiple consumers (e.g. one LoRA used by several workflows), the date check
+    // defaults to the LATEST installed date, so a file uploaded between two installs is not
+    // falsely reported as an update when the newest upload is already installed.
+    let installedVersion: CivitAIModelVersion | undefined;
+    let newestInstalledDate = 0;
+    for (const v of modelVersions) {
+      if (installedVersionIds.has(v.id)) {
+        const d = this.getVersionDate(v);
+        if (d > newestInstalledDate) {
+          newestInstalledDate = d;
+          installedVersion = v;
+        }
       }
     }
 
     const hashMatchesLatest = this.versionFileMatchesHash(latestVersion, localHash);
 
-    // If the installed version isn't published on this model anymore, we have no date to
-    // compare against, so fall back to the previous version-id comparison.
+    // Nothing of this model is installed -> nothing to update.
     if (!installedVersion) {
-      const hasUpdate = !hashMatchesLatest && latestVersion.id !== currentVersionId;
-      return { hasUpdate, latestVersion };
+      return { hasUpdate: false, latestVersion };
     }
 
-    // Only an update when a remote version was uploaded strictly AFTER the installed one.
-    const newerExists = this.getVersionDate(latestVersion) > this.getVersionDate(installedVersion)
-      && latestVersion.id !== currentVersionId;
+    // Update only when a remote version is dated strictly NEWER than the latest installed
+    // date, and that newest-dated version isn't already installed.
+    const newerExists = this.getVersionDate(latestVersion) > newestInstalledDate
+      && !installedVersionIds.has(latestVersion.id);
     const hasUpdate = newerExists && !hashMatchesLatest;
     return { hasUpdate, latestVersion, installedVersion };
+  }
+
+  // All version ids installed locally for a given CivitAI model (every local_models row).
+  private async getInstalledVersionIds(modelId: number): Promise<Set<number>> {
+    const rows = await dbManager.all(
+      'SELECT civitai_version_id FROM local_models WHERE civitai_model_id = ? AND civitai_version_id IS NOT NULL;',
+      [modelId]
+    );
+    return new Set(rows.map((r: any) => Number(r.civitai_version_id)));
   }
 
   async checkForUpdates(localModel: LocalModel): Promise<UpdateInfo | null> {
@@ -124,9 +146,10 @@ export class VersionManager {
       }
 
       const nowChecked = Date.now();
+      const installedVersionIds = await this.getInstalledVersionIds(localModel.civitaiModelId);
       const { hasUpdate: newerExists, latestVersion } = this.evaluateUpdate(
         fullModel.modelVersions,
-        localModel.civitaiVersionId,
+        installedVersionIds,
         localModel.sha256
       );
       const isIgnored = await this.isUpdateIgnored(localModel.civitaiModelId, latestVersion.id);
@@ -181,6 +204,19 @@ export class VersionManager {
       return { totalChecked: 0, updatesFound: 0, modelsWithUpdates: [] };
     }
 
+    // Every installed version id per CivitAI model (drawn from ALL local_models rows, not just
+    // the cached ones being re-checked), so the date check defaults to the latest installed date
+    // even when a model has multiple installed copies.
+    const installedRows = await dbManager.all(
+      'SELECT DISTINCT civitai_model_id, civitai_version_id FROM local_models WHERE civitai_model_id IS NOT NULL AND civitai_version_id IS NOT NULL;'
+    );
+    const installedByModel = new Map<number, Set<number>>();
+    for (const r of installedRows) {
+      const modelId = Number(r.civitai_model_id);
+      if (!installedByModel.has(modelId)) installedByModel.set(modelId, new Set());
+      installedByModel.get(modelId)!.add(Number(r.civitai_version_id));
+    }
+
     // Cache model details to prevent repetitive API calls for models with multiple local files
     const modelCache = new Map<number, any>();
     const modelsWithUpdates: BatchUpdateResult['modelsWithUpdates'] = [];
@@ -212,9 +248,10 @@ export class VersionManager {
 
         if (fullModel && fullModel.modelVersions && fullModel.modelVersions.length > 0) {
           const nowChecked = Date.now();
+          const installedVersionIds = installedByModel.get(modelId) || new Set<number>();
           const { hasUpdate: newerExists, latestVersion } = this.evaluateUpdate(
             fullModel.modelVersions,
-            currentVersionId,
+            installedVersionIds,
             row.sha256
           );
           const isIgnored = await this.isUpdateIgnored(modelId, latestVersion.id);

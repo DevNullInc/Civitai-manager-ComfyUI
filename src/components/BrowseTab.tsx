@@ -464,6 +464,18 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
     let latestUnignoredVersion: CivitAIModelVersion | undefined;
 
     if (model.modelVersions && model.modelVersions.length > 0) {
+      // Newest upload date among ALL installed versions of this model. When the model is
+      // installed for multiple consumers, the date check defaults to the LATEST installed
+      // date, so a file uploaded between two installs is never flagged as an update as long
+      // as the newest upload is already installed.
+      let newestInstalledDate = 0;
+      for (const iv of model.modelVersions) {
+        if (installedVersions.has(iv.id)) {
+          const d = new Date(iv.publishedAt || iv.createdAt || 0).getTime();
+          if (Number.isFinite(d) && d > newestInstalledDate) newestInstalledDate = d;
+        }
+      }
+
       // Sort by upload/publish date (newest first) so the "latest" is a date decision and
       // older uploads that happen to sit at index 0 are never reported as an update.
       const byDate = [...model.modelVersions].sort((a, b) => {
@@ -474,7 +486,13 @@ export const BrowseTab: React.FC<BrowseTabProps> = ({ onQueueDownload, initialQu
       for (const ver of byDate) {
         const isInstalled = installedVersions.has(ver.id);
         const isIgnored = ignoredSet.has(`${model.id}_${ver.id}`);
-        if (!isInstalled && !isIgnored) {
+        const vDate = new Date(ver.publishedAt || ver.createdAt || 0).getTime();
+        if (
+          !isInstalled &&
+          !isIgnored &&
+          Number.isFinite(vDate) &&
+          vDate > newestInstalledDate
+        ) {
           hasUninstalledNewer = true;
           latestUnignoredVersion = ver;
           break;
