@@ -382,6 +382,25 @@ export const DownloadsTab: React.FC = () => {
                   {task.error && <span className="text-red-400 font-sans font-medium">{task.error}</span>}
                 </div>
 
+                {task.status === 'completed' && task.note && (
+                  <div
+                    className={`p-3 border rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-fadeIn ${
+                      /(NOT|could not|Could not|still on disk)/.test(task.note)
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 glow-amber'
+                        : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 glow-emerald'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {/(NOT|could not|Could not|still on disk)/.test(task.note) ? (
+                        <AlertTriangle size={16} className="shrink-0 text-amber-400" />
+                      ) : (
+                        <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+                      )}
+                      <span>{task.note}</span>
+                    </div>
+                  </div>
+                )}
+
                 {task.status === 'failed' && (task.isHashMismatch || task.error?.toLowerCase().includes('sha256') || task.error?.toLowerCase().includes('hash')) && (
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-fadeIn glow-amber">
                     <div className="flex items-center gap-2 text-amber-300">

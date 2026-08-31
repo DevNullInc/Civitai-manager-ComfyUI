@@ -304,6 +304,7 @@ export interface DownloadTask {
   deleteOldVersionFile?: string;
   deleteOldModelId?: string;
   completedAt?: string;
+  note?: string;
 }
 
 export interface LocalModel {

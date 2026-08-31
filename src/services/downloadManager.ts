@@ -541,9 +541,13 @@ export class DownloadManager {
             } else {
               await dbManager.run('DELETE FROM local_models WHERE file_path = ?;', [oldPath]);
             }
+            task.note = `Previous version removed: the superseded file "${path.basename(oldPath)}" was confirmed deleted and its old Library entry was removed. This updated version is now in your Library.`;
+          } else {
+            task.note = `Previous version was not deleted: the old file "${path.basename(oldPath)}" could not be found on disk (it may already be gone), so nothing was removed.`;
           }
         } catch (delErr) {
           logger.warn(`Failed to delete superseded version file ${task.deleteOldVersionFile}:`, delErr);
+          task.note = `Previous version could NOT be deleted: "${path.basename(task.deleteOldVersionFile)}" is still on disk. Check file permissions or delete it manually.`;
         }
       }
 
