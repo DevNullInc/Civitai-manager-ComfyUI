@@ -57,6 +57,42 @@ let currentConfig: AppConfig = {
   local_api_port: 5174,
 };
 
+function isValidFolderPath(p: string): boolean {
+  const s = (p || '').trim();
+  if (!s || s.length < 3 || s.length > 500) return false;
+  if (/[\0<>:"|?*\x00-\x1F]/.test(s)) return false;
+  if (/[`$;|&]/.test(s)) return false;
+  const segs = s.split(/[\\/]+/);
+  if (segs.includes('..') || segs.includes('.')) return false;
+  const isWinAbs = /^[a-zA-Z]:[\\/]/.test(s);
+  const isUnc = /^\\\\[^\\]+\\[^\\]+/.test(s);
+  const isUnixAbs = /^\//.test(s);
+  if (!isWinAbs && !isUnc && !isUnixAbs) return false;
+  if (s.slice(2).includes(':')) return false;
+  return true;
+}
+function sanitizeFolderPath(p: string): string | null {
+  const t = (p || '').trim().replace(/\\{2,}/g, '\\');
+  if (!t) return null;
+  if (!isValidFolderPath(t)) return null;
+  if (t.length > 3 && /[\\/]$/.test(t)) return t.replace(/[\\/]+$/, '');
+  return t;
+}
+function sanitizeFolderList(list: any): string[] {
+  if (!Array.isArray(list)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of list) {
+    const s = sanitizeFolderPath(String(raw || ''));
+    if (!s) continue;
+    const k = s.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+  }
+  return out;
+}
+
 async function createWindow() {
   Menu.setApplicationMenu(null);
 
@@ -999,6 +1035,37 @@ function startHttpBridgeServer() {
         res.end(JSON.stringify(currentConfig));
       } else if (url === '/api/save-config' && req.method === 'POST') {
         const body = await getBody();
+        // Sanitize folder paths server-side — never trust client-supplied paths
+        if (body.comfyui_root !== undefined) {
+          const s = body.comfyui_root ? sanitizeFolderPath(String(body.comfyui_root)) : '';
+          if (body.comfyui_root && !s) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid comfyui_root path' }));
+            return;
+          }
+          body.comfyui_root = s || '';
+        }
+        if (body.comfyui_folders !== undefined) {
+          body.comfyui_folders = sanitizeFolderList(body.comfyui_folders);
+        }
+        if (body.comfyui_install_dir !== undefined) {
+          const s = body.comfyui_install_dir ? sanitizeFolderPath(String(body.comfyui_install_dir)) : '';
+          if (body.comfyui_install_dir && !s) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid comfyui_install_dir path' }));
+            return;
+          }
+          body.comfyui_install_dir = s || '';
+        }
+        if (body.comfyui_custom_nodes_dir !== undefined) {
+          const s = body.comfyui_custom_nodes_dir ? sanitizeFolderPath(String(body.comfyui_custom_nodes_dir)) : '';
+          if (body.comfyui_custom_nodes_dir && !s) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid comfyui_custom_nodes_dir path' }));
+            return;
+          }
+          body.comfyui_custom_nodes_dir = s || '';
+        }
         currentConfig = { ...currentConfig, ...body };
 
         if (body.comfyui_root !== undefined) {
@@ -1656,6 +1723,25 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('save-config', async (_event, newConfig: Partial<AppConfig>) => {
+    // Sanitize folder inputs before persisting
+    if (newConfig.comfyui_root !== undefined) {
+      const s = newConfig.comfyui_root ? sanitizeFolderPath(String(newConfig.comfyui_root)) : '';
+      if (newConfig.comfyui_root && !s) throw new Error('Invalid comfyui_root path');
+      newConfig.comfyui_root = s || '';
+    }
+    if (newConfig.comfyui_folders !== undefined) {
+      newConfig.comfyui_folders = sanitizeFolderList(newConfig.comfyui_folders as any);
+    }
+    if (newConfig.comfyui_install_dir !== undefined) {
+      const s = newConfig.comfyui_install_dir ? sanitizeFolderPath(String(newConfig.comfyui_install_dir)) : '';
+      if (newConfig.comfyui_install_dir && !s) throw new Error('Invalid comfyui_install_dir path');
+      newConfig.comfyui_install_dir = s || '';
+    }
+    if (newConfig.comfyui_custom_nodes_dir !== undefined) {
+      const s = newConfig.comfyui_custom_nodes_dir ? sanitizeFolderPath(String(newConfig.comfyui_custom_nodes_dir)) : '';
+      if (newConfig.comfyui_custom_nodes_dir && !s) throw new Error('Invalid comfyui_custom_nodes_dir path');
+      newConfig.comfyui_custom_nodes_dir = s || '';
+    }
     currentConfig = { ...currentConfig, ...newConfig };
 
     if (newConfig.civitai_api_key !== undefined) {

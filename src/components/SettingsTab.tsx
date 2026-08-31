@@ -220,7 +220,36 @@ export const SettingsTab: React.FC = () => {
     if (folderBrowser?.target === 'install') {
       handleComfyUIInstallDirChange(path, true);
     } else {
-      setNewFolderInput(path);
+      // Browse should auto-add — no extra click needed
+      const sanitized = sanitizeFolderPath(path);
+      if (!sanitized) {
+        setImportError(`Invalid folder path: ${path}`);
+        setTimeout(() => setImportError(null), 5000);
+        setFolderBrowser(null);
+        return;
+      }
+      if (config.comfyui_folders.some((f) => f.toLowerCase() === sanitized.toLowerCase())) {
+        setNewFolderInput('');
+        setFolderBrowser(null);
+        return;
+      }
+      const updatedFolders = [...config.comfyui_folders, sanitized];
+      setConfig({
+        ...config,
+        comfyui_folders: updatedFolders,
+        comfyui_root: updatedFolders[0] || '',
+      });
+      setNewFolderInput('');
+      if (window.civitaiAPI?.scaffoldModelFolders) {
+        window.civitaiAPI.scaffoldModelFolders(sanitized).then((results: any) => {
+          let count = 0;
+          if (Array.isArray(results)) for (const r of results) count += r.created?.length || 0;
+          if (count > 0) {
+            setScaffoldFeedback({ success: true, message: `Created ${count} missing ComfyUI model subfolder${count !== 1 ? 's' : ''} in ${sanitized}` });
+            setTimeout(() => setScaffoldFeedback(null), 7000);
+          }
+        }).catch(() => {});
+      }
     }
     setFolderBrowser(null);
   };
@@ -321,6 +350,35 @@ export const SettingsTab: React.FC = () => {
     return p.trim().replace(/\\{2,}/g, '\\');
   };
 
+  /** Only absolute folder paths. Rejects relative, URLs, shell metachars and traversal. */
+  const isValidFolderPath = (raw: string): boolean => {
+    const p = raw.trim();
+    if (!p || p.length < 3 || p.length > 500) return false;
+    if (/[\0<>:"|?*\x00-\x1F]/.test(p)) return false;
+    // shell injection chars must not appear anywhere in a folder path
+    if (/[`$;|&]/.test(p)) return false;
+    // no .. segments
+    const segs = p.split(/[\\/]+/);
+    if (segs.includes('..') || segs.includes('.')) return false;
+    // Windows absolute C:\ or C:/ or UNC \\server\share or Unix /
+    const isWinAbs = /^[a-zA-Z]:[\\/]/.test(p);
+    const isUnc = /^\\\\[^\\]+\\[^\\]+/.test(p);
+    const isUnixAbs = /^\//.test(p);
+    if (!isWinAbs && !isUnc && !isUnixAbs) return false;
+    // colon only at drive letter position
+    if (p.slice(2).includes(':')) return false;
+    return true;
+  };
+
+  const sanitizeFolderPath = (raw: string): string | null => {
+    const n = normalizeFolderPath(raw);
+    if (!n) return null;
+    if (!isValidFolderPath(n)) return null;
+    // strip trailing slash except root
+    if (n.length > 3 && /[\\/]$/.test(n)) return n.replace(/[\\/]+$/, '');
+    return n;
+  };
+
   useEffect(() => {
     const loadConfig = async () => {
       if (window.civitaiAPI) {
@@ -330,7 +388,7 @@ export const SettingsTab: React.FC = () => {
             ? loaded.comfyui_folders
             : (loaded.comfyui_root ? [loaded.comfyui_root] : []);
 
-          const folders = rawFolders.map(normalizeFolderPath).filter(Boolean);
+          const folders = rawFolders.map((p: string) => sanitizeFolderPath(p) ?? '').filter(Boolean) as string[];
 
           setConfig({
             comfyui_root: normalizeFolderPath(loaded.comfyui_root || folders[0] || ''),
@@ -386,7 +444,9 @@ export const SettingsTab: React.FC = () => {
       // If install_dir was just typed (onChange with commitFolders=false), folders may
       // still be stale — ensure the derived <install>\models folder is present without
       // dropping user-added extra model dirs (including ones that also end with \Models).
-      let foldersForSave = config.comfyui_folders.map(normalizeFolderPath).filter(Boolean);
+      let foldersForSave = config.comfyui_folders
+        .map((p) => sanitizeFolderPath(p) ?? '')
+        .filter(Boolean) as string[];
       const installTrimmed = (config.comfyui_install_dir || '').trim();
       if (installTrimmed) {
         const derived = deriveModelsFolder(installTrimmed);
@@ -487,11 +547,17 @@ export const SettingsTab: React.FC = () => {
   };
 
   const addFolder = () => {
-    const trimmed = normalizeFolderPath(newFolderInput);
-    if (!trimmed) return;
-    if (config.comfyui_folders.includes(trimmed)) return;
+    const sanitized = sanitizeFolderPath(newFolderInput);
+    if (!sanitized) {
+      if (newFolderInput.trim()) {
+        setImportError(`Invalid folder path: ${newFolderInput.trim()}`);
+        setTimeout(() => setImportError(null), 5000);
+      }
+      return;
+    }
+    if (config.comfyui_folders.some((f) => f.toLowerCase() === sanitized.toLowerCase())) return;
 
-    const updatedFolders = [...config.comfyui_folders, trimmed];
+    const updatedFolders = [...config.comfyui_folders, sanitized];
     setConfig({
       ...config,
       comfyui_folders: updatedFolders,
@@ -501,7 +567,7 @@ export const SettingsTab: React.FC = () => {
 
     // Auto-build missing standard ComfyUI model subdirectories in newly added folder
     if (window.civitaiAPI?.scaffoldModelFolders) {
-      window.civitaiAPI.scaffoldModelFolders(trimmed).then((results: any) => {
+      window.civitaiAPI.scaffoldModelFolders(sanitized).then((results: any) => {
         let count = 0;
         if (Array.isArray(results)) {
           for (const r of results) count += r.created?.length || 0;
@@ -509,7 +575,7 @@ export const SettingsTab: React.FC = () => {
         if (count > 0) {
           setScaffoldFeedback({
             success: true,
-            message: `Created ${count} missing ComfyUI model subfolder${count !== 1 ? 's' : ''} in ${trimmed}`,
+            message: `Created ${count} missing ComfyUI model subfolder${count !== 1 ? 's' : ''} in ${sanitized}`,
           });
           setTimeout(() => setScaffoldFeedback(null), 7000);
         }
