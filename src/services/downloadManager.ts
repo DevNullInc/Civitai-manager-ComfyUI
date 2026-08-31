@@ -159,6 +159,17 @@ export class DownloadManager {
     }
   }
 
+  /** Flush all in-memory tasks to SQLite and stop the periodic timer. Called on app shutdown. */
+  async flushAndStopPersistence(): Promise<void> {
+    if (this.persistenceTimer) {
+      clearInterval(this.persistenceTimer);
+      this.persistenceTimer = null;
+    }
+    if (!this.dbReady) return;
+    // Persist current snapshot — deletions have already removed rows, so only live tasks are written.
+    await this.persistAll();
+  }
+
   setMaxConcurrent(max: number) {
     this.maxConcurrent = Math.max(1, Math.min(10, Math.round(max || 2)));
     logger.info(`Download queue concurrency set to ${this.maxConcurrent}`);
@@ -199,7 +210,7 @@ export class DownloadManager {
     return fullTask;
   }
 
-  pauseTask(id: string) {
+  async pauseTask(id: string): Promise<void> {
     const active = this.activeDownloads.get(id);
     if (active) {
       active.cancel();
@@ -210,21 +221,21 @@ export class DownloadManager {
       task.status = 'paused';
       task.speedBps = 0;
       logger.info(`Paused download task: ${task.fileName}`);
-      this.persistTask(id).catch(() => {});
+      await this.persistTask(id);
     }
   }
 
-  resumeTask(id: string) {
+  async resumeTask(id: string): Promise<void> {
     const task = this.tasks.get(id);
     if (task && (task.status === 'paused' || task.status === 'failed')) {
       task.status = 'pending';
       task.error = undefined;
-      this.persistTask(id).catch(() => {});
+      await this.persistTask(id);
       this.processQueue();
     }
   }
 
-  cancelTask(id: string) {
+  async cancelTask(id: string): Promise<void> {
     const active = this.activeDownloads.get(id);
     if (active) {
       active.cancel();
@@ -246,7 +257,7 @@ export class DownloadManager {
       this.tasks.delete(id);
       logger.info(`Cancelled download task and deleted partial data: ${task.fileName}`);
     }
-    this.removePersistedRecord(id);
+    await this.removePersistedRecord(id);
     this.processQueue();
   }
 

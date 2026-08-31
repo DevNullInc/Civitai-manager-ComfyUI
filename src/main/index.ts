@@ -1366,17 +1366,17 @@ function startHttpBridgeServer() {
         res.end(JSON.stringify(tasks));
       } else if (url === '/api/pause-download' && req.method === 'POST') {
         const body = await getBody();
-        downloadManager.pauseTask(body.id);
+        await downloadManager.pauseTask(body.id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
       } else if (url === '/api/resume-download' && req.method === 'POST') {
         const body = await getBody();
-        downloadManager.resumeTask(body.id);
+        await downloadManager.resumeTask(body.id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
       } else if (url === '/api/cancel-download' && req.method === 'POST') {
         const body = await getBody();
-        downloadManager.cancelTask(body.id);
+        await downloadManager.cancelTask(body.id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
       } else if (url === '/api/delete-download' && req.method === 'POST') {
@@ -1997,18 +1997,18 @@ function registerIpcHandlers() {
     return task;
   });
 
-  ipcMain.handle('pause-download', (_event: unknown, id: string) => {
-    downloadManager.pauseTask(id);
+  ipcMain.handle('pause-download', async (_event: unknown, id: string) => {
+    await downloadManager.pauseTask(id);
     return true;
   });
 
-  ipcMain.handle('resume-download', (_event: unknown, id: string) => {
-    downloadManager.resumeTask(id);
+  ipcMain.handle('resume-download', async (_event: unknown, id: string) => {
+    await downloadManager.resumeTask(id);
     return true;
   });
 
-  ipcMain.handle('cancel-download', (_event: unknown, id: string) => {
-    downloadManager.cancelTask(id);
+  ipcMain.handle('cancel-download', async (_event: unknown, id: string) => {
+    await downloadManager.cancelTask(id);
     return true;
   });
 
@@ -2352,6 +2352,14 @@ if (!gotTheLock) {
       mainWindow.show();
       mainWindow.focus();
     }
+  });
+
+  // Ensure download queue deletions/persists are flushed before the process exits.
+  // Without this, a fire-and-forget DELETE that hasn't committed yet resurrects via hydrateFromDb() on next launch.
+  app.on('before-quit', async (e) => {
+    try {
+      await downloadManager.flushAndStopPersistence();
+    } catch {}
   });
 
   app.whenReady().then(async () => {
