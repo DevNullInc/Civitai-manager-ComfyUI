@@ -1154,21 +1154,24 @@ function startHttpBridgeServer() {
       ) {
         let nodeType = '';
         let searchGitHub = false;
+        let forceRefresh = false;
         if (req.method === 'GET') {
           const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
           nodeType = parsedUrl.searchParams.get('nodeType') || parsedUrl.searchParams.get('node_type') || parsedUrl.searchParams.get('type') || parsedUrl.searchParams.get('name') || '';
           searchGitHub = parsedUrl.searchParams.get('searchGitHub') === 'true';
+          forceRefresh = parsedUrl.searchParams.get('forceRefresh') === 'true';
         } else {
           const body = await getBody();
           nodeType = body.nodeType || body.node_type || body.type || body.name || '';
           searchGitHub = body.searchGitHub === true;
+          forceRefresh = body.forceRefresh === true;
         }
         const targetNodesDir = resolveCustomNodesDir(currentConfig);
         const resolution = await nodeResolverService.resolveMissingNode(
           nodeType,
           targetNodesDir,
           currentConfig.comfyui_install_dir,
-          { searchGitHub }
+          { searchGitHub, forceRefresh }
         );
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(resolution));
@@ -1839,13 +1842,13 @@ function registerIpcHandlers() {
   });
 
   // Node Resolution & GitHub Fallback Handlers
-  ipcMain.handle('resolve-missing-node', async (_event: unknown, nodeType: string, customNodesDir?: string, searchGitHub = false) => {
+  ipcMain.handle('resolve-missing-node', async (_event: unknown, nodeType: string, customNodesDir?: string, searchGitHub = false, forceRefresh = false) => {
     const targetNodesDir = resolveCustomNodesDir(currentConfig, customNodesDir);
     return await nodeResolverService.resolveMissingNode(
       nodeType,
       targetNodesDir,
       currentConfig.comfyui_install_dir,
-      { searchGitHub: !!searchGitHub }
+      { searchGitHub: !!searchGitHub, forceRefresh: !!forceRefresh }
     );
   });
 

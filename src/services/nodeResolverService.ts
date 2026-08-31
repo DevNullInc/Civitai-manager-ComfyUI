@@ -621,7 +621,7 @@ export class NodeResolverService {
     nodeType: string,
     customNodesDir?: string,
     installDir?: string,
-    opts?: { searchGitHub?: boolean }
+    opts?: { searchGitHub?: boolean; forceRefresh?: boolean }
   ): Promise<NodeResolutionResult> {
     const cleanType = nodeType.trim();
     const result: NodeResolutionResult = {
@@ -657,7 +657,7 @@ export class NodeResolverService {
     // Persistent cache (SQLite): previous outcomes — successful or failed — are
     // honored so that loading the same workflow again never re-attempts a node.
     // Passed only when the caller explicitly asks for a fresh (re-)search.
-    if (!opts?.searchGitHub) {
+    if (!opts?.searchGitHub && !opts?.forceRefresh) {
       const cached = await this.getCachedResolution(cleanType, customNodesDir);
       if (cached) return cached;
     }

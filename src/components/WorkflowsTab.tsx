@@ -95,7 +95,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {}
+    } catch { }
     return [];
   });
   const [selectedWorkflowIndex, setSelectedWorkflowIndex] = useState<number>(0);
@@ -126,7 +126,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       } else {
         sessionStorage.removeItem('civitai_workflows_state');
       }
-    } catch {}
+    } catch { }
   }, [workflows]);
 
   // Load configured workflows on initial mount
@@ -164,9 +164,8 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
         }
         setScanFeedback({
           success: true,
-          message: `Found ${results.length} ${results.length === 1 ? 'workflow' : 'workflows'} in your ComfyUI directory${
-            forceRescan ? '' : ' (click Rescan for an updated refresh)'
-          }.`,
+          message: `Found ${results.length} ${results.length === 1 ? 'workflow' : 'workflows'} in your ComfyUI directory${forceRescan ? '' : ' (click Rescan for an updated refresh)'
+            }.`,
         });
         // Always re-resolve the active workflow's nodes after a scan. Previously this
         // only ran when the queue was empty, so a queue restored from sessionStorage
@@ -221,7 +220,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   // the local install, ComfyUI's built-in core nodes (parsed from install nodes.py +
   // comfy_extras), and the curated registry. GitHub is never queried via the API here;
   // the per-node card opens GitHub in the browser instead.
-  const resolveWorkflowNodes = async (wf?: WorkflowInfo) => {
+  const resolveWorkflowNodes = async (wf?: WorkflowInfo, forceRefresh = false) => {
     if (!wf || !wf.nodeTypes || wf.nodeTypes.length === 0 || !window.civitaiAPI?.resolveMissingNode) {
       return;
     }
@@ -231,7 +230,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
     for (const nodeType of wf.nodeTypes) {
       try {
-        const res = await window.civitaiAPI.resolveMissingNode(nodeType);
+        const res = await window.civitaiAPI.resolveMissingNode(nodeType, undefined, undefined, forceRefresh);
         newResolutions[nodeType] = res;
       } catch (err) {
         newResolutions[nodeType] = {
@@ -535,7 +534,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           try {
             if (key === 'workflow') workflowData = JSON.parse(val);
             if (key === 'prompt') promptData = JSON.parse(val);
-          } catch {}
+          } catch { }
         }
       }
 
@@ -640,11 +639,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       {/* Scan Feedback Banner */}
       {scanFeedback && (
         <div
-          className={`p-3 rounded-2xl text-xs flex items-center justify-between gap-2 border transition-all animate-fadeIn ${
-            scanFeedback.success
-              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
-              : 'bg-amber-500/15 border-amber-500/40 text-amber-200'
-          }`}
+          className={`p-3 rounded-2xl text-xs flex items-center justify-between gap-2 border transition-all animate-fadeIn ${scanFeedback.success
+            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+            : 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+            }`}
         >
           <div className="flex items-center gap-2">
             {scanFeedback.success ? (
@@ -688,7 +686,11 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           </div>
 
           <button
-            onClick={() => loadWorkflows(true)}
+            onClick={() => {
+              loadWorkflows(true);
+              const active = workflows.length > 0 ? workflows[selectedWorkflowIndex] : null;
+              if (active) resolveWorkflowNodes(active, true);
+            }}
             disabled={isLoadingWorkflows}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-purple-900/30 border border-slate-700 hover:border-purple-500/50 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95"
             title="Rescan ComfyUI directories for newly downloaded or modified workflows"
@@ -737,11 +739,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           }
         }}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-3xl p-6 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-2 ${
-          isDragOver
-            ? 'border-cyan-400 bg-cyan-950/30 scale-[1.01]'
-            : 'border-slate-800/80 hover:border-slate-700 bg-slate-900/40 hover:bg-slate-900/60'
-        }`}
+        className={`border-2 border-dashed rounded-3xl p-6 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-2 ${isDragOver
+          ? 'border-cyan-400 bg-cyan-950/30 scale-[1.01]'
+          : 'border-slate-800/80 hover:border-slate-700 bg-slate-900/40 hover:bg-slate-900/60'
+          }`}
       >
         <div className="p-3 rounded-full bg-slate-800/80 text-cyan-400 shadow-inner">
           <Upload size={22} className={isDragOver ? 'animate-bounce' : ''} />
@@ -767,31 +768,28 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
             <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-xl">
               <button
                 onClick={() => setViewMode('both')}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                  viewMode === 'both'
-                    ? 'bg-purple-600 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${viewMode === 'both'
+                  ? 'bg-purple-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Split View
               </button>
               <button
                 onClick={() => setViewMode('map')}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                  viewMode === 'map'
-                    ? 'bg-purple-600 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${viewMode === 'map'
+                  ? 'bg-purple-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Visual Map
               </button>
               <button
                 onClick={() => setViewMode('matrix')}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                  viewMode === 'matrix'
-                    ? 'bg-purple-600 text-white shadow'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${viewMode === 'matrix'
+                  ? 'bg-purple-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Dependency Matrix
               </button>
@@ -805,11 +803,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                 <div key={idx} className="relative group shrink-0">
                   <button
                     onClick={() => handleSelectWorkflow(idx)}
-                    className={`flex items-center gap-2.5 pl-4 pr-8 py-3 rounded-2xl border transition-all cursor-pointer text-left ${
-                      isSelected
-                        ? 'bg-linear-to-r from-purple-950/60 to-indigo-950/60 border-purple-500/60 shadow-lg shadow-purple-900/30'
-                        : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 text-slate-300'
-                    }`}
+                    className={`flex items-center gap-2.5 pl-4 pr-8 py-3 rounded-2xl border transition-all cursor-pointer text-left ${isSelected
+                      ? 'bg-linear-to-r from-purple-950/60 to-indigo-950/60 border-purple-500/60 shadow-lg shadow-purple-900/30'
+                      : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 text-slate-300'
+                      }`}
                   >
                     {wf.fileType === 'png' ? (
                       <ImageIcon size={18} className="text-emerald-400 shrink-0" />
@@ -846,11 +843,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
         <div className="glass-panel p-5 rounded-3xl border border-slate-800 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div
-              className={`p-3 rounded-2xl ${
-                isWorkflowFullyReady
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-              }`}
+              className={`p-3 rounded-2xl ${isWorkflowFullyReady
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                }`}
             >
               {isWorkflowFullyReady ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
             </div>
@@ -872,20 +868,18 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           {/* Quick Metrics Badges */}
           <div className="flex items-center gap-2">
             <span
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
-                missingModelsCount === 0
-                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
-                  : 'bg-amber-950/40 text-amber-300 border-amber-500/30'
-              }`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${missingModelsCount === 0
+                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
+                : 'bg-amber-950/40 text-amber-300 border-amber-500/30'
+                }`}
             >
               {installedModelsCount}/{totalModelsCount} Models Ready
             </span>
             <span
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
-                missingCustomNodesCount === 0
-                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
-                  : 'bg-rose-950/40 text-rose-300 border-rose-500/30'
-              }`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${missingCustomNodesCount === 0
+                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
+                : 'bg-rose-950/40 text-rose-300 border-rose-500/30'
+                }`}
             >
               {installedCustomNodesCount}/{totalCustomNodesCount} Nodes Ready
             </span>
@@ -936,11 +930,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                   return (
                     <div
                       key={mIdx}
-                      className={`p-4 rounded-2xl border transition-all ${
-                        model.isInstalled
-                          ? 'bg-slate-900/60 border-slate-800/80 text-slate-200'
-                          : 'bg-amber-950/10 border-amber-500/30 text-amber-200'
-                      }`}
+                      className={`p-4 rounded-2xl border transition-all ${model.isInstalled
+                        ? 'bg-slate-900/60 border-slate-800/80 text-slate-200'
+                        : 'bg-amber-950/10 border-amber-500/30 text-amber-200'
+                        }`}
                     >
                       <div className="flex items-start md:items-center justify-between gap-4 flex-col md:flex-row">
                         <div className="space-y-1">
@@ -1045,7 +1038,8 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                           handleLocateInWorkflow(type);
                         }}
                         onInstalled={(folderName) => {
-                          // Update resolution locally
+                          // Update this node's resolution locally so the card flips
+                          // to "installed" immediately.
                           setNodeResolutions((prev) => ({
                             ...prev,
                             [nodeType]: {
@@ -1054,6 +1048,10 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
                               installedFolder: folderName,
                             },
                           }));
+                          // Re-resolve every node in the active workflow against disk
+                          // (bypassing the SQLite cache) so sibling node classes shipped
+                          // by the same extension also stop showing as missing.
+                          if (activeWorkflow) resolveWorkflowNodes(activeWorkflow, true);
                         }}
                       />
                     </div>
