@@ -42,6 +42,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = $PSScriptRoot
 $PidFile = Join-Path $ProjectRoot '.cmm.pid'
+$InstalledMarker = Join-Path $ProjectRoot '.installed'
 
 if ($Port -lt 1024 -or $Port -gt 65535) {
   Write-Status '!!' "Invalid Port ($Port). Must be between 1024 and 65535." 'Red'
@@ -264,6 +265,17 @@ function Stop-App {
 }
 
 function Ensure-NodeInstalled {
+  $nodeModulesDir = Join-Path $ProjectRoot 'node_modules'
+
+  # First-run watchdog: once the environment is proven (Node + node_modules present),
+  # later launches flat-skip the entire provisioning block — no node/npm/npx PATH
+  # probing, no winget/MSI fallback, no npm install. The only exception is a wiped
+  # ./node_modules, which falls through to a full re-provision (and re-stamp).
+  if (Test-Path $InstalledMarker) {
+    if (Test-Path $nodeModulesDir) { return }
+    Remove-Item $InstalledMarker -Force -ErrorAction SilentlyContinue
+  }
+
   $nodeCmd = Get-Command 'node' -ErrorAction SilentlyContinue
   $npmCmd = Get-Command 'npm' -ErrorAction SilentlyContinue
   $npxCmd = Get-Command 'npx' -ErrorAction SilentlyContinue
@@ -324,7 +336,6 @@ function Ensure-NodeInstalled {
   }
 
   # Check if project dependencies (node_modules) are installed
-  $nodeModulesDir = Join-Path $ProjectRoot 'node_modules'
   if (-not (Test-Path $nodeModulesDir)) {
     Write-Status '>>' 'node_modules not found. Installing project dependencies (npm install)...' 'Cyan'
     Push-Location $ProjectRoot
@@ -338,6 +349,9 @@ function Ensure-NodeInstalled {
       Pop-Location
     }
   }
+
+  # Stamp the completed first-run setup so every later launch skips installer work.
+  $null = New-Item -Path $InstalledMarker -ItemType File -Force
 }
 
 function Check-GitUpdates {

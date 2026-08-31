@@ -9,6 +9,7 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="$SCRIPT_DIR/.cmm.pid"
+INSTALLED_FILE="$SCRIPT_DIR/.installed"
 ACTION="${1:-start}"
 PORT=5173
 API_PORT=5174
@@ -88,6 +89,16 @@ if ! [[ "$API_PORT" =~ ^[0-9]+$ ]] || [ "$API_PORT" -lt 1024 ] || [ "$API_PORT" 
 fi
 
 ensure_node_installed() {
+  # First-run watchdog: once the environment is proven (node + node_modules present),
+  # later launches flat-skip the entire provisioning block. The only exception is a
+  # wiped ./node_modules, which falls through to a full re-provision (and re-stamp).
+  if [ -f "$INSTALLED_FILE" ]; then
+    if [ -d "$SCRIPT_DIR/node_modules" ]; then
+      return 0
+    fi
+    rm -f "$INSTALLED_FILE"
+  fi
+
   if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
     write_status "!" "Node.js runtime was not detected on this system." "$C_YELLOW"
     echo ""
@@ -102,6 +113,9 @@ ensure_node_installed() {
     (cd "$SCRIPT_DIR" && npm install)
     write_status "ok" "Dependencies installed successfully." "$C_GREEN"
   fi
+
+  # Stamp the completed first-run setup so every later launch skips installer work.
+  touch "$INSTALLED_FILE"
 }
 
 is_safe_to_kill() {

@@ -8,6 +8,8 @@ dist-app/
 .DS_Store
 scratch/
 .cmm.pid
+.cmm-update-check
+.installed
 tests/
 civitai_manager.sqlite-wal
 release/

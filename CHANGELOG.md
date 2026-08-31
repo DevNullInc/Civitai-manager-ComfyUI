@@ -131,6 +131,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - The C# `Add-Type` window-helper is compiled **lazily on first window focus** instead of on every invocation, so `status`/`stop`/`update`/etc. no longer pay a ~1s compiler round-trip.
   - Waiting for the Vite dev server now **polls the TCP port** until it accepts connections instead of a fixed 2-second sleep (usually ready well before that); restart's settle sleep was cut from 1s to 500ms.
   - `Get-RunningProcs`/`Stop-App` fetch all candidate command lines in a **single unfiltered WMI query** (~1s total) instead of one ~1s per-PID query — `status` went from ~6s to ~2s. (The `Win32_Process ... IN(...)` filter silently returns no rows on some machines, hence the unfiltered table scan.)
+- **First-Run `.installed` Marker (all launchers)**:
+  - Once a launcher has provisioned the environment (Node + `node_modules` present), it stamps a `.installed` file next to itself. On every later run the launchers **flat-skip the entire installer/dependency block** — no `node`/`npm`/`npx` PATH probing, no winget/MSI fallback, no `npm install` checks.
+  - If `node_modules` is later wiped, the marker is invalidated and the full re-provision (and re-stamp) runs again.
+  - Applied consistently to `cmm.ps1`, `cmm.sh` (and therefore `cmm.bat`, which delegates to `cmm.ps1`); the marker is git-ignored like `.cmm.pid`.
 
 - **Project Rebranded → Renegade Core Model Manager (RenegadeCMM)**:
   - Display name is now **Renegade Core Model Manager**; the short technical/project identifier is **RenegadeCMM** (repo, `productName`, app id, npm package, binary/installer artifacts). The `ComfyUI Edition` tagline and all legacy "CivitAI Model Manager"-style names were dropped.
