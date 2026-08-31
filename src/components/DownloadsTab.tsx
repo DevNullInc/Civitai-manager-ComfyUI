@@ -77,23 +77,18 @@ export const DownloadsTab: React.FC = () => {
     });
   };
 
-  const toggleSelectAllFinished = () => {
-    const finishedIds = tasks.filter((t) => t.status === 'completed').map((t) => t.id);
-    if (finishedIds.length === 0) return;
+  const toggleSelectAll = () => {
+    if (tasks.length === 0) return;
+    const allIds = tasks.map((t) => t.id);
     setSelected((prev) => {
-      const next = new Set(prev);
-      const shouldSelectAll = finishedIds.some((id) => !next.has(id));
-      finishedIds.forEach((id) => {
-        if (shouldSelectAll) next.add(id);
-        else next.delete(id);
-      });
-      return next;
+      const shouldSelectAll = allIds.some((id) => !prev.has(id));
+      return shouldSelectAll ? new Set(allIds) : new Set<string>();
     });
   };
 
   const existingSelectedCount = Array.from(selected).filter((id) => tasks.some((t) => t.id === id)).length;
   const finishedCount = tasks.filter((t) => t.status === 'completed').length;
-  const allFinishedSelected = finishedCount > 0 && tasks.filter((t) => t.status === 'completed').every((t) => selected.has(t.id));
+  const allSelected = tasks.length > 0 && tasks.every((t) => selected.has(t.id));
 
   const handleDeleteSelected = async () => {
     const ids = Array.from(selected).filter((id) => tasks.some((t) => t.id === id));
@@ -215,22 +210,22 @@ export const DownloadsTab: React.FC = () => {
       {tasks.length > 0 && (
         <div className="glass-panel p-3.5 rounded-2xl flex flex-wrap items-center gap-3 justify-between border border-slate-800 shadow-xl">
           <button
-            onClick={toggleSelectAllFinished}
-            disabled={finishedCount === 0}
+            onClick={toggleSelectAll}
+            disabled={tasks.length === 0}
             className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
-              allFinishedSelected
+              allSelected
                 ? 'bg-purple-600/20 border-purple-500/50 text-purple-200'
                 : 'bg-slate-900/80 border-slate-700/80 text-slate-300 hover:text-white hover:border-purple-500/40'
             }`}
-            title={allFinishedSelected ? 'Unselect all finished downloads' : `Select all finished downloads (${finishedCount})`}
+            title={allSelected ? 'Unselect all downloads' : `Select all downloads (${tasks.length})`}
           >
             <span className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
-              allFinishedSelected ? 'bg-purple-500 border-purple-400' : 'bg-slate-950 border-slate-600'
+              allSelected ? 'bg-purple-500 border-purple-400' : 'bg-slate-950 border-slate-600'
             }`}>
-              {allFinishedSelected && <Check size={13} className="text-white stroke-[3]" />}
+              {allSelected && <Check size={13} className="text-white stroke-[3]" />}
             </span>
             <span>
-              {allFinishedSelected ? 'Unselect Finished' : `Select Finished (${finishedCount})`}
+              {allSelected ? 'Unselect All' : `Select All (${tasks.length})`}
             </span>
           </button>
 
