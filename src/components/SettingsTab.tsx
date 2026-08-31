@@ -228,16 +228,10 @@ export const SettingsTab: React.FC = () => {
         setFolderBrowser(null);
         return;
       }
-      if (config.comfyui_folders.some((f) => f.toLowerCase() === sanitized.toLowerCase())) {
-        setNewFolderInput('');
-        setFolderBrowser(null);
-        return;
-      }
-      const updatedFolders = [...config.comfyui_folders, sanitized];
-      setConfig({
-        ...config,
-        comfyui_folders: updatedFolders,
-        comfyui_root: updatedFolders[0] || '',
+      setConfig((prev) => {
+        if (prev.comfyui_folders.some((f) => f.toLowerCase() === sanitized.toLowerCase())) return prev;
+        const updatedFolders = [...prev.comfyui_folders, sanitized];
+        return { ...prev, comfyui_folders: updatedFolders, comfyui_root: updatedFolders[0] || '' };
       });
       setNewFolderInput('');
       if (window.civitaiAPI?.scaffoldModelFolders) {
@@ -354,7 +348,8 @@ export const SettingsTab: React.FC = () => {
   const isValidFolderPath = (raw: string): boolean => {
     const p = raw.trim();
     if (!p || p.length < 3 || p.length > 500) return false;
-    if (/[\0<>:"|?*\x00-\x1F]/.test(p)) return false;
+    // colon handled separately (allowed only as C:\) so exclude it here
+    if (/[\0<>"|?*\x00-\x1F]/.test(p)) return false;
     // shell injection chars must not appear anywhere in a folder path
     if (/[`$;|&]/.test(p)) return false;
     // no .. segments
@@ -557,11 +552,10 @@ export const SettingsTab: React.FC = () => {
     }
     if (config.comfyui_folders.some((f) => f.toLowerCase() === sanitized.toLowerCase())) return;
 
-    const updatedFolders = [...config.comfyui_folders, sanitized];
-    setConfig({
-      ...config,
-      comfyui_folders: updatedFolders,
-      comfyui_root: updatedFolders[0] || '',
+    setConfig((prev) => {
+      if (prev.comfyui_folders.some((f) => f.toLowerCase() === sanitized.toLowerCase())) return prev;
+      const updatedFolders = [...prev.comfyui_folders, sanitized];
+      return { ...prev, comfyui_folders: updatedFolders, comfyui_root: updatedFolders[0] || '' };
     });
     setNewFolderInput('');
 

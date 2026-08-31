@@ -60,7 +60,7 @@ let currentConfig: AppConfig = {
 function isValidFolderPath(p: string): boolean {
   const s = (p || '').trim();
   if (!s || s.length < 3 || s.length > 500) return false;
-  if (/[\0<>:"|?*\x00-\x1F]/.test(s)) return false;
+  if (/[\0<>"|?*\x00-\x1F]/.test(s)) return false;
   if (/[`$;|&]/.test(s)) return false;
   const segs = s.split(/[\\/]+/);
   if (segs.includes('..') || segs.includes('.')) return false;
