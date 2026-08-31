@@ -25,6 +25,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Added `cmm:start:mac`, `cmm:stop:mac`, `cmm:restart:mac`, `cmm:status:mac`, `cmm:package:mac` npm convenience scripts in `package.json`.
   - `cmm.sh` is now explicitly Linux-only; macOS users should use `cmm-mac.sh`.
 
+- **"Scan Folders" Now Shows Result Feedback**:
+  - Clicking **Scan Folders** / **Rescan ComfyUI Folder** in the Workflows tab shows a dismissible banner with the outcome — e.g. "Found N workflows in your ComfyUI directory" (green) or a failure/empty notice (amber) — so the action always gives visible confirmation instead of silently returning.
+- **Orphaned Build-Asset Janitor (`dist/assets` cleanup)**:
+  - Added a lightweight, non-destructive cleanup that prunes stale hashed renderer bundles from `dist/assets` — only `index-*.js` / `index-*.css` are ever touched; the folder, vendor chunks, and the current build's entry points are never wiped.
+  - Keeps every asset referenced by `dist/index.html` **plus** the single most-recently-generated js/css pair as a safety net, then purges all older orphaned revisions from previous build cycles (Vite's `emptyOutDir: false` otherwise lets these accumulate indefinitely).
+  - Runs automatically on `stop` (and `restart`, once processes are fully terminated and idle) in **`cmm.ps1` (native PowerShell 5.1)**, **`cmm.sh` (Linux)**, and **`cmm-mac.sh` (macOS, POSIX)**, plus as a standalone `clean-assets` launcher action and a `--clean-assets`/`-CleanAssets` flag.
+  - Exposed as `npm run clean:assets` (`node scripts/clean-assets.js`, supporting `--dry-run` and `--quiet`) with robust error handling — missing files/directories are not errors, and the command aborts safely if `index.html` references can't be parsed. Fully idempotent.
+  - Deliberately **not** run while the app is serving assets (startup/hot-reload/build-in-progress): a mid-flight prune could delete a bundle a live viewport may still reload, so pruning is gated to shutdown when no process is reading `dist`.
+
 - **Automatic ComfyUI Model Subfolder Scaffolding & Verification**:
   - Automatically creates and verifies the full standard ComfyUI model subfolder tree (`checkpoints/`, `loras/`, `vae/`, `controlnet/`, `diffusion_models/`, `upscale_models/`, `clip/`, `clip_vision/`, `text_encoders/`, `unet/`, `hypernetworks/`, `gligen/`, `style_models/`, `model_patches/`, `configs/`, `vae_approx/`, `ipadapter/`, `insightface/`, `photomaker/`, `pulid/`, `reactor/`, `gguf/`, `wildcards/`, `ultralytics/`, `yolo/`, `sams/`) inside configured model directories if any subdirectories are missing.
   - Workflows directory is explicitly omitted from model folders since workflows are managed separately (`workflows/`, `user/default/workflows/`).

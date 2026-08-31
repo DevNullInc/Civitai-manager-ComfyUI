@@ -101,6 +101,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   const [selectedWorkflowIndex, setSelectedWorkflowIndex] = useState<number>(0);
   const [savedWorkflows, setSavedWorkflows] = useState<WorkflowInfo[]>([]);
   const [isLoadingWorkflows, setIsLoadingWorkflows] = useState<boolean>(false);
+  const [scanFeedback, setScanFeedback] = useState<{ message: string; success: boolean } | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'both' | 'map' | 'matrix'>('both');
   const [selectedNodeId, setSelectedNodeId] = useState<string | number | null>(null);
@@ -161,6 +162,12 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
             setSelectedWorkflowIndex(0);
           }
         }
+        setScanFeedback({
+          success: true,
+          message: `Found ${results.length} ${results.length === 1 ? 'workflow' : 'workflows'} in your ComfyUI directory${
+            forceRescan ? '' : ' (click Rescan for an updated refresh)'
+          }.`,
+        });
         // Always re-resolve the active workflow's nodes after a scan. Previously this
         // only ran when the queue was empty, so a queue restored from sessionStorage
         // kept nodeResolutions empty — the Custom Node Extensions panel read
@@ -168,9 +175,15 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
         // even when its extension (e.g. TIPO, MXReroute) isn't installed.
         const active = workflows.length > 0 ? workflows[selectedWorkflowIndex] : results[0];
         if (active) resolveWorkflowNodes(active);
+      } else {
+        setScanFeedback({ success: false, message: 'Scan returned no results.' });
       }
     } catch (err) {
       console.error('Failed to scan workflows:', err);
+      setScanFeedback({
+        success: false,
+        message: 'Failed to scan ComfyUI directories. Check your installation path in Settings.',
+      });
     } finally {
       setIsLoadingWorkflows(false);
     }
@@ -623,6 +636,34 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Scan Feedback Banner */}
+      {scanFeedback && (
+        <div
+          className={`p-3 rounded-2xl text-xs flex items-center justify-between gap-2 border transition-all animate-fadeIn ${
+            scanFeedback.success
+              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+              : 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {scanFeedback.success ? (
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+            ) : (
+              <AlertCircle size={16} className="shrink-0 text-amber-400" />
+            )}
+            <span>{scanFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setScanFeedback(null)}
+            className="text-slate-400 hover:text-slate-200 text-xs px-1.5 py-0.5 rounded cursor-pointer"
+            aria-label="Dismiss scan feedback"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Saved ComfyUI Workflows Dropdown Selector */}
       <div className="glass-panel p-4 rounded-3xl border border-slate-800/90 shadow-xl bg-slate-900/50 backdrop-blur-md space-y-2.5">

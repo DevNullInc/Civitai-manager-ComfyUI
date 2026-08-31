@@ -42,7 +42,8 @@
     "cmm:restart:mac": "./cmm-mac.sh restart",
     "cmm:status:mac": "./cmm-mac.sh status",
     "cmm:package:mac": "./cmm-mac.sh package",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "clean:assets": "node scripts/clean-assets.js"
   },
   "keywords": [
     "civitai",

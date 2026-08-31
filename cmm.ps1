@@ -26,7 +26,7 @@
 
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('start', 'stop', 'restart', 'status', 'update', 'package', 'publish', 'dist', 'scan', 'download', 'check-updates', 'export', 'hf', 'workflows', 'help')]
+  [ValidateSet('start', 'stop', 'restart', 'status', 'update', 'package', 'publish', 'dist', 'scan', 'download', 'check-updates', 'export', 'hf', 'workflows', 'clean-assets', 'help')]
   [string]$Action = 'start',
 
   [int]$Port = 5173,
@@ -34,6 +34,7 @@ param(
 
   [switch]$Headless,
   [switch]$NoWindow,
+  [switch]$CleanAssets,
 
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$RemainingArgs
@@ -262,6 +263,62 @@ function Stop-App {
   }
   Write-Status 'ok' 'Application stopped.' 'Green'
   return $true
+}
+
+# Prunes stale hashed renderer bundles from dist/assets after the app has fully stopped.
+# Non-destructive: only `index-*.js` / `index-*.css` are considered; every asset referenced
+# by dist/index.html (plus the single newest js/css pair as a safety net) is kept. Missing
+# files are not errors and the folder is never wiped wholesale.
+function Clean-Assets {
+  $assetsDir = Join-Path $ProjectRoot 'dist\assets'
+  $indexHtml = Join-Path $ProjectRoot 'dist\index.html'
+
+  if (-not (Test-Path $assetsDir)) {
+    Write-Status '!' 'No dist\assets directory found; nothing to clean.' 'DarkGray'
+    return
+  }
+
+  $keep = New-Object System.Collections.Generic.HashSet[string]
+  if (Test-Path $indexHtml) {
+    $html = Get-Content -LiteralPath $indexHtml -Raw -ErrorAction SilentlyContinue
+    if ($html) {
+      [regex]::Matches($html, '(?:src|href)\s*=\s*["'']([^"'']*assets/[^"'']+)["'']') |
+        ForEach-Object {
+          $ref = $_.Groups[1].Value
+          if ($ref -match '\.(js|css)$') {
+            $name = [System.IO.Path]::GetFileName($ref.TrimEnd('/'))
+            if ($name) { [void]$keep.Add($name) }
+          }
+        }
+    }
+  }
+
+  # Newest single js + css pair as a safety net (in case index.html hasn't been updated yet).
+  $candidates = @(Get-ChildItem -LiteralPath $assetsDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^index-.*\.(js|css)$' })
+  foreach ($group in $candidates | Group-Object { $_.Extension.ToLowerInvariant() }) {
+    $newest = $group.Group | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($newest) { [void]$keep.Add($newest.Name) }
+  }
+
+  $removed = 0
+  foreach ($file in $candidates) {
+    if ($keep.Contains($file.Name)) { continue }
+    try {
+      Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop
+      $removed++
+    }
+    catch {
+      Write-Status '!' "Skipped $($file.Name): $($_.Exception.Message)" 'DarkGray'
+    }
+  }
+
+  if ($removed -gt 0) {
+    Write-Status 'ok' "Pruned $removed orphaned asset(s) from dist\assets." 'Green'
+  }
+  else {
+    Write-Status 'ok' 'No orphaned dist assets to prune.' 'DarkGray'
+  }
 }
 
 function Ensure-NodeInstalled {
@@ -690,10 +747,16 @@ switch ($Action) {
   }
   'stop' {
     Stop-App | Out-Null
+    # Janitor: prune orphaned hashed assets only after processes are fully stopped.
+    Clean-Assets
+  }
+  'clean-assets' {
+    Clean-Assets
   }
   'restart' {
     Write-Status '>>' 'Restarting application...' 'Cyan'
     Stop-App | Out-Null
+    Clean-Assets
     Start-Sleep -Milliseconds 500
     Start-App
   }

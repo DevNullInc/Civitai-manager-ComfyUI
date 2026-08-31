@@ -13,6 +13,7 @@ ACTION="${1:-start}"
 PORT=5173
 API_PORT=5174
 HEADLESS=false
+CLEAN_ASSETS=false
 
 # Auto-configure NVM environment if present
 export NVM_DIR="$HOME/.nvm"
@@ -60,6 +61,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --headless|--no-window)
       HEADLESS=true
+      shift
+      ;;
+    --clean-assets)
+      CLEAN_ASSETS=true
       shift
       ;;
     *)
@@ -203,6 +208,7 @@ stop_app() {
   if [ ${#pids[@]} -eq 0 ]; then
     write_status "!" "No running Renegade Core Model Manager processes found." "$C_YELLOW"
     rm -f "$PID_FILE" 2>/dev/null || true
+    clean_assets
     return 0
   fi
 
@@ -220,7 +226,56 @@ stop_app() {
 
   rm -f "$PID_FILE" 2>/dev/null || true
   write_status "ok" "Application stopped." "$C_GREEN"
+  clean_assets
 }
+
+# Janitor: prune stale hashed renderer bundles from dist/assets once the app is idle.
+# Only `index-*.js` / `index-*.css` are considered; anything referenced by dist/index.html
+# plus the single newest js/css pair is kept. Non-destructive, missing files are not errors.
+clean_assets() {
+  local assets_dir="$SCRIPT_DIR/dist/assets"
+  local index_html="$SCRIPT_DIR/dist/index.html"
+  if [ ! -d "$assets_dir" ]; then
+    write_status "!" "No dist/assets directory found; nothing to clean." "$C_GRAY"
+    return 0
+  fi
+
+  local keep=""
+  if [ -f "$index_html" ]; then
+    keep="$(grep -aoE '(src|href)="[^"]*assets/[^"]+"' "$index_html" 2>/dev/null | sed -E 's/^(src|href)="//; s/"$//' | sed -E 's#.*assets/##' | sort -u || true)"
+  fi
+
+  # Always retain the single most recently-generated js and css pair as a safety net.
+  local newest_js newest_css
+  newest_js="$(ls -t "$assets_dir"/index-*.js 2>/dev/null | head -n1 || true)"
+  newest_css="$(ls -t "$assets_dir"/index-*.css 2>/dev/null | head -n1 || true)"
+  if [ -n "$newest_js" ]; then keep="$keep
+$(basename "$newest_js")"; fi
+  if [ -n "$newest_css" ]; then keep="$keep
+$(basename "$newest_css")"; fi
+  keep="$(printf '%s\n' "$keep" | grep -v '^$' | sed 's/\.\/assets\///' | sort -u)"
+
+  local removed=0
+  local f
+  for f in "$assets_dir"/index-*.js "$assets_dir"/index-*.css; do
+    [ -f "$f" ] || continue
+    local name
+    name="$(basename "$f")"
+    if printf '%s\n' "$keep" | grep -qx "$name"; then
+      continue
+    fi
+    if rm -f "$f" 2>/dev/null; then
+      removed=$((removed + 1))
+    fi
+  done
+
+  if [ "$removed" -gt 0 ]; then
+    write_status "ok" "Pruned $removed orphaned asset(s) from dist/assets." "$C_GREEN"
+  else
+    write_status "ok" "No orphaned dist assets to prune." "$C_GRAY"
+  fi
+}
+
 
 start_app() {
   ensure_node_installed
@@ -430,10 +485,16 @@ echo ""
 # Dispatch Command
 case "$ACTION" in
   start)
+    if [ "$CLEAN_ASSETS" = "true" ]; then
+      clean_assets
+    fi
     start_app
     ;;
   stop)
     stop_app
+    ;;
+  clean-assets)
+    clean_assets
     ;;
   restart)
     write_status ">>" "Restarting application..." "$C_CYAN"
@@ -457,6 +518,7 @@ case "$ACTION" in
     echo "  start                    Start the desktop app and Vite web server (default)"
     echo "  stop                     Stop all running CMM processes"
     echo "  restart                  Restart the application"
+    echo "  clean-assets             Prune orphaned hashed bundles from dist/assets"
     echo "  update                   Pull latest development commits and rebuild"
     echo "  status                   Show running process status & endpoints"
     echo "  package / dist           Package standalone macOS application (.dmg, .zip)"
