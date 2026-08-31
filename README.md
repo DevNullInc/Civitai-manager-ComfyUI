@@ -182,7 +182,13 @@ The included `cmm.ps1` (PowerShell), `cmm.sh` (Linux Bash), and `cmm-mac.sh` (ma
 
 # 6. Stop all running application instances cleanly
 .\cmm.ps1 stop
+
+# 7. Prune orphaned hashed build bundles from ./dist/assets manually
+.\cmm.ps1 clean-assets
+# (or the equivalent shorthand: .\cmm.ps1 stop -CleanAssets)
 ```
+
+> **Note:** `stop` (and `restart`) automatically run the asset janitor once all processes are fully stopped and idle, so orphaned `dist/assets/index-*.js` / `index-*.css` bundles from previous build cycles are pruned on shutdown. The active pair referenced by `dist/index.html` (plus the newest js/css pair as a safety net) is always kept — the folder and vendor chunks are never wiped.
 
 **Linux (Bash):**
 
@@ -197,6 +203,9 @@ The included `cmm.ps1` (PowerShell), `cmm.sh` (Linux Bash), and `cmm-mac.sh` (ma
 ./cmm.sh status
 ./cmm.sh restart
 ./cmm.sh stop
+
+# 4. Prune orphaned hashed build bundles from ./dist/assets
+./cmm.sh clean-assets
 ```
 
 **macOS (Bash):**
@@ -215,6 +224,9 @@ The included `cmm.ps1` (PowerShell), `cmm.sh` (Linux Bash), and `cmm-mac.sh` (ma
 
 # 4. Package standalone macOS binaries (.dmg & .zip)
 ./cmm-mac.sh package
+
+# 5. Prune orphaned hashed build bundles from ./dist/assets
+./cmm-mac.sh clean-assets
 ```
 
 #### 🍏 Building & Packaging on macOS
@@ -297,6 +309,10 @@ npm run dist:installer   # Standard Windows Setup installer (.exe)
 npm run dist:linux       # Standalone Linux archive (.tar.gz)
 npm run dist:mac         # Standalone macOS DMG and ZIP (.dmg / .zip)
 npm run dist:all         # All release targets (Windows + Linux + macOS)
+
+# Prune orphaned hashed build bundles from ./dist/assets (cross-platform Node CLI)
+npm run clean:assets
+# Optional flags: --dry-run (report only, delete nothing) and --quiet (no per-file output)
 ```
 
 Outputs will be saved in the `release/` directory:
@@ -310,10 +326,11 @@ Outputs will be saved in the `release/` directory:
 
 | Parameter / Flag | Type     | Default | Description                                                                                                                                        |
 | :--------------- | :------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Action`         | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, `package`, or `publish`.                                                               |
+| `Action`         | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, `package`, `publish`, or `clean-assets`.                                                  |
 | `-Port <int>`    | `int`    | `5173`  | Port for the Vite web server & HTTP bridge.                                                                                                        |
 | `-Headless`      | `switch` | `false` | Runs background server and web UI without launching the Electron desktop window. Ideal for remote servers, Docker, WSL, or browser-only workflows. |
 | `-NoWindow`      | `switch` | `false` | Alias for `-Headless`.                                                                                                                             |
+| `-CleanAssets`   | `switch` | `false` | Also run the asset janitor (prune orphaned `dist/assets` bundles). `stop`/`restart` always prune; `start` prunes first only when this flag is set.  |
 
 ---
 
