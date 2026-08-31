@@ -107,11 +107,14 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
     // the canvas wheel listeners with one anchored at the pointer's canvas-relative point.
     //
     // Touchpads emit wheel events far faster than any display can repaint (multiples per
-    // frame), and an intermediate rAF may regret the anchor. Cap zoom applications at
-    // ~60fps: deltas accumulate between frames and are flushed at most once per
-    // 1000/60 ms via requestAnimationFrame, so input is never dropped and the final
-    // event always gets applied. On >=120 Hz displays the interval guard also throttles
-    // the rAF flush itself back to <=60 applies/second.
+    // frame). Rather than letting each hardware tick poke the canvas, catch the wheel
+    // event on the map, accumulate deltaY into a running balance (plus the latest cursor
+    // anchor), and block the native scroll. One requestAnimationFrame flush applies the
+    // whole balance at once - collapsing the churn of micro-calls into a single smooth
+    // <=60fps canvas transform - and resets the counter. Each flush drains everything
+    // (no remainder carried across frames, which is what made zoom "coast" after the
+    // fingers stopped). On >=120 Hz displays the interval guard throttles the rAF flush
+    // itself back to <=60 applies/second.
     const ZOOM_FRAME_MS = 1000 / 60;
     let pendingDeltaY = 0;
     let pendingCenter: [number, number] = [0, 0];
@@ -126,21 +129,14 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
         return;
       }
       lastZoomAppliedAt = now;
-      // A swipe can pile hundreds of px of delta between two frames; applying it as
-      // one changeScale(double) is what made the anchored zoom feel like it "catches
-      // up" in coarse jumps instead of gliding. Apply at most a 120px-equivalent
-      // chunk per frame (~1.2x per 120px) and carry the remainder forward, so the
-      // scale still moves in LiteGraph-like micro-steps across frames.
-      const ZOOM_CHUNK_PX = 120;
-      const dy = Math.max(-ZOOM_CHUNK_PX, Math.min(ZOOM_CHUNK_PX, pendingDeltaY));
-      pendingDeltaY -= dy;
-      const k = Math.pow(1.2, -dy / ZOOM_CHUNK_PX);
+      const dy = pendingDeltaY;
+      pendingDeltaY = 0;
+      const k = Math.pow(1.2, -dy / 120);
       const next = Math.max(c.ds.min_scale, Math.min(c.ds.max_scale, c.ds.scale * k));
       if (next !== c.ds.scale) {
         c.ds.changeScale(next, pendingCenter);
         setZoomPercent(Math.round(c.ds.scale * 100));
       }
-      if (pendingDeltaY !== 0) zoomRafId = requestAnimationFrame(flushZoom);
     };
 
     const onWheel = (e: WheelEvent) => {
