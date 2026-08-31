@@ -105,21 +105,49 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
     // or raw client coordinates (processMouseWheel) — neither tracks the pointer inside a
     // nested panel, so touchpad pinch / scroll visibly jumps away from the cursor. Replace
     // the canvas wheel listeners with one anchored at the pointer's canvas-relative point.
+    //
+    // Touchpads emit wheel events far faster than any display can repaint (multiples per
+    // frame), and an intermediate rAF may regret the anchor. Cap zoom applications at
+    // ~60fps: deltas accumulate between frames and are flushed at most once per
+    // 1000/60 ms via requestAnimationFrame, so input is never dropped and the final
+    // event always gets applied. On >=120 Hz displays the interval guard also throttles
+    // the rAF flush itself back to <=60 applies/second.
+    const ZOOM_FRAME_MS = 1000 / 60;
+    let pendingDeltaY = 0;
+    let pendingCenter: [number, number] = [0, 0];
+    let lastZoomAppliedAt = 0;
+    let zoomRafId: number | null = null;
+
+    const flushZoom = (now: number) => {
+      zoomRafId = null;
+      if (pendingDeltaY === 0) return;
+      if (now - lastZoomAppliedAt < ZOOM_FRAME_MS) {
+        zoomRafId = requestAnimationFrame(flushZoom);
+        return;
+      }
+      lastZoomAppliedAt = now;
+      const dy = pendingDeltaY;
+      const zoomCenter = pendingCenter;
+      pendingDeltaY = 0;
+      const k = Math.pow(1.2, -dy / 120);
+      const next = Math.max(c.ds.min_scale, Math.min(c.ds.max_scale, c.ds.scale * k));
+      if (next === c.ds.scale) return;
+      c.ds.changeScale(next, zoomCenter);
+      setZoomPercent(Math.round(c.ds.scale * 100));
+    };
+
     const onWheel = (e: WheelEvent) => {
       if (!c.graph || !c.allow_dragcanvas || !c.canvas) return;
       let dy = e.deltaY;
       if (e.deltaMode === 1) dy *= 16; // line-based scrolling
       else if (e.deltaMode === 2) dy *= 100; // page-based scrolling
       if (dy === 0) return;
+      pendingDeltaY += dy;
       const rect = c.canvas.getBoundingClientRect();
-      const zoomCenter: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
-      const k = Math.pow(1.2, -dy / 120);
-      const next = Math.max(c.ds.min_scale, Math.min(c.ds.max_scale, c.ds.scale * k));
-      if (next === c.ds.scale) return;
-      c.ds.changeScale(next, zoomCenter);
-      setZoomPercent(Math.round(c.ds.scale * 100));
+      pendingCenter = [e.clientX - rect.left, e.clientY - rect.top];
       e.preventDefault();
       e.stopPropagation();
+      if (zoomRafId == null) zoomRafId = requestAnimationFrame(flushZoom);
     };
     const wheelCallback = (c as any)._mousewheel_callback as ((e: Event) => void) | undefined;
     const canvasEl = canvasElRef.current;
@@ -138,6 +166,7 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
 
     return () => {
       try {
+        if (zoomRafId != null) cancelAnimationFrame(zoomRafId);
         c.stopRendering();
         const el = canvasEl as any;
         el.removeEventListener('wheel', onWheel);

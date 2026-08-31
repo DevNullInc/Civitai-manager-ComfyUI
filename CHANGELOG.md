@@ -122,8 +122,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Toolbar keeps zoom in/out (0.2x–2.0x), **Fit to View**, and one-click fullscreen expand/shrink.
   - Rendering is read-only for now; full LiteGraph editing mode is tracked for v1.6.0 (see ROADMAP).
   - Added LiteGraph.js copyright notice + full MIT license text to the top-level `LICENSE`.
-- **Workflow Map Zoom Anchors at the Cursor**:
+- **Workflow Map Zoom Anchors at the Cursor, Throttled to 60fps**:
   - Replaced LiteGraph's wheel handlers (which zoom around the canvas center or raw document coordinates) with a pointer-anchored zoom so touchpad pinch and mouse-wheel scrolling zoom toward the cursor instead of jumping away.
+  - Touchpad gestures emit many wheel events per frame, so zoom applications are capped at ~60/second: deltas accumulate and flush once per frame (via `requestAnimationFrame`, plus an interval guard for ≥120 Hz displays) — input is never dropped and the final event always applies.
 
 - **Project Rebranded → Renegade Core Model Manager (RenegadeCMM)**:
   - Display name is now **Renegade Core Model Manager**; the short technical/project identifier is **RenegadeCMM** (repo, `productName`, app id, npm package, binary/installer artifacts). The `ComfyUI Edition` tagline and all legacy "CivitAI Model Manager"-style names were dropped.
