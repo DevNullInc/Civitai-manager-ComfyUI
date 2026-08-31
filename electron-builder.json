@@ -1,6 +1,6 @@
 {
-  "appId": "com.civitai.modelmanager",
-  "productName": "CivitAI Model Manager",
+  "appId": "com.devnullinc.renegadecmm",
+  "productName": "RenegadeCMM",
   "copyright": "Copyright © 2026",
   "directories": {
     "output": "dist-app"

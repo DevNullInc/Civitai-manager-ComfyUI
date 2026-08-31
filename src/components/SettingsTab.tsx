@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -626,7 +626,7 @@ export const SettingsTab: React.FC = () => {
   const handleCopyJson = async () => {
     try {
       const exportData = {
-        _format: 'civitai-model-manager-settings',
+        _format: 'renegadecmm-settings',
         version: '1.3.0',
         exportedAt: new Date().toISOString(),
         settings: config,

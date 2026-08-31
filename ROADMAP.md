@@ -1,6 +1,6 @@
-# 🗺️ CivitAI Model Manager (CMM) — Product Roadmap
+# 🗺️ Renegade Core Model Manager (CMM) — Product Roadmap
 
-This document outlines the planned milestones, upcoming features, and architectural evolution of **CivitAI Model Manager - ComfyUI Edition**.
+This document outlines the planned milestones, upcoming features, and architectural evolution of **Renegade Core Model Manager**.
 
 ---
 
@@ -39,7 +39,7 @@ graph LR
 - [x] ~~**Localhost-Only Security Hardening**:~~
   - ~~Strict `127.0.0.1` binding with remote IP filtering, Origin verification, and in-app Settings toggle to guarantee zero remote/LAN access to local filesystem operations.~~
 - [x] ~~**Custom Node Developer Documentation**:~~
-  - ~~Complete REST API guide with Python examples for node creators in [`docs/API_REFERENCE.md`](file:///home/stygianrenegade/Projects/manager/Civitai-manager-ComfyUI/docs/API_REFERENCE.md).~~
+  - ~~Complete REST API guide with Python examples for node creators in [`docs/API_REFERENCE.md`](file:///home/stygianrenegade/Projects/manager/RenegadeCMM/docs/API_REFERENCE.md).~~
 - [x] ~~**Direct In-Memory Workflow Parsing Engine**:~~
   - ~~Direct raw JSON / prompt dictionary extraction without requiring disk file paths.~~
 - [x] ~~**4-Tier Node Resolution & GitHub Fallback Engine**:~~
@@ -90,5 +90,5 @@ graph LR
 
 Have a feature request or suggestion for the roadmap?
 
-- Open an issue or discussion on GitHub: [CivitAI-manager-ComfyUI Issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues)
+- Open an issue or discussion on GitHub: [RenegadeCMM Issues](https://github.com/DevNullInc/RenegadeCMM/issues)
 - Contributions, pull requests, and feedback are always welcome!

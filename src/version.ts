@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Central application version & build configuration
  */
 export const APP_VERSION = '1.3.0';

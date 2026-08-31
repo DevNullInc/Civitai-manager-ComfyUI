@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -278,7 +278,7 @@ function AppContent() {
   };
 
   const openRepo = () => {
-    const url = 'https://github.com/DevNullInc/Civitai-manager-ComfyUI';
+    const url = 'https://github.com/DevNullInc/RenegadeCMM';
     if (window.civitaiAPI && typeof window.civitaiAPI.openExternal === 'function') {
       window.civitaiAPI.openExternal(url);
     } else {
@@ -300,10 +300,10 @@ function AppContent() {
           </div>
           <div>
             <h1 className="font-extrabold text-sm text-slate-100 tracking-tight leading-none">
-              CivitAI Manager
+              Renegade Core Model Manager
             </h1>
             <span className="text-[10px] gradient-text font-extrabold tracking-wider uppercase mt-0.5 block">
-              ComfyUI Edition
+              RenegadeCMM
             </span>
           </div>
         </div>
@@ -395,7 +395,7 @@ function AppContent() {
             return (
               <div
                 className="flex items-center gap-2 shrink-0 bg-rose-500/15 border border-rose-500/40 px-3.5 py-1.5 rounded-xl text-[11px] font-bold text-rose-400 shadow-sm"
-                title="CivitAI Model Manager backend is offline or disconnected. Start the application with ./cmm.sh"
+                title="Renegade Core Model Manager backend is offline or disconnected. Start the application with ./cmm.sh"
               >
                 <span className="relative flex h-2 w-2">
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
@@ -538,9 +538,9 @@ function AppContent() {
       {/* Persistent Footer */}
       <footer className="sticky bottom-0 z-40 glass-panel border-t border-slate-800/80 backdrop-blur-xl px-6 py-2 shadow-2xl flex items-center justify-between text-xs text-slate-400 w-full shrink-0">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-300">CivitAI Model Manager</span>
+          <span className="font-semibold text-slate-300">Renegade Core Model Manager</span>
           <span className="text-slate-600">•</span>
-          <span className="text-purple-400 font-medium">ComfyUI Edition</span>
+          <span className="text-purple-400 font-medium">RenegadeCMM</span>
           <span className="text-slate-600">•</span>
           <span className="px-1.5 py-0.2 rounded bg-slate-800/80 text-[10px] text-slate-400 border border-slate-700/50 font-mono">GPL-3.0</span>
         </div>
@@ -556,7 +556,7 @@ function AppContent() {
 
         <button
           onClick={openRepo}
-          title="Open GitHub Repository (DevNullInc/Civitai-manager-ComfyUI)"
+          title="Open GitHub Repository (DevNullInc/RenegadeCMM)"
           className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-purple-300 border border-slate-800 hover:border-purple-500/40 transition-all cursor-pointer font-medium text-xs group shadow-sm"
         >
           <Github size={13} className="text-purple-400 group-hover:scale-110 transition-transform" />

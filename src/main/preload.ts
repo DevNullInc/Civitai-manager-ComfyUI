@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify

@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-title CivitAI Model Manager
+title Renegade Core Model Manager
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cmm.ps1" %*
 set EXIT_CODE=%ERRORLEVEL%

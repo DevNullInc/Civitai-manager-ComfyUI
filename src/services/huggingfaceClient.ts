@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -54,7 +54,7 @@ export class HuggingFaceClient {
 
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
-      'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0 (HuggingFace Integration)',
+      'User-Agent': 'RenegadeCMM/1.3.0 (HuggingFace Integration)',
     };
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
@@ -72,7 +72,7 @@ export class HuggingFaceClient {
       const res = await axios.get('https://huggingface.co/api/whoami-v2', {
         headers: {
           Authorization: `Bearer ${tokenToTest}`,
-          'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
+          'User-Agent': 'RenegadeCMM/1.3.0',
         },
         timeout: 10000,
       });

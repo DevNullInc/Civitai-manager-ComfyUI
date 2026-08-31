@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -462,7 +462,7 @@ export class NodeResolverService {
 
           const data = await this.fetchHttpJson(url, {
             headers: {
-              'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
+              'User-Agent': 'RenegadeCMM/1.3.0',
               Accept: 'application/vnd.github.v3+json',
             },
           });
@@ -1124,7 +1124,7 @@ export class NodeResolverService {
         } catch {}
 
         const headers: Record<string, string> = {
-          'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
+          'User-Agent': 'RenegadeCMM/1.3.0',
         };
         if (etag) {
           headers['If-None-Match'] = etag;

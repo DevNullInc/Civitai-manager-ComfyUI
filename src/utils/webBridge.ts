@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -47,7 +47,7 @@ if (typeof window !== 'undefined') {
 
 export function setupWebBridgeIfNeeded() {
   if (typeof window !== 'undefined' && !window.civitaiAPI) {
-    console.info('[CivitAI Manager] Electron IPC not found. Initializing HTTP Native Server Bridge on port 5174.');
+    console.info('[RenegadeCMM] Electron IPC not found. Initializing HTTP Native Server Bridge on port 5174.');
 
     window.civitaiAPI = {
       getConfig: async () => {
@@ -683,7 +683,7 @@ export function setupWebBridgeIfNeeded() {
           return {
             isUpdateAvailable: false,
             isDevelopmentVersion: true,
-            githubUrl: 'https://github.com/DevNullInc/Civitai-manager-ComfyUI',
+            githubUrl: 'https://github.com/DevNullInc/RenegadeCMM',
             isPackaged: false,
             error: e.message,
           };

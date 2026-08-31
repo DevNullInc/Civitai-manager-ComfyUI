@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -32,7 +32,7 @@ import { logger } from '../utils/logger';
 import { AppConfig, AppUpdateCheckResult } from '../types/app';
 import { BUILD_CONFIG } from '../version';
 
-app.setName('civitai-model-manager');
+app.setName('renegadecmm');
 
 let mainWindow: BrowserWindow | null = null;
 let currentConfig: AppConfig = {
@@ -65,7 +65,7 @@ async function createWindow() {
     height: 880,
     minWidth: 1124,
     minHeight: 720,
-    title: 'CivitAI Model Manager - ComfyUI Edition',
+    title: 'Renegade Core Model Manager (RenegadeCMM)',
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
     webPreferences: {
@@ -762,7 +762,7 @@ async function pullMissingModel(modelData: any, targetRoot?: string) {
 
 async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
   const repoOwner = 'DevNullInc';
-  const repoName = 'Civitai-manager-ComfyUI';
+  const repoName = 'RenegadeCMM';
   const githubUrl = `https://github.com/${repoOwner}/${repoName}`;
 
   let isPackaged = false;
@@ -806,7 +806,7 @@ async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
     const res = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}/commits/main`, {
       timeout: 4500,
       headers: {
-        'User-Agent': 'CivitAI-Model-Manager-ComfyUI',
+        'User-Agent': 'RenegadeCMM',
         'Accept': 'application/vnd.github.v3+json',
       },
     });
@@ -963,7 +963,7 @@ function startHttpBridgeServer() {
             enabled: isApiEnabled,
             uptime: process.uptime(),
             pid: process.pid,
-            name: 'CivitAI Model Manager',
+            name: 'RenegadeCMM',
             version: '1.3.0',
             port: apiPort,
             host: '127.0.0.1',
@@ -2337,7 +2337,7 @@ logger.onLog((logPayload) => {
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  logger.info('Another instance of CivitAI Model Manager is already running. Focusing existing window and exiting.');
+  logger.info('Another instance of Renegade Core Model Manager is already running. Focusing existing window and exiting.');
   app.quit();
 } else {
   app.on('second-instance', (_event, _commandLine, _workingDirectory) => {

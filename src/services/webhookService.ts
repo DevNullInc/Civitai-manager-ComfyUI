@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -75,7 +75,7 @@ export class WebhookService {
       event,
       timestamp: new Date().toISOString(),
       test: true,
-      message: 'Test event from CivitAI Model Manager',
+      message: 'Test event from Renegade Core Model Manager',
       data: {
         modelName: 'Test Model (DreamShaper)',
         fileName: 'dreamshaper_v8.safetensors',
@@ -89,7 +89,7 @@ export class WebhookService {
         timeout: 5000,
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'CivitAI-Model-Manager-ComfyUI/Webhook',
+          'User-Agent': 'RenegadeCMM/Webhook',
         },
       });
       return { success: res.status >= 200 && res.status < 300, status: res.status };
@@ -107,7 +107,7 @@ export class WebhookService {
         timeout: 8000,
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'CivitAI-Model-Manager-ComfyUI/Webhook',
+          'User-Agent': 'RenegadeCMM/Webhook',
         },
       });
       logger.info(`Successfully sent webhook [${payload.event}] to: ${url}`);

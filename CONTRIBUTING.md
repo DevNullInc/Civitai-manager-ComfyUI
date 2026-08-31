@@ -1,6 +1,6 @@
-# Contributing to CivitAI Model Manager (ComfyUI Edition)
+# Contributing to Renegade Core Model Manager
 
-Thank you for your interest in contributing to **CivitAI Model Manager (ComfyUI Edition)**! 🎉
+Thank you for your interest in contributing to **Renegade Core Model Manager**! 🎉
 
 This project is an open-source, community-driven desktop application built with Electron, React, TypeScript, and SQLite, designed to streamline model management, workflow dependency resolution, and automated downloads for ComfyUI.
 
@@ -8,7 +8,7 @@ This project is an open-source, community-driven desktop application built with 
 
 ## 📜 Table of Contents
 
-- [Contributing to CivitAI Model Manager (ComfyUI Edition)](#contributing-to-civitai-model-manager-comfyui-edition)
+- [Contributing to Renegade Core Model Manager](#contributing-to-renegade-core-model-manager)
   - [📜 Table of Contents](#-table-of-contents)
   - [🤝 Code of Conduct](#-code-of-conduct)
   - [💡 How Can I Contribute?](#-how-can-i-contribute)
@@ -36,7 +36,7 @@ We are committed to providing a welcoming, inclusive, and harassment-free enviro
 
 ### Reporting Bugs
 
-If you discover a bug, please check the [existing issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues) first. If it hasn't been reported, open a new issue with:
+If you discover a bug, please check the [existing issues](https://github.com/DevNullInc/RenegadeCMM/issues) first. If it hasn't been reported, open a new issue with:
 
 - **A clear, descriptive title.**
 - **Steps to reproduce the issue.**
@@ -81,8 +81,8 @@ Feature requests are always welcome! Before opening a feature request:
 
 ```bash
 # 1. Clone your fork
-git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
-cd Civitai-manager-ComfyUI
+git clone https://github.com/DevNullInc/RenegadeCMM.git
+cd RenegadeCMM
 
 # 2. Install dependencies
 npm install
@@ -103,7 +103,7 @@ npm run dev
 ## 🏛️ Project Architecture
 
 ```
-Civitai-manager-ComfyUI/
+RenegadeCMM/
 ├── src/
 │   ├── main/                 # Electron main process (lifecycle, IPC, window management)
 │   │   ├── index.ts          # Main process entry & HTTP API server bridge
@@ -185,4 +185,4 @@ feat: add interactive visual node map to Workflows tab
 
 ## 📄 License
 
-By contributing to **CivitAI Model Manager - ComfyUI Edition**, you agree that your contributions will be licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+By contributing to **Renegade Core Model Manager**, you agree that your contributions will be licensed under the **GNU General Public License v3.0 (GPL-3.0)**.

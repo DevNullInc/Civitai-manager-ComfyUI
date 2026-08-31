@@ -99,13 +99,13 @@ export function AboutTab() {
             <div>
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight">
-                  CivitAI Model Manager
+                  Renegade Core Model Manager
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                   v{sysInfo.version || '1.3.0'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  ComfyUI Edition
+                  RenegadeCMM
                 </span>
               </div>
               <p className="text-sm text-slate-400 mt-1">
@@ -116,7 +116,7 @@ export function AboutTab() {
 
           <div className="flex items-center gap-3 flex-wrap">
             <button
-              onClick={() => openLink('https://github.com/DevNullInc/Civitai-manager-ComfyUI')}
+              onClick={() => openLink('https://github.com/DevNullInc/RenegadeCMM')}
               className="px-4 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/70 hover:border-purple-500/50 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-lg"
             >
               <Github size={15} className="text-purple-400" />
@@ -125,7 +125,7 @@ export function AboutTab() {
             </button>
 
             <button
-              onClick={() => openLink('https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues')}
+              onClick={() => openLink('https://github.com/DevNullInc/RenegadeCMM/issues')}
               className="px-4 py-2.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-200 border border-rose-800/60 hover:border-rose-500/80 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-lg"
             >
               <Bug size={15} className="text-rose-400" />
@@ -197,7 +197,7 @@ export function AboutTab() {
               <span>Open Source License</span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              CivitAI Model Manager is Free and Open Source Software distributed under the terms of the GNU GPL 3.0.
+              Renegade Core Model Manager is Free and Open Source Software distributed under the terms of the GNU GPL 3.0.
             </p>
             <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
               <div className="flex items-center justify-between text-xs">

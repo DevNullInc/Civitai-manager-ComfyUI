@@ -1,4 +1,4 @@
-# CivitAI Model Manager (CMM)
+# Renegade Core Model Manager (CMM)
 
 **The missing model manager for ComfyUI.** A unified desktop application for discovering, downloading, organizing, and version-managing generative AI models across multiple CivitAI sources with intelligent auto-sorting into ComfyUI's folder structure.
 
@@ -108,25 +108,25 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 
 ```bash
 # Download the latest release from GitHub (Assets)
-CivitAI-Model-Manager-Setup-<version>.exe
+RenegadeCMM-Setup-<version>.exe
 # Or portable standalone:
-CivitAI-Model-Manager-Standalone-<version>.exe
+RenegadeCMM-Standalone-<version>.exe
 
 # Or install via winget (when available)
-winget install CivitAI.ModelManager
+winget install RenegadeCMM.RenegadeCMM
 ```
 
 ### Linux
 
 ```bash
 # Extract standalone Linux release bundle
-tar -xzf civitai-model-manager-<version>.tar.gz
-cd civitai-model-manager-<version>
-./civitai-model-manager
+tar -xzf renegadecmm-<version>.tar.gz
+cd renegadecmm-<version>
+./renegadecmm
 
 # Or AppImage (when building on Linux/CI)
-chmod +x CivitAI-Model-Manager-<version>.AppImage
-./CivitAI-Model-Manager-<version>.AppImage
+chmod +x RenegadeCMM-<version>.AppImage
+./RenegadeCMM-<version>.AppImage
 ```
 
 ### macOS (Community & Self-Build)
@@ -136,18 +136,18 @@ chmod +x CivitAI-Model-Manager-<version>.AppImage
 
 ```bash
 # 1. Mount downloaded disk image (.dmg) or extract .zip
-# Drag "CivitAI Model Manager.app" to /Applications
+# Drag "RenegadeCMM.app" to /Applications
 
 # 2. If macOS Gatekeeper blocks the unsigned application, clear the quarantine attribute:
-xattr -cr "/Applications/CivitAI Model Manager.app"
+xattr -cr "/Applications/RenegadeCMM.app"
 # Or: Right-click the app icon in Finder → click "Open" → select "Open" in the prompt
 ```
 
 ### Build & Run from Source
 
 ```bash
-git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
-cd Civitai-manager-ComfyUI
+git clone https://github.com/DevNullInc/RenegadeCMM.git
+cd RenegadeCMM
 
 # Install dependencies
 npm install
@@ -229,8 +229,8 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
 2. **Clone & Install Dependencies**:
 
    ```bash
-   git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
-   cd Civitai-manager-ComfyUI
+   git clone https://github.com/DevNullInc/RenegadeCMM.git
+   cd RenegadeCMM
    npm install
    ```
 
@@ -258,16 +258,16 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
    ```
 
    Compiled binaries are written to the `release/` directory:
-   - `CivitAI Model Manager-<version>-arm64.dmg` (Apple Silicon M1/M2/M3/M4)
-   - `CivitAI Model Manager-<version>-x64.dmg` (Intel x86_64)
-   - `CivitAI Model Manager-<version>-mac.zip`
+   - `RenegadeCMM-<version>-arm64.dmg` (Apple Silicon M1/M2/M3/M4)
+   - `RenegadeCMM-<version>-x64.dmg` (Intel x86_64)
+   - `RenegadeCMM-<version>-mac.zip`
 
 #### ⚠️ macOS Platform Caveats & Limitations
 
 Please keep the following platform differences and limitations in mind when running or building on macOS:
 
 - **No Official Mac Test Device**: Primary development occurs on Linux and Windows. macOS support relies on standard cross-platform Electron APIs and community bug reports.
-- **Unsigned Binaries & Gatekeeper**: Self-built or unsigned macOS applications will be flagged by Apple Gatekeeper as from an "Unidentified Developer". You must right-click $\rightarrow$ Open or execute `xattr -cr "/Applications/CivitAI Model Manager.app"` to bypass the quarantine check.
+- **Unsigned Binaries & Gatekeeper**: Self-built or unsigned macOS applications will be flagged by Apple Gatekeeper as from an "Unidentified Developer". You must right-click $\rightarrow$ Open or execute `xattr -cr "/Applications/RenegadeCMM.app"` to bypass the quarantine check.
 - **Native C++ Node Module Compilation**: Packages utilizing native C++ bindings (`sqlite3` and `keytar`) must compile locally for your target architecture (`arm64` vs `x64`). Run `npm run postinstall` (or `npx electron-builder install-app-deps`) if architecture mismatches occur.
 - **Python Environment Resolution**: Automatic detection of Windows-specific embedded Python environments (`ComfyUI_windows_portable\python_embeded\python.exe`) is bypassed on macOS; CMM will look for virtualenvs (`venv/bin/python`, `.venv/bin/python`), Conda environments (`conda`/`miniconda`), or your active system Python interpreter when running companion node dependency installers.
 - **Dedicated macOS Launcher**: Use `./cmm-mac.sh` (and `./cmm-dev-mac.sh` for development) instead of `./cmm.sh` on macOS. The macOS script uses `osascript` (AppleScript) for window focus, macOS-specific Electron binary paths (`Electron.app/Contents/MacOS/Electron`), and macOS-specific protected process lists.
@@ -297,10 +297,10 @@ npm run dist:all         # All release targets (Windows + Linux + macOS)
 
 Outputs will be saved in the `release/` directory:
 
-- `CivitAI Model Manager-Standalone-v<version>.exe` (Windows Portable binary)
-- `CivitAI Model Manager Setup <version>.exe` (Windows Installer binary)
-- `civitai-model-manager-<version>.tar.gz` (Linux Standalone distribution)
-- `CivitAI Model Manager-<version>-arm64.dmg` / `CivitAI Model Manager-<version>-x64.dmg` (macOS DMG disk image)
+- `RenegadeCMM-Standalone-v<version>.exe` (Windows Portable binary)
+- `RenegadeCMM Setup <version>.exe` (Windows Installer binary)
+- `renegadecmm-<version>.tar.gz` (Linux Standalone distribution)
+- `RenegadeCMM-<version>-arm64.dmg` / `RenegadeCMM-<version>-x64.dmg` (macOS DMG disk image)
 
 #### Script Parameters & Flags Reference
 
@@ -625,8 +625,8 @@ By contributing to this project, you agree that your contributions will be licen
 ### Development Setup
 
 ```bash
-git clone https://github.com/DevNullInc/Civitai-manager-ComfyUI.git
-cd Civitai-manager-ComfyUI
+git clone https://github.com/DevNullInc/RenegadeCMM.git
+cd RenegadeCMM
 
 # Install dependencies
 npm install
@@ -704,9 +704,9 @@ Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI 
 
 ## 📧 Support & Feedback
 
-- **Issues**: [GitHub Issues](https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues)
-- **Vulnerability Reporting**: [GitHub Security](https://github.com/DevNullInc/Civitai-manager-ComfyUI/security)
-- **Discussions**: [GitHub Discussions](https://github.com/DevNullInc/Civitai-manager-ComfyUI/discussions)
+- **Issues**: [GitHub Issues](https://github.com/DevNullInc/RenegadeCMM/issues)
+- **Vulnerability Reporting**: [GitHub Security](https://github.com/DevNullInc/RenegadeCMM/security)
+- **Discussions**: [GitHub Discussions](https://github.com/DevNullInc/RenegadeCMM/discussions)
 
 ---
 

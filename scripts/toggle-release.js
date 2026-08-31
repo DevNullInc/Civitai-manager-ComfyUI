@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CivitAI Model Manager - Build Mode Toggle Utility
+ * Renegade Core Model Manager - Build Mode Toggle Utility
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * Switches between:
@@ -48,7 +48,7 @@ if (arg === 'release' || arg === 'prod' || arg === 'production' || arg === 'stab
   console.log(`\n🔄 [BUILD MODE TOGGLED] => ${nextDev ? 'DEVELOPMENT (IS_DEV_BUILD = true)' : 'RELEASE (IS_DEV_BUILD = false)'}\n`);
 } else {
   console.log('\n======================================================');
-  console.log('  CivitAI Model Manager - Build Mode Status');
+  console.log('  Renegade Core Model Manager - Build Mode Status');
   console.log('======================================================');
   console.log(`  Current Mode : ${isCurrentlyDev ? '⚡ DEVELOPMENT (IS_DEV_BUILD = true)' : '🔒 RELEASE / PRODUCTION (IS_DEV_BUILD = false)'}`);
   console.log(`  File         : src/version.ts\n`);

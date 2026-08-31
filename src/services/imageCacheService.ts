@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -160,7 +160,7 @@ export class ImageCacheService {
             port: parsed.port ? Number(parsed.port) : (parsed.protocol === 'https:' ? 443 : 80),
             path: parsed.pathname + parsed.search,
             headers: {
-              'User-Agent': 'CivitAI-Model-Manager-ComfyUI/1.3.0',
+              'User-Agent': 'RenegadeCMM/1.3.0',
               Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
             },
             timeout: 15000,

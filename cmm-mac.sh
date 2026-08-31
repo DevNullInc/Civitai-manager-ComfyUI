@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#   CivitAI Model Manager (CMM) - macOS Launcher Script
+#   Renegade Core Model Manager (CMM) - macOS Launcher Script
 #   Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
 #   Licensed under GNU General Public License v3.0 (GPL-3.0)
 # ==============================================================================
@@ -91,7 +91,7 @@ ensure_node_installed() {
   if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
     write_status "!" "Node.js runtime was not detected on this system." "$C_YELLOW"
     echo ""
-    echo -e "  ${C_YELLOW}CivitAI Model Manager requires Node.js (v20+ or v22 LTS recommended).${C_RESET}"
+    echo -e "  ${C_YELLOW}Renegade Core Model Manager requires Node.js (v20+ or v22 LTS recommended).${C_RESET}"
     echo -e "  Install via Homebrew:  ${C_CYAN}brew install node${C_RESET}"
     echo -e "  Or download from:     ${C_CYAN}https://nodejs.org/${C_RESET}"
     echo -e "  Or install via NVM:   ${C_CYAN}https://github.com/nvm-sh/nvm${C_RESET}"
@@ -201,7 +201,7 @@ stop_app() {
   read -r -a pids <<< "$(get_running_pids)"
 
   if [ ${#pids[@]} -eq 0 ]; then
-    write_status "!" "No running CivitAI Model Manager processes found." "$C_YELLOW"
+    write_status "!" "No running Renegade Core Model Manager processes found." "$C_YELLOW"
     rm -f "$PID_FILE" 2>/dev/null || true
     return 0
   fi
@@ -230,8 +230,8 @@ start_app() {
 
   if [ ${#existing[@]} -gt 0 ]; then
     # Try bringing existing GUI window to focus using osascript (AppleScript)
-    if osascript -e 'tell application "System Events" to set frontmost of (first process whose name contains "CivitAI Model Manager") to true' 2>/dev/null; then
-      write_status "ok" "CivitAI Model Manager is already running. Active window brought to front." "$C_GREEN"
+    if osascript -e 'tell application "System Events" to set frontmost of (first process whose name contains "RenegadeCMM") to true' 2>/dev/null; then
+      write_status "ok" "Renegade Core Model Manager is already running. Active window brought to front." "$C_GREEN"
       return 0
     fi
 
@@ -309,7 +309,7 @@ start_app() {
   } > "$PID_FILE"
 
   echo ""
-  write_status "ok" "CivitAI Model Manager is running!" "$C_GREEN"
+  write_status "ok" "Renegade Core Model Manager is running!" "$C_GREEN"
   echo ""
   echo -e "    ${C_GRAY}Web / Browser UI : http://127.0.0.1:$PORT${C_RESET}"
   echo -e "    ${C_GRAY}HTTP API Bridge  : http://127.0.0.1:$API_PORT${C_RESET}"
@@ -330,9 +330,9 @@ show_status() {
   read -r -a pids <<< "$(get_running_pids)"
 
   if [ ${#pids[@]} -eq 0 ]; then
-    write_status "-" "CivitAI Model Manager is not running." "$C_YELLOW"
+    write_status "-" "Renegade Core Model Manager is not running." "$C_YELLOW"
   else
-    write_status "+" "CivitAI Model Manager is running (${#pids[@]} processes):" "$C_GREEN"
+    write_status "+" "Renegade Core Model Manager is running (${#pids[@]} processes):" "$C_GREEN"
     for pid in "${pids[@]}"; do
       local pname
       pname=$(ps -p "$pid" -o comm= 2>/dev/null || echo "process")
@@ -422,7 +422,7 @@ update_app() {
 # Print Banner
 echo ""
 echo -e "  ${C_MAGENTA}+----------------------------------------------+${C_RESET}"
-echo -e "  ${C_MAGENTA}|   CivitAI Model Manager - ComfyUI Edition   |${C_RESET}"
+echo -e "  ${C_MAGENTA}|   Renegade Core Model Manager   |${C_RESET}"
 echo -e "  ${C_MAGENTA}|                macOS Launcher                |${C_RESET}"
 echo -e "  ${C_MAGENTA}+----------------------------------------------+${C_RESET}"
 echo ""

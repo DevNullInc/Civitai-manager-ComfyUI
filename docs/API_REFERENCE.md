@@ -1,6 +1,6 @@
-# 🔌 CivitAI Model Manager (CMM) — Local API Reference
+# 🔌 Renegade Core Model Manager (CMM) — Local API Reference
 
-This document provides complete documentation and code examples for developers building **ComfyUI Custom Nodes**, scripts, and local extensions that integrate with CivitAI Model Manager via its native HTTP API bridge.
+This document provides complete documentation and code examples for developers building **ComfyUI Custom Nodes**, scripts, and local extensions that integrate with Renegade Core Model Manager via its native HTTP API bridge.
 
 ---
 
@@ -27,7 +27,7 @@ from typing import Dict, Any, Optional, List
 
 class CMMClient:
     """
-    Client helper for ComfyUI custom nodes connecting to CivitAI Model Manager.
+    Client helper for ComfyUI custom nodes connecting to Renegade Core Model Manager.
     Automatically defaults to port 5174 if no port or base_url is provided.
     """
     def __init__(self, port: int = 5174, base_url: Optional[str] = None):
@@ -37,7 +37,7 @@ class CMMClient:
             self.base_url = f"http://127.0.0.1:{port or 5174}"
 
     def is_online(self) -> bool:
-        """Verify if CivitAI Model Manager is running and the API Bridge is reachable."""
+        """Verify if Renegade Core Model Manager is running and the API Bridge is reachable."""
         try:
             res = requests.get(f"{self.base_url}/api/health", timeout=1.5)
             return res.status_code == 200 and res.json().get("status") == "ok"
@@ -122,7 +122,7 @@ Checks if CMM is running, whether the API Bridge is enabled, and returns the act
 {
   "status": "online",
   "enabled": true,
-  "name": "CivitAI Model Manager",
+  "name": "Renegade Core Model Manager",
   "version": "1.3.0",
   "port": 5174,
   "host": "127.0.0.1",

@@ -1,7 +1,7 @@
 {
-  "name": "civitai-model-manager",
+  "name": "renegadecmm",
   "version": "1.3.0",
-  "description": "The missing model manager for ComfyUI with verified CivitAI API integration and intelligent auto-sorting.",
+  "description": "Renegade Core Model Manager - the missing model manager for ComfyUI with verified CivitAI API integration and intelligent auto-sorting.",
   "main": "dist/main/index.js",
   "bin": {
     "cmm": "bin/cmm.js"
@@ -59,12 +59,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/DevNullInc/Civitai-manager-ComfyUI.git"
+    "url": "https://github.com/DevNullInc/RenegadeCMM.git"
   },
   "bugs": {
-    "url": "https://github.com/DevNullInc/Civitai-manager-ComfyUI/issues"
+    "url": "https://github.com/DevNullInc/RenegadeCMM/issues"
   },
-  "homepage": "https://github.com/DevNullInc/Civitai-manager-ComfyUI#readme",
+  "homepage": "https://github.com/DevNullInc/RenegadeCMM#readme",
   "license": "GPL-3.0",
   "dependencies": {
     "adm-zip": "^0.6.0",
@@ -98,8 +98,8 @@
     "@tootallnate/once": "^2.0.1"
   },
   "build": {
-    "appId": "com.devnullinc.civitai-manager-comfyui",
-    "productName": "CivitAI Model Manager",
+    "appId": "com.devnullinc.renegadecmm",
+    "productName": "RenegadeCMM",
     "copyright": "Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc",
     "directories": {
       "output": "release",

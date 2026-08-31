@@ -1,11 +1,11 @@
 <#
-  CivitAI Model Manager - ComfyUI Edition
+  Renegade Core Model Manager
   Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
   Licensed under GNU General Public License v3.0 (GPL-3.0)
 #>
 <#
 .SYNOPSIS
-  CivitAI Model Manager - launcher script.
+  Renegade Core Model Manager - launcher script.
 
 .DESCRIPTION
   Start, stop, or restart the Electron app from the terminal.
@@ -183,7 +183,7 @@ function Get-RunningProcs {
 function Stop-App {
   $procs = Get-RunningProcs
   if ($procs.Count -eq 0) {
-    Write-Status '!' 'No running CivitAI Model Manager processes found.' 'Yellow'
+    Write-Status '!' 'No running Renegade Core Model Manager processes found.' 'Yellow'
     return $false
   }
 
@@ -215,7 +215,7 @@ function Ensure-NodeInstalled {
   if (-not $nodeCmd -or -not $npmCmd -or -not $npxCmd) {
     Write-Status '!' 'Node.js runtime was not detected on this system.' 'Yellow'
     Write-Host ''
-    Write-Host '  CivitAI Model Manager requires Node.js (v20+ LTS recommended).' -ForegroundColor Yellow
+    Write-Host '  Renegade Core Model Manager requires Node.js (v20+ LTS recommended).' -ForegroundColor Yellow
     Write-Host ''
 
     $installed = $false
@@ -249,7 +249,7 @@ function Ensure-NodeInstalled {
         Write-Status '!!' "Failed downloading Node.js installer: $_" 'Red'
         Write-Host ''
         Write-Host '  Please download and install Node.js manually from: https://nodejs.org/' -ForegroundColor Cyan
-        throw 'Node.js is required to run CivitAI Model Manager.'
+        throw 'Node.js is required to run Renegade Core Model Manager.'
       }
     }
 
@@ -358,7 +358,7 @@ function Start-App {
     # Check if any running process has a visible GUI window to bring to the front
     foreach ($p in $existing) {
       if (Set-ProcessWindowFocus $p) {
-        Write-Status 'ok' "CivitAI Model Manager is already running (PID $($p.Id)). Active window brought to front." 'Green'
+        Write-Status 'ok' "Renegade Core Model Manager is already running (PID $($p.Id)). Active window brought to front." 'Green'
         return
       }
     }
@@ -473,7 +473,7 @@ function Start-App {
   }
 
   Write-Host ''
-  Write-Status 'ok' 'CivitAI Model Manager is running!' 'Green'
+  Write-Status 'ok' 'Renegade Core Model Manager is running!' 'Green'
   Write-Host ''
   Write-Host "    Web / Browser UI : http://localhost:$Port" -ForegroundColor DarkGray
   Write-Host "    HTTP API Bridge  : http://localhost:$ApiPort" -ForegroundColor DarkGray
@@ -494,10 +494,10 @@ function Start-App {
 function Show-Status {
   $procs = Get-RunningProcs
   if ($procs.Count -eq 0) {
-    Write-Status '-' 'CivitAI Model Manager is not running.' 'Yellow'
+    Write-Status '-' 'Renegade Core Model Manager is not running.' 'Yellow'
   }
   else {
-    Write-Status '+' "CivitAI Model Manager is running ($($procs.Count) processes):" 'Green'
+    Write-Status '+' "Renegade Core Model Manager is running ($($procs.Count) processes):" 'Green'
     foreach ($p in $procs) {
       Write-Host "      PID $($p.Id)  -  $($p.ProcessName)" -ForegroundColor DarkGray
     }
@@ -545,7 +545,7 @@ function Invoke-AppPackage {
 
 Write-Host ''
 Write-Host '  +----------------------------------------------+' -ForegroundColor Magenta
-Write-Host '  |   CivitAI Model Manager - ComfyUI Edition   |' -ForegroundColor Magenta
+Write-Host '  |   Renegade Core Model Manager   |' -ForegroundColor Magenta
 Write-Host '  +----------------------------------------------+' -ForegroundColor Magenta
 Write-Host ''
 

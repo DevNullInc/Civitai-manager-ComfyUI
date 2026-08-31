@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -68,7 +68,7 @@ export const DevelopmentUpdateBanner: React.FC = () => {
   };
 
   const handleOpenGitHub = () => {
-    const url = updateInfo.githubUrl || 'https://github.com/DevNullInc/Civitai-manager-ComfyUI';
+    const url = updateInfo.githubUrl || 'https://github.com/DevNullInc/RenegadeCMM';
     if (window.civitaiAPI && typeof window.civitaiAPI.openExternal === 'function') {
       window.civitaiAPI.openExternal(url);
     } else {

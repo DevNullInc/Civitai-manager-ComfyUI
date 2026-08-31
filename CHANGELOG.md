@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes, fixes, and unversioned enhancements to **CivitAI Model Manager (ComfyUI Edition)** are documented in this file.
+All notable changes, fixes, and unversioned enhancements to **Renegade Core Model Manager** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
@@ -105,6 +105,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Added [`docs/APISecurity.md`](docs/APISecurity.md) documenting exactly how the CivitAI API key and HuggingFace token are encrypted, stored, transmitted, and their real-world trust boundaries (with an honest note that at-rest encryption currently relies on a static embedded key, not an OS keychain — plus a roadmap to close that gap).
 - **F5 / Ctrl+R Hard Refresh**:
   - The Electron frontend re-enables a hard refresh via `F5`, `Ctrl+R`, or `Cmd+R` (intercepting the key and calling `window.location.reload()`), which re-mounts the active tab so it re-fetches its data after a network drop — previously the removed default menu left no way to refresh the app.
+
+### 🔄 Changed
+
+- **Project Rebranded → Renegade Core Model Manager (RenegadeCMM)**:
+  - Display name is now **Renegade Core Model Manager**; the short technical/project identifier is **RenegadeCMM** (repo, `productName`, app id, npm package, binary/installer artifacts). The `ComfyUI Edition` tagline and all legacy "CivitAI Model Manager"-style names were dropped.
+  - GitHub URLs (repo, issues, security, donations/docs links) updated to `DevNullInc/RenegadeCMM`; the development-update checker and auto-update metadata now target the new repository.
+  - Source headers, UI strings (app title, about, footer), launcher window/process matching (`cmm.sh`/`cmm.ps1`/`cmm-mac.sh`/`cmm.bat`), CRUD backup/import format identifiers, and outbound HTTP `User-Agent` strings updated to the new brand.
+  - **Note**: the companion-node detection aliases (`comfyui-model-manager`, `comfyui-civitai-manager-*`), internal identifiers (`window.civitaiAPI`), and DB columns/Uri (`civitai_api_key`, `civitai_version_id`, etc.) that name the third-party **CivitAI platform** are intentionally unchanged.
+  - **Action required**: rename the GitHub repository `DevNullInc/Civitai-manager-ComfyUI` → `DevNullInc/RenegadeCMM` so the updated URLs, dev-update checker, and auto-update mechanism work.
 
 ### 🛡️ Fixed & Improved
 

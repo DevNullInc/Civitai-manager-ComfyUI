@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -154,7 +154,7 @@ export async function generateDiagnosticReport(extraContext?: Record<string, any
   const errorCount = logHistory.filter((l) => l.level === 'error').length;
   const warnCount = logHistory.filter((l) => l.level === 'warn').length;
 
-  let report = `### CivitAI Model Manager - Diagnostic Report\n`;
+  let report = `### Renegade Core Model Manager - Diagnostic Report\n`;
   report += `**Generated:** ${timestamp}\n\n`;
   report += `#### 🖥️ Environment\n`;
   report += `- **App Version:** ${sysInfo.version || '1.3.0'}\n`;

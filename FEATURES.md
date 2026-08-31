@@ -1,4 +1,4 @@
-# ⚡ CivitAI Model Manager (ComfyUI Edition) — Feature Crib-Notes
+# ⚡ Renegade Core Model Manager — Feature Crib-Notes
 
 > **The TL;DR feature breakdown for anyone who wants the quick crib-notes without scrolling through long docs.**
 

@@ -1,4 +1,4 @@
-# 🔐 CivitAI Model Manager (CMM) — API Key & Secret Storage Security
+# 🔐 Renegade Core Model Manager (CMM) — API Key & Secret Storage Security
 
 **Audience:** Users, contributors, and security reviewers.
 **Scope:** How the CivitAI API key and HuggingFace access token are handled, encrypted, stored, transmitted, and used at runtime — in both the desktop (Electron) and browser (dev) builds of this app.

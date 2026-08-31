@@ -1,5 +1,5 @@
 /**
- * CivitAI Model Manager - ComfyUI Edition
+ * Renegade Core Model Manager (RenegadeCMM)
  * Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc
  *
  * This program is free software: you can redistribute it and/or modify
@@ -14,7 +14,7 @@ import { dbManager } from '../db/db';
 import { logger } from '../utils/logger';
 
 export interface BackupManifest {
-  format: 'civitai-model-manager-backup-zip' | 'civitai-model-manager-settings';
+  format: 'renegadecmm-backup-zip' | 'renegadecmm-settings';
   version: string;
   createdAt: string;
   stats: {
@@ -60,7 +60,7 @@ export class BackupService {
       } catch (e) {}
 
       const manifest: BackupManifest = {
-        format: 'civitai-model-manager-backup-zip',
+        format: 'renegadecmm-backup-zip',
         version: '1.3.0',
         createdAt: new Date().toISOString(),
         stats: {
