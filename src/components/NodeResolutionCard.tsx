@@ -18,6 +18,7 @@ import {
   Terminal,
   Loader2,
   Sparkles,
+  RefreshCw,
   Link as LinkIcon,
   Package,
   FolderSearch,
@@ -46,6 +47,8 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
   const [isInstallingDeps, setIsInstallingDeps] = useState(false);
   const [installOutput, setInstallOutput] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
+  // Set once "Run Pip Install" succeeds, so the button can't be pressed again.
+  const [depsInstalled, setDepsInstalled] = useState(false);
 
   // Manual fallback mapping (searchable dropdown of installed custom node folders)
   const [manualPickerOpen, setManualPickerOpen] = useState(false);
@@ -113,6 +116,7 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
       const res = await window.civitaiAPI.installNodeDependencies(folderPath);
       if (res.success) {
         setInstallOutput(res.output || 'Dependencies installed successfully.');
+        setDepsInstalled(true);
       } else {
         setInstallError(res.error || 'Failed to install dependencies.');
         setInstallOutput(res.output || null);
@@ -488,15 +492,28 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
                 </div>
                 <button
                   onClick={() => handleInstallDeps(cloneResult.targetPath)}
-                  disabled={isInstallingDeps}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow cursor-pointer disabled:opacity-50"
+                  disabled={isInstallingDeps || depsInstalled}
+                  title={
+                    depsInstalled
+                      ? 'Dependencies already installed (restart ComfyUI to load the new nodes).'
+                      : 'Run pip install for this node\'s requirements'
+                  }
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isInstallingDeps ? (
                     <Loader2 size={13} className="animate-spin" />
+                  ) : depsInstalled ? (
+                    <CheckCircle2 size={13} />
                   ) : (
                     <Terminal size={13} />
                   )}
-                  <span>Run Pip Install</span>
+                  <span>
+                    {isInstallingDeps
+                      ? 'Installing...'
+                      : depsInstalled
+                        ? 'Dependencies Installed'
+                        : 'Run Pip Install'}
+                  </span>
                 </button>
               </div>
 
@@ -507,6 +524,15 @@ export const NodeResolutionCard: React.FC<NodeResolutionCardProps> = ({
               )}
               {installError && (
                 <p className="text-rose-400 text-[11px]">{installError}</p>
+              )}
+              {depsInstalled && (
+                <p className="flex items-start gap-1.5 text-amber-300/90 text-[11px] bg-amber-500/10 border border-amber-500/25 rounded-lg px-2.5 py-2">
+                  <RefreshCw size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    Dependencies installed. <strong>Restart ComfyUI</strong> to load the
+                    new nodes before re-scanning the workflow.
+                  </span>
+                </p>
               )}
             </div>
           )}

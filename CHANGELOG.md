@@ -159,6 +159,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - The collapsed (non-expanded) LiteGraph map no longer swallows mouse-wheel / pointer events on hover, which used to hang up scrolling while moving through the workflow page. It is inert (`pointer-events: none`) until you explicitly click inside it (a click-catcher overlay activates it), and it releases the grab the moment you click anywhere outside the map again. The fullscreen map stays fully interactive.
 - **"Search GitHub" Leads With the Pack Name Instead of a Noisy Query**:
   - The browser search previously concatenated `comfyui <nodeClass> <packName>` (e.g. `comfyui easy negative ComfyUI Easy Use`). It now searches just the hosting pack/repo name (e.g. `ComfyUI Easy Use`), falling back to `comfyui <nodeClass>` only when no pack is identified — a repo-title search returns the right extension.
+- **"Run Pip Install" Lockout & Restart Notice**:
+  - The per-node **Run Pip Install** button now locks after a successful install ("Dependencies Installed", disabled) so a double-press can't kick off a second pip run. On success the card shows an amber notice — "**Restart ComfyUI** to load the new nodes" — before the user re-scans the workflow.
+
 - **ComfyUI Official Registry (registry.comfy.org) Fallback**:
   - Node resolution gained a **Tier 2.5**: when the ComfyUI-Manager community registry misses a node class, the app queries the official ComfyUI Registry (`GET https://api.comfy.org/nodes/search?comfy_node_search=<node>`) for an authoritative node-to-repo match before falling through to a broad GitHub search. Matched nodes get the correct pack name, author, and repo link on their card. Results (including negative/not-found) are cached in SQLite with a 24h TTL.
 
