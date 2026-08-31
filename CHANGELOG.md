@@ -108,6 +108,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🔄 Changed
 
+- **Workflow Node Map Rendered with LiteGraph.js (same engine ComfyUI uses)**:
+  - Replaced the hand-rolled SVG layout/path/edge renderer (`buildLayeredLayout`, `resolveCanvasLayout`, `buildEdgePaths`, `computeBounds`, `normalizeEdge`, and the DOM drag/pan handlers) with a read-only **LiteGraph.js v0.7.18** canvas in the new `WorkflowNodeMap` component.
+  - The map now reuses the exact LiteGraph canvas engine ComfyUI itself uses, so node boxes, wires, pan, and zoom behave (and render) identically; nodes keep their embedded canvas coordinates (`pos`/`size`) and bezier links.
+  - Node readiness color-coding preserved: 🟢 **Ready** (emerald), 🟡 **Missing Model** (amber), 🔴 **Missing Extension** (rose); clicking a node still focuses its resolution cards.
+  - Toolbar keeps zoom in/out (0.2x–2.0x), **Fit to View**, and one-click fullscreen expand/shrink.
+  - Rendering is read-only for now; full LiteGraph editing mode is tracked for v1.6.0 (see ROADMAP).
+  - Added LiteGraph.js copyright notice + full MIT license text to the top-level `LICENSE`.
+
 - **Project Rebranded → Renegade Core Model Manager (RenegadeCMM)**:
   - Display name is now **Renegade Core Model Manager**; the short technical/project identifier is **RenegadeCMM** (repo, `productName`, app id, npm package, binary/installer artifacts). The `ComfyUI Edition` tagline and all legacy "CivitAI Model Manager"-style names were dropped.
   - GitHub URLs (repo, issues, security, donations/docs links) updated to `DevNullInc/RenegadeCMM`; the development-update checker and auto-update metadata now target the new repository.
@@ -160,3 +168,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Strict JSON validity verification: immediately alerts user on non-ComfyUI JSON payloads or corrupted files without adding empty 0/0 cards to the queue.
 - **Tab State Persistence**:
   - Maintained persistent DOM mounting across all primary navigation tabs (`browse`, `library`, `workflows`, `downloads`, `settings`, `about`) via display styling, preventing component unmounting, scroll resets, and workflow queue clears during tab switching.
+- **Workflow Node Map: Fit-to-View & Fullscreen Exit Fixes**:
+  - **Fit to View** now resizes the LiteGraph drawing buffer to the visible container *before* computing the fit transform (with a fallback to the canvas size when the host is hidden) and forces an immediate redraw. Previously a stale or zero-sized buffer left the map zoomed into a blank corner, making the button appear to do nothing.
+  - The render loop is now resilient: `draw()` is wrapped so a single aberrant node/link can't permanently kill the rAF loop (which previously made the canvas go blank), and rendering is correctly stopped on unmount.
+  - The expanded fullscreen map can now be collapsed with the existing **X** button or the **Escape** key; the expand toggle uses a functional state update so rapid toggling can't get stuck.
+- **Launcher Banner Box Centering**:
+  - Centered the `cmm.sh` / `cmm-mac.sh` / `cmm.ps1` ASCII box title/subtitle: the box was 47 chars wide while the title spanned fewer, leaving the right pipe lopsided, and the macOS subtitle overflowed the box by a character. The box is now 39 chars with symmetric padding, and the macOS subtitle aligns to the same content width.
