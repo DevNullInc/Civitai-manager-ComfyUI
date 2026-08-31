@@ -87,11 +87,24 @@ export default function WorkflowNodeMap({
     c.ds.min_scale = 0.2;
     c.show_info = false;
 
+    // The bundled render loop dies permanently if a single draw() call throws (e.g. an
+    // aberrant workflow node/link), which freezes the canvas and makes pan/zoom/fit appear
+    // dead. Wrap draw so one bad node can never kill the whole renderer.
+    const drawImpl = c.draw.bind(c);
+    (c as any).draw = (...rest: any[]) => {
+      try {
+        return drawImpl(...rest);
+      } catch (err) {
+        console.error('WorkflowNodeMap render error:', err);
+      }
+    };
+
     graphRef.current = g;
     canvasRef.current = c;
 
     return () => {
       try {
+        c.stopRendering();
         c.setCanvas(null, true);
       } catch {
         /* ignore teardown errors */
@@ -99,6 +112,19 @@ export default function WorkflowNodeMap({
       graphRef.current = null;
       canvasRef.current = null;
     };
+  }, []);
+
+  // Force an immediate synchronous redraw so view changes never depend solely on the
+  // internal requestAnimationFrame loop staying healthy.
+  const forceDraw = useCallback(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    try {
+      c.setDirty(true, true);
+      c.draw(true, true);
+    } catch (err) {
+      console.error('WorkflowNodeMap render error:', err);
+    }
   }, []);
 
   // Fit the whole graph into the current viewport.
@@ -111,10 +137,27 @@ export default function WorkflowNodeMap({
     if (!nodes.length) {
       c.ds.offset = [0, 0];
       c.ds.scale = 1;
-      c.setDirty(true, true);
       setZoomPercent(100);
+      forceDraw();
       return;
     }
+
+    // Keep the drawing buffer in sync with the host before computing the transform.
+    // Otherwise the graph is fitted to (and drawn into) a stale or zero-sized buffer,
+    // which makes Fit to View appear to do nothing.
+    const hostW = host.clientWidth || 0;
+    const hostH = host.clientHeight || 0;
+    if (hostW > 0 && hostH > 0) {
+      try {
+        c.resize();
+      } catch {
+        /* ignore resize errors */
+      }
+    }
+
+    const vw = hostW || c.canvas.width || 600;
+    const vh = hostH || c.canvas.height || 400;
+
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -129,17 +172,15 @@ export default function WorkflowNodeMap({
       maxX = Math.max(maxX, x + w);
       maxY = Math.max(maxY, y + h);
     }
-    const vw = host.clientWidth || 600;
-    const vh = host.clientHeight || 400;
     const bw = maxX - minX || 1;
     const bh = maxY - minY || 1;
     const pad = 80;
     const scale = Math.max(0.1, Math.min(1, (vw - pad) / bw, (vh - pad) / bh));
     c.ds.scale = scale;
     c.ds.offset = [(vw - bw * scale) / 2 - minX * scale, (vh - bh * scale) / 2 - minY * scale];
-    c.setDirty(true, true);
     setZoomPercent(Math.round(scale * 100));
-  }, []);
+    forceDraw();
+  }, [forceDraw]);
 
   // (Re)build the LiteGraph graph whenever the data or node statuses change.
   useEffect(() => {
@@ -204,13 +245,23 @@ export default function WorkflowNodeMap({
   // Re-size and re-fit whenever visibility/fullscreen changes.
   useEffect(() => {
     if (!visible) return;
-    const c = canvasRef.current;
-    const host = hostRef.current;
-    if (!c || !host) return;
-    c.resize();
     fitToView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMapExpanded, visible]);
+
+  // Collapse the expanded map via the X button or the Escape key.
+  useEffect(() => {
+    if (!isMapExpanded) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggleExpand();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isMapExpanded, onToggleExpand]);
 
   const zoomBy = (delta: number) => {
     const c = canvasRef.current;
@@ -223,8 +274,8 @@ export default function WorkflowNodeMap({
     const cy = (host.clientHeight || 400) / 2;
     c.ds.scale = next;
     c.ds.offset = [cx - (cx - c.ds.offset[0]) * k, cy - (cy - c.ds.offset[1]) * k];
-    c.setDirty(true, true);
     setZoomPercent(Math.round(next * 100));
+    forceDraw();
   };
 
   const showButtons = visible;

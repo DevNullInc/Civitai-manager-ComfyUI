@@ -833,7 +833,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           onFocusNode={setSelectedNodeId}
           viewMode={viewMode}
           isMapExpanded={isMapExpanded}
-          onToggleExpand={() => setIsMapExpanded(!isMapExpanded)}
+          onToggleExpand={() => setIsMapExpanded((prev) => !prev)}
         />
       )}
 
