@@ -106,7 +106,17 @@ export const SettingsTab: React.FC = () => {
   const [autoDetectFeedback, setAutoDetectFeedback] = useState<{ success: boolean; message: string; path?: string } | null>(null);
   const [scaffoldFeedback, setScaffoldFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [isScaffolding, setIsScaffolding] = useState(false);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const [showDebugLog, setShowDebugLog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const appendDebug = (msg: string) => {
+    const ts = new Date().toLocaleTimeString();
+    const line = `[${ts}] ${msg}`;
+    setDebugLog((prev) => [...prev.slice(-49), line]);
+    // also mirror to browser console for DevTools
+    console.log(`[Settings Debug] ${msg}`);
+  };
   const [folderBrowser, setFolderBrowser] = useState<{ target: 'install' | 'addFolder'; start: string } | null>(null);
 
   const handleAutoDetectComfyUI = async () => {
@@ -173,20 +183,19 @@ export const SettingsTab: React.FC = () => {
     setConfig((prev) => {
       const base = { ...prev, comfyui_install_dir: installDir };
       if (!trimmed) return base;
-      const first = prev.comfyui_folders[0];
-      const isDefaultModelsPath = !first || /[\\/]models[\\/]?$/i.test(first);
       const derivedModels = deriveModelsFolder(trimmed);
-      if (isDefaultModelsPath) {
-        return { ...base, comfyui_folders: [derivedModels], comfyui_root: derivedModels };
+      if (!derivedModels) return base;
+      const existing = prev.comfyui_folders || [];
+      if (existing.length > 0 && existing[0].toLowerCase() === derivedModels.toLowerCase()) {
+        return base;
       }
-      if (!prev.comfyui_folders.includes(derivedModels)) {
-        return {
-          ...base,
-          comfyui_folders: [derivedModels, ...prev.comfyui_folders.filter((f) => f !== derivedModels)],
-          comfyui_root: derivedModels,
-        };
-      }
-      return base;
+      const otherFolders = existing.filter((f) => f.toLowerCase() !== derivedModels.toLowerCase());
+      const updatedFolders = [derivedModels, ...otherFolders];
+      return {
+        ...base,
+        comfyui_folders: updatedFolders,
+        comfyui_root: updatedFolders[0] || '',
+      };
     });
   };
 
@@ -254,12 +263,17 @@ export const SettingsTab: React.FC = () => {
       try {
         const res = await window.civitaiAPI.inspectComfyUIInstall(customPath);
         setInstallInfo(res);
-        if (res?.autoModelsDir && (!config.comfyui_folders || config.comfyui_folders.length === 0)) {
-          setConfig((prev) => ({
-            ...prev,
-            comfyui_folders: [res.autoModelsDir!],
-            comfyui_root: res.autoModelsDir!,
-          }));
+        if (res?.autoModelsDir) {
+          setConfig((prev) => {
+            if (!prev.comfyui_folders || prev.comfyui_folders.length === 0) {
+              return {
+                ...prev,
+                comfyui_folders: [res.autoModelsDir!],
+                comfyui_root: res.autoModelsDir!,
+              };
+            }
+            return prev;
+          });
         }
       } catch {
         setInstallInfo(null);
@@ -439,23 +453,23 @@ export const SettingsTab: React.FC = () => {
       // If install_dir was just typed (onChange with commitFolders=false), folders may
       // still be stale — ensure the derived <install>\models folder is present without
       // dropping user-added extra model dirs (including ones that also end with \Models).
-      let foldersForSave = config.comfyui_folders
+      let foldersForSave = (config.comfyui_folders || [])
         .map((p) => sanitizeFolderPath(p) ?? '')
         .filter(Boolean) as string[];
       const installTrimmed = (config.comfyui_install_dir || '').trim();
       if (installTrimmed) {
         const derived = deriveModelsFolder(installTrimmed);
-        const hasDerived = foldersForSave.some((f) => f.toLowerCase() === derived.toLowerCase());
-        if (!hasDerived) {
+        if (derived && !foldersForSave.some((f) => f.toLowerCase() === derived.toLowerCase())) {
           foldersForSave = [derived, ...foldersForSave];
         }
       }
       const primaryRoot = foldersForSave[0] || normalizeFolderPath(config.comfyui_root || '');
-      const payload = {
+      const payload: AppConfig = {
         ...config,
         comfyui_folders: foldersForSave,
         comfyui_root: primaryRoot,
       };
+      appendDebug(`SAVE payload folders=${JSON.stringify(payload.comfyui_folders)} install_dir=${payload.comfyui_install_dir} root=${payload.comfyui_root}`);
       await window.civitaiAPI.saveConfig(payload);
       setConfig(payload);
       setSavedSuccess(true);
@@ -463,13 +477,20 @@ export const SettingsTab: React.FC = () => {
       // Verify what actually persisted (catch cache/DB divergence)
       try {
         const verify = await window.civitaiAPI.getConfig();
+        appendDebug(`VERIFY getConfig folders=${JSON.stringify(verify?.comfyui_folders)} install_dir=${verify?.comfyui_install_dir} root=${verify?.comfyui_root}`);
         const mismatch =
-          (verify.comfyui_install_dir || '') !== (payload.comfyui_install_dir || '') ||
-          JSON.stringify(verify.comfyui_folders || []) !== JSON.stringify(payload.comfyui_folders || []);
+          (verify?.comfyui_install_dir || '') !== (payload.comfyui_install_dir || '') ||
+          JSON.stringify(verify?.comfyui_folders || []) !== JSON.stringify(payload.comfyui_folders || []);
         if (mismatch) {
+          const msg = `MISMATCH — expected ${JSON.stringify(payload.comfyui_folders)} got ${JSON.stringify(verify?.comfyui_folders)}`;
+          appendDebug(msg);
           console.warn('[Settings] Persisted config mismatch — expected', payload, 'got', verify);
+        } else {
+          appendDebug('VERIFY OK — DB matches payload');
         }
-      } catch {}
+      } catch (e: any) {
+        appendDebug(`VERIFY error: ${e?.message || e}`);
+      }
     } catch (err: any) {
       console.error('Failed to save configuration:', err);
       alert(`Failed to save settings: ${err?.message || err}`);
@@ -578,11 +599,13 @@ export const SettingsTab: React.FC = () => {
   };
 
   const removeFolder = (index: number) => {
-    const updatedFolders = config.comfyui_folders.filter((_, i) => i !== index);
-    setConfig({
-      ...config,
-      comfyui_folders: updatedFolders,
-      comfyui_root: updatedFolders[0] || '',
+    setConfig((prev) => {
+      const updatedFolders = prev.comfyui_folders.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        comfyui_folders: updatedFolders,
+        comfyui_root: updatedFolders[0] || '',
+      };
     });
   };
 
@@ -733,6 +756,8 @@ export const SettingsTab: React.FC = () => {
         : imported.comfyui_root
         ? [imported.comfyui_root]
         : [],
+      comfyui_install_dir: imported.comfyui_install_dir || '',
+      comfyui_custom_nodes_dir: imported.comfyui_custom_nodes_dir || '',
       civitai_api_key: imported.civitai_api_key || '',
       mirror_url: imported.mirror_url || '',
       huggingface_token: imported.huggingface_token || '',
@@ -756,6 +781,14 @@ export const SettingsTab: React.FC = () => {
           ? imported.nsfw_max_visible_level
           : 5,
       nsfw_blur_enabled: imported.nsfw_blur_enabled !== false,
+      strict_hash_verification: imported.strict_hash_verification !== false,
+      max_concurrent_downloads:
+        typeof imported.max_concurrent_downloads === 'number'
+          ? imported.max_concurrent_downloads
+          : 2,
+      default_download_folder: imported.default_download_folder || '',
+      local_api_enabled: imported.local_api_enabled !== false,
+      local_api_port: imported.local_api_port || 5174,
     };
 
     setConfig(merged);
@@ -2198,6 +2231,62 @@ export const SettingsTab: React.FC = () => {
           onCancel={() => setFolderBrowser(null)}
         />
       )}
+
+      {/* Debug Console */}
+      <div className="glass-panel p-4 rounded-3xl border border-slate-800 space-y-3 shadow-xl">
+        <button
+          type="button"
+          onClick={() => setShowDebugLog((v) => !v)}
+          className="flex items-center gap-2 text-xs font-bold text-slate-200 hover:text-white cursor-pointer"
+        >
+          <Terminal size={14} className="text-cyan-400" />
+          <span>Debug Console {debugLog.length > 0 ? `(${debugLog.length})` : ''}</span>
+          <span className="text-[10px] text-slate-500">{showDebugLog ? '▼ hide' : '▶ show'}</span>
+        </button>
+        {showDebugLog && (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDebugLog([])}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 cursor-pointer"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const cfg = await (window as any).civitaiAPI?.getConfig?.();
+                    appendDebug(`MANUAL getConfig folders=${JSON.stringify(cfg?.comfyui_folders)} install_dir=${cfg?.comfyui_install_dir}`);
+                  } catch (e: any) {
+                    appendDebug(`MANUAL getConfig error: ${e?.message || e}`);
+                  }
+                }}
+                className="px-2.5 py-1 rounded-lg bg-cyan-900/30 hover:bg-cyan-800/40 border border-cyan-700/30 text-[11px] text-cyan-300 cursor-pointer"
+              >
+                Refresh from DB
+              </button>
+            </div>
+            <div className="max-h-64 overflow-y-auto rounded-xl bg-slate-950 border border-slate-800 p-3 font-mono text-[11px] leading-5 whitespace-pre-wrap break-all select-text cursor-text">
+              {debugLog.length === 0 ? (
+                <span className="text-slate-500 select-text">No debug entries yet. Save settings to see payload ↔ DB verify.</span>
+              ) : (
+                debugLog.map((l, i) => (
+                  <div
+                    key={i}
+                    className={`select-text ${
+                      l.includes('MISMATCH') ? 'text-amber-300' : l.includes('VERIFY OK') ? 'text-emerald-300' : 'text-slate-300'
+                    }`}
+                  >
+                    {l}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -150,12 +150,24 @@ async function loadConfigFromDb() {
     });
 
     if (cfgObj.comfyui_root) currentConfig.comfyui_root = cfgObj.comfyui_root;
-    if (cfgObj.comfyui_folders) currentConfig.comfyui_folders = cfgObj.comfyui_folders;
+    if (cfgObj.comfyui_folders) {
+      let f = cfgObj.comfyui_folders;
+      if (typeof f === 'string') {
+        try {
+          f = JSON.parse(f);
+        } catch {}
+      }
+      currentConfig.comfyui_folders = sanitizeFolderList(f);
+    }
     if (cfgObj.comfyui_install_dir !== undefined) currentConfig.comfyui_install_dir = cfgObj.comfyui_install_dir;
     if (cfgObj.comfyui_custom_nodes_dir !== undefined) currentConfig.comfyui_custom_nodes_dir = cfgObj.comfyui_custom_nodes_dir;
     if ((!currentConfig.comfyui_folders || currentConfig.comfyui_folders.length === 0) && currentConfig.comfyui_root) {
       currentConfig.comfyui_folders = [currentConfig.comfyui_root];
     }
+    if (currentConfig.comfyui_folders && currentConfig.comfyui_folders.length > 0 && !currentConfig.comfyui_root) {
+      currentConfig.comfyui_root = currentConfig.comfyui_folders[0];
+    }
+    logger.info(`[Config] Loaded from DB: folders=${JSON.stringify(currentConfig.comfyui_folders)} install_dir=${currentConfig.comfyui_install_dir} root=${currentConfig.comfyui_root}`);
     if (cfgObj.civitai_api_key) {
       const decrypted = decryptKey(cfgObj.civitai_api_key);
       currentConfig.civitai_api_key = decrypted;
@@ -1207,6 +1219,10 @@ function startHttpBridgeServer() {
           advancedMappings: currentConfig.advanced_mappings,
         });
 
+        try {
+          await dbManager.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+        } catch {}
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(currentConfig));
       } else if (url === '/api/scaffold-model-folders' && req.method === 'POST') {
@@ -1895,6 +1911,12 @@ function registerIpcHandlers() {
       separateByCreator: currentConfig.organize_by.creator,
       advancedMappings: currentConfig.advanced_mappings,
     });
+
+    // Ensure WAL is checkpointed so the write is visible to the next process/restart
+    try {
+      await dbManager.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      logger.info(`[Config] Saved folders: ${JSON.stringify(currentConfig.comfyui_folders)} install_dir=${currentConfig.comfyui_install_dir}`);
+    } catch {}
 
     return currentConfig;
   });

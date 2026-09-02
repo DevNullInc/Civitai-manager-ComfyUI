@@ -357,15 +357,15 @@ export function AboutTab() {
               filteredLogs.map((entry) => (
                 <div
                   key={entry.id}
-                  className={`p-2 rounded-lg border text-left transition-colors flex flex-col gap-1 ${entry.level === 'error'
+                  className={`p-2 rounded-lg border text-left transition-colors flex flex-col gap-1 select-text ${entry.level === 'error'
                     ? 'bg-rose-950/25 border-rose-900/40 text-rose-300'
                     : entry.level === 'warn'
                       ? 'bg-amber-950/25 border-amber-900/40 text-amber-300'
                       : 'bg-slate-900/40 border-slate-800/50 text-slate-300'
                     }`}
                 >
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-[10px] text-slate-500 shrink-0 select-none">
+                  <div className="flex items-start gap-2.5 select-text">
+                    <span className="text-[10px] text-slate-500 shrink-0 select-text">
                       {entry.time}
                     </span>
                     <span
@@ -378,13 +378,13 @@ export function AboutTab() {
                     >
                       {entry.level}
                     </span>
-                    <span className="whitespace-pre-wrap break-all flex-1 font-mono text-[11.5px]">
+                    <span className="whitespace-pre-wrap break-all flex-1 font-mono text-[11.5px] select-text">
                       {entry.message}
                     </span>
                   </div>
 
                   {entry.stack && (
-                    <pre className="text-[10px] text-slate-500 bg-slate-950/80 p-2 rounded border border-slate-800/80 overflow-x-auto whitespace-pre font-mono mt-1">
+                    <pre className="text-[10px] text-slate-500 bg-slate-950/80 p-2 rounded border border-slate-800/80 overflow-x-auto whitespace-pre font-mono mt-1 select-text">
                       {entry.stack}
                     </pre>
                   )}

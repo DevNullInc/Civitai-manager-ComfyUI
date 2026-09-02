@@ -36,10 +36,21 @@ async function loadConfig() {
     });
 
     if (cfgObj.comfyui_root) currentConfig.comfyui_root = cfgObj.comfyui_root;
-    if (cfgObj.comfyui_folders) currentConfig.comfyui_folders = cfgObj.comfyui_folders;
+    if (cfgObj.comfyui_folders) {
+      let f = cfgObj.comfyui_folders;
+      if (typeof f === 'string') {
+        try {
+          f = JSON.parse(f);
+        } catch {}
+      }
+      currentConfig.comfyui_folders = Array.isArray(f) ? f : [];
+    }
     if (cfgObj.comfyui_install_dir) currentConfig.comfyui_install_dir = cfgObj.comfyui_install_dir;
     if ((!currentConfig.comfyui_folders || currentConfig.comfyui_folders.length === 0) && currentConfig.comfyui_root) {
       currentConfig.comfyui_folders = [currentConfig.comfyui_root];
+    }
+    if (currentConfig.comfyui_folders && currentConfig.comfyui_folders.length > 0 && !currentConfig.comfyui_root) {
+      currentConfig.comfyui_root = currentConfig.comfyui_folders[0];
     }
   } catch (err) {
     console.error('Error loading config in Vite plugin:', err);
@@ -78,6 +89,7 @@ function apiServerPlugin(): Plugin {
 
         try {
           if (req.url === '/api/config' && req.method === 'GET') {
+            await loadConfig();
             res.end(JSON.stringify(currentConfig));
           } else if (req.url === '/api/save-config' && req.method === 'POST') {
             const body = await getBody();
