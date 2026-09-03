@@ -12,7 +12,8 @@ graph LR
     v14 --> v141["🎯 v1.4.1<br/>Live ComfyUI & Keep-Alive"]
     v141 --> v15["🎯 v1.5.0<br/>Native HF & GGUF Engine"]
     v15 --> v16["🎯 v1.6.0<br/>Hardlink Storage Optimizer"]
-    v16 --> v20["🎯 v2.0.0<br/>Smart Collections & Trigger Hub"]
+    v16 --> v17["🎯 v1.7.0<br/>Smart Collections & Trigger Hub"]
+    v17 --> v20["🎯 v2.0.0<br/>Unified Multi-Gen & Package Launch Hub"]
 ```
 
 ---
@@ -103,7 +104,7 @@ graph LR
 
 ---
 
-### 🎯 Phase 4: v2.0.0 — Smart Collections, Trigger Word Hub & Semantic Search
+### 🎯 Phase 4: v1.7.0 — Smart Collections, Trigger Word Hub & Semantic Search
 >
 > **Goal**: Complete creative workstation and prompt curation engine.
 
@@ -113,6 +114,33 @@ graph LR
   - Group models by project, art style, or architecture (e.g., *"Flux Realism Setup"*, *"SDXL Inpainting Kit"*, *"Anime Style LoRAs"*).
 - [ ] **Local Semantic Search**:
   - Embed local model descriptions and prompt tags with an embedded vector store to allow natural language search (e.g., *"find high-contrast cinematic lighting LoRAs"*).
+
+---
+
+### 🎯 Phase 5: v2.0.0 — Unified Multi-Gen Ecosystem & Automated Package Launch Hub
+>
+> **Goal**: Expand Renegade CMM into an all-in-one AI generation workstation and runtime manager. Launch, orchestrate, and automatically install multiple generative backends, model engines, and LLM suites directly from a single native launchpad.
+
+- [ ] **Universal Multi-Gen Launchpad & Suite Selector**:
+  - Unified launch window allowing users to select, configure, and boot their preferred generation environment: **ComfyUI**, **AUTOMATIC1111**, **Stable Diffusion WebUI / SD.Next**, **Fooocus**, **SwarmUI**, and more.
+  - Dedicated package profile switching with customizable launch flags, port overrides, environment variables, and GPU acceleration arguments.
+- [ ] **Automated Host Package Installer & Environment Provisioning**:
+  - One-click native installation and environment setup for any supported generation suite directly onto the host computer if not already installed.
+  - Automated dependency bootstrapping: Git repository cloning, isolated Python virtual environments (venv/conda), PyTorch/CUDA wheels, and required packages without manual terminal commands.
+  - Built-in one-click package updater, dependency health repair, and version rollback management.
+- [ ] **Integrated Local LLM & Multi-Modal Packages**:
+  - Full package orchestration and installation support for local LLM engines and text runtimes (Ollama, llama.cpp, text-generation-webui, KoboldCPP).
+  - Cross-modal workflow bridging allowing local LLMs to generate prompts, detailed captions, metadata tags, and structured generation parameters directly for diffusion engines.
+- [ ] **Unified Multi-Gen Model Architecture & Symlink / Hardlink Linker**:
+  - Prevent multi-gigabyte duplicate model files across engines (e.g., Automatic1111's `models/Stable-diffusion/` vs. ComfyUI's `models/checkpoints/` vs. Fooocus / SwarmUI directory structures) using automated symlinks, hardlinks, or NTFS junction points.
+  - User-configurable primary model repository: users can designate a centralized master model folder that automatically creates and manages links for all generative suites, or elect a specific generator's native folder to host the physical file while linking the others.
+- [ ] **Library Tab "Hot-Swap" Link Management & Relocation Engine**:
+  - Interactive link configuration and duplicate-merging directly from the Library tab.
+  - Zero-breakage physical relocation: if a user moves a physical model file out of the central store directly into a specific engine's local directory, CMM hot-swaps the link: deletes the old target link in place, transfers the physical file, and immediately regenerates the symlink/hardlink from the previous source path, guaranteeing unbroken compatibility across all other installed engines.
+- [ ] **Orphan-Proof Cascading Purge & SQLite Registry Cleaning**:
+  - When a model is deleted and purged from the CMM Library, the system purges the physical file and automatically tracks and removes all associated symlinks/hardlinks across all registered generator folders via the SQLite database registry, preventing orphaned database records and broken filesystem links.
+- [ ] **Universal Multi-Source Downloader**:
+  - Unified CivitAI and Hugging Face model browser routing downloads automatically to the primary model storage and linking across all active generative backends.
 
 ---
 
