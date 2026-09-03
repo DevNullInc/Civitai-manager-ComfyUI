@@ -7,7 +7,7 @@
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  */
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
@@ -55,6 +55,7 @@ let currentConfig: AppConfig = {
   nsfw_blur_enabled: true,
   local_api_enabled: true,
   local_api_port: 5174,
+  comfyui_server_url: 'http://127.0.0.1:8188',
 };
 
 function isValidFolderPath(p: string): boolean {
@@ -108,8 +109,31 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true,
+      backgroundThrottling: false,
     },
   });
+
+  try {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const u = details.url.toLowerCase();
+      if (u.includes('127.0.0.1:') || u.includes('localhost:') || u.includes('comfy')) {
+        const responseHeaders = { ...details.responseHeaders };
+        delete responseHeaders['x-frame-options'];
+        delete responseHeaders['X-Frame-Options'];
+        if (responseHeaders['content-security-policy']) {
+          responseHeaders['content-security-policy'] = responseHeaders['content-security-policy'].map((csp: string) =>
+            csp.replace(/frame-ancestors[^;]+;?/gi, '')
+          );
+        }
+        callback({ cancel: false, responseHeaders });
+        return;
+      }
+      callback({ cancel: false, responseHeaders: details.responseHeaders });
+    });
+  } catch (err: any) {
+    logger.warn('Failed to register onHeadersReceived for ComfyUI frame embedding:', err?.message);
+  }
 
   mainWindow.removeMenu();
   mainWindow.setMenuBarVisibility(false);
@@ -216,6 +240,9 @@ async function loadConfigFromDb() {
     }
     if (cfgObj.local_api_port !== undefined) {
       currentConfig.local_api_port = cfgObj.local_api_port;
+    }
+    if (cfgObj.comfyui_server_url !== undefined && typeof cfgObj.comfyui_server_url === 'string') {
+      currentConfig.comfyui_server_url = cfgObj.comfyui_server_url;
     }
 
     folderRouter.updateConfig({
@@ -959,6 +986,150 @@ function resolveWorkflowScanPaths(config: AppConfig, customPaths?: string | stri
   return Array.from(candidateDirs);
 }
 
+async function checkComfyUIStatus(targetUrl?: string): Promise<{ online: boolean; serverUrl: string; version?: string; devices?: string[]; os?: string; error?: string }> {
+  let url = (targetUrl && targetUrl.trim()) ? targetUrl.trim() : (currentConfig.comfyui_server_url || 'http://127.0.0.1:8188');
+  url = url.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) {
+    url = `http://${url}`;
+  }
+
+  try {
+    const res = await axios.get(`${url}/system_stats`, {
+      timeout: 1500,
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (res.status === 200 && res.data) {
+      const data = res.data;
+      const devices = Array.isArray(data.devices)
+        ? data.devices.map((d: any) => d.name || d.type || 'Device')
+        : [];
+      const version = data.system?.comfyui_version || data.system?.version || 'Active';
+      return {
+        online: true,
+        serverUrl: url,
+        version: String(version),
+        devices,
+        os: data.system?.os,
+      };
+    }
+  } catch (err: any) {
+    try {
+      const fallback = await axios.get(`${url}/prompt`, { timeout: 1000 });
+      if (fallback.status === 200) {
+        return {
+          online: true,
+          serverUrl: url,
+          version: 'Active',
+          devices: [],
+        };
+      }
+    } catch {}
+  }
+
+  return {
+    online: false,
+    serverUrl: url,
+    error: 'ComfyUI server not responding',
+  };
+}
+
+async function saveComfyUIWorkflow(fileName: string, data: any, fileType = 'json'): Promise<{ success: boolean; filePath?: string; fileName?: string; error?: string }> {
+  try {
+    if (!fileName || !data) {
+      return { success: false, error: 'Missing fileName or data payload' };
+    }
+
+    let targetDir = '';
+    if (currentConfig.comfyui_install_dir && fs.existsSync(currentConfig.comfyui_install_dir)) {
+      const modernUserWf = path.join(currentConfig.comfyui_install_dir, 'user', 'default', 'workflows');
+      const rootWf = path.join(currentConfig.comfyui_install_dir, 'workflows');
+      if (fs.existsSync(modernUserWf)) {
+        targetDir = modernUserWf;
+      } else if (fs.existsSync(rootWf)) {
+        targetDir = rootWf;
+      } else {
+        fs.mkdirSync(modernUserWf, { recursive: true });
+        targetDir = modernUserWf;
+      }
+    } else {
+      const scanPaths = resolveWorkflowScanPaths(currentConfig);
+      if (scanPaths.length > 0) {
+        targetDir = scanPaths[0];
+      }
+    }
+
+    if (!targetDir) {
+      return {
+        success: false,
+        error: 'No ComfyUI installation directory or workflow folder configured. Set ComfyUI path in Settings.',
+      };
+    }
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    let cleanName = path.basename(fileName).replace(/[\\/:*?"<>|]/g, '_');
+    const isPng = fileType === 'png' || cleanName.toLowerCase().endsWith('.png');
+    if (!isPng && !cleanName.toLowerCase().endsWith('.json')) {
+      cleanName = `${cleanName}.json`;
+    }
+
+    const fullPath = path.join(targetDir, cleanName);
+
+    if (isPng) {
+      if (typeof data === 'string' && data.startsWith('data:image/')) {
+        const base64Data = data.replace(/^data:image\/\w+;base64,/, '');
+        fs.writeFileSync(fullPath, Buffer.from(base64Data, 'base64'));
+      } else if (Buffer.isBuffer(data)) {
+        fs.writeFileSync(fullPath, data);
+      } else {
+        const jsonName = cleanName.replace(/\.png$/i, '.json');
+        const jsonPath = path.join(targetDir, jsonName);
+        const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        fs.writeFileSync(jsonPath, jsonStr, 'utf-8');
+        return { success: true, filePath: jsonPath, fileName: jsonName };
+      }
+    } else {
+      const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      fs.writeFileSync(fullPath, jsonStr, 'utf-8');
+    }
+
+    logger.info(`[Workflows] Auto-saved workflow to ComfyUI directory: ${fullPath}`);
+    return { success: true, filePath: fullPath, fileName: cleanName };
+  } catch (err: any) {
+    logger.error('Failed to save workflow to ComfyUI:', err);
+    return { success: false, error: err?.message || 'Failed to save workflow' };
+  }
+}
+
+async function executeComfyUIPrompt(promptData: any, serverUrl?: string): Promise<{ success: boolean; prompt_id?: string; number?: number; error?: string }> {
+  let url = (serverUrl && serverUrl.trim()) ? serverUrl.trim() : (currentConfig.comfyui_server_url || 'http://127.0.0.1:8188');
+  url = url.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) {
+    url = `http://${url}`;
+  }
+
+  try {
+    const payload = promptData.prompt ? promptData : { prompt: promptData };
+    const res = await axios.post(`${url}/prompt`, payload, {
+      timeout: 5000,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return {
+      success: true,
+      prompt_id: res.data?.prompt_id,
+      number: res.data?.number,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.response?.data?.error?.message || err?.message || 'Failed to queue prompt in ComfyUI',
+    };
+  }
+}
+
 function startHttpBridgeServer() {
   const apiPort =
     parseInt(process.env.API_PORT || process.env.BRIDGE_PORT || process.env.CMM_PORT || '', 10) || 5174;
@@ -1207,6 +1378,13 @@ function startHttpBridgeServer() {
           await dbManager.run(
             'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
             ['local_api_port', JSON.stringify(body.local_api_port)]
+          );
+        }
+
+        if (body.comfyui_server_url !== undefined && typeof body.comfyui_server_url === 'string') {
+          await dbManager.run(
+            'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+            ['comfyui_server_url', JSON.stringify(body.comfyui_server_url.trim())]
           );
         }
 
@@ -1667,6 +1845,25 @@ function startHttpBridgeServer() {
         const workflows = await workflowScanner.scanWorkflows(targetPaths);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(workflows));
+      } else if ((url === '/api/comfyui/status' || url === '/api/comfyui-status') && (req.method === 'GET' || req.method === 'POST')) {
+        let targetUrl: string | undefined;
+        if (req.method === 'POST') {
+          const body = await getBody();
+          targetUrl = body.serverUrl || body.url;
+        }
+        const status = await checkComfyUIStatus(targetUrl);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
+      } else if ((url === '/api/comfyui/save-workflow' || url === '/api/save-comfyui-workflow') && req.method === 'POST') {
+        const body = await getBody();
+        const result = await saveComfyUIWorkflow(body.fileName, body.data, body.fileType);
+        res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else if ((url === '/api/comfyui/prompt' || url === '/api/execute-comfyui-prompt') && req.method === 'POST') {
+        const body = await getBody();
+        const result = await executeComfyUIPrompt(body.prompt || body, body.serverUrl);
+        res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
       } else if (url === '/api/webhooks/test' && req.method === 'POST') {
         const body = await getBody();
         const result = await webhookService.testWebhook(body.url, body.event);
@@ -1903,6 +2100,13 @@ function registerIpcHandlers() {
       );
     }
 
+    if (newConfig.comfyui_server_url !== undefined && typeof newConfig.comfyui_server_url === 'string') {
+      await dbManager.run(
+        'INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?);',
+        ['comfyui_server_url', JSON.stringify(newConfig.comfyui_server_url.trim())]
+      );
+    }
+
     folderRouter.updateConfig({
       rootPath: currentConfig.comfyui_root,
       folderPaths: currentConfig.comfyui_folders,
@@ -1950,6 +2154,18 @@ function registerIpcHandlers() {
 
   ipcMain.handle('parse-workflow', async (_event: unknown, workflowData: any, workflowName?: string) => {
     return await workflowScanner.parseWorkflow(workflowData, workflowName);
+  });
+
+  ipcMain.handle('check-comfyui-status', async (_event: unknown, serverUrl?: string) => {
+    return await checkComfyUIStatus(serverUrl);
+  });
+
+  ipcMain.handle('save-comfyui-workflow', async (_event: unknown, fileName: string, data: any, fileType?: string) => {
+    return await saveComfyUIWorkflow(fileName, data, fileType);
+  });
+
+  ipcMain.handle('execute-comfyui-prompt', async (_event: unknown, promptData: any, serverUrl?: string) => {
+    return await executeComfyUIPrompt(promptData, serverUrl);
   });
 
   // ComfyUI Installation & Custom Node Inspection

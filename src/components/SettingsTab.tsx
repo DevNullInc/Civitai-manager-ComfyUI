@@ -43,12 +43,15 @@ import {
   Loader2,
   ExternalLink,
   Package,
+  Wifi,
+  Radio,
 } from 'lucide-react';
 import {
   AppConfig,
   ConflictStrategy,
   FilenamePatternRule,
   ComfyUIInstallInfo,
+  ComfyUIStatus,
   DEFAULT_FOLDER_MAP,
   DEFAULT_FILENAME_PATTERNS,
 } from '../types/app';
@@ -80,10 +83,13 @@ export const SettingsTab: React.FC = () => {
     default_download_folder: '',
     local_api_enabled: true,
     local_api_port: 5174,
+    comfyui_server_url: 'http://127.0.0.1:8188',
   });
 
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [comfyStatus, setComfyStatus] = useState<ComfyUIStatus | null>(null);
+  const [isCheckingComfyStatus, setIsCheckingComfyStatus] = useState(false);
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
@@ -434,13 +440,30 @@ export const SettingsTab: React.FC = () => {
             comfyui_custom_nodes_dir: loaded.comfyui_custom_nodes_dir || '',
             local_api_enabled: loaded.local_api_enabled !== false,
             local_api_port: loaded.local_api_port || 5174,
+            comfyui_server_url: loaded.comfyui_server_url || 'http://127.0.0.1:8188',
           });
           checkInstallDir(loaded.comfyui_install_dir);
+          checkComfyConnection(loaded.comfyui_server_url || 'http://127.0.0.1:8188');
         }
       }
     };
     loadConfig();
   }, []);
+
+  const checkComfyConnection = async (targetUrl?: string) => {
+    const url = targetUrl || config.comfyui_server_url || 'http://127.0.0.1:8188';
+    setIsCheckingComfyStatus(true);
+    try {
+      if (window.civitaiAPI?.checkComfyUIStatus) {
+        const res = await window.civitaiAPI.checkComfyUIStatus(url);
+        setComfyStatus(res);
+      }
+    } catch (err: any) {
+      setComfyStatus({ online: false, serverUrl: url, error: err?.message || 'Failed to connect' });
+    } finally {
+      setIsCheckingComfyStatus(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -1019,6 +1042,69 @@ export const SettingsTab: React.FC = () => {
                 )}
               </button>
             )}
+          </div>
+
+          {/* ComfyUI Server Endpoint & Live Canvas Bridge */}
+          <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <Radio size={14} className="text-cyan-400" />
+                <span>ComfyUI Server Endpoint (Live Canvas & Workflow Bridge)</span>
+              </label>
+              {comfyStatus && (
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      comfyStatus.online
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                        : 'bg-slate-800/80 border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        comfyStatus.online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                      }`}
+                    />
+                    <span>
+                      {comfyStatus.online
+                        ? `Connected (${comfyStatus.version || 'Online'})`
+                        : 'Offline / Unreachable'}
+                    </span>
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                placeholder="http://127.0.0.1:8188"
+                value={config.comfyui_server_url || ''}
+                onChange={(e) => setConfig((prev) => ({ ...prev, comfyui_server_url: e.target.value }))}
+                className="flex-1 bg-slate-950/80 border border-slate-700/80 rounded-xl px-4 py-2 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => checkComfyConnection()}
+                disabled={isCheckingComfyStatus}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer shrink-0 active:scale-95"
+                title="Probe ComfyUI server status at this URL"
+              >
+                {isCheckingComfyStatus ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wifi size={13} />
+                    <span>Test Connection</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Default is <code className="font-mono text-cyan-300">http://127.0.0.1:8188</code>. Used to embed the live ComfyUI workspace and push workflows directly into the active graph.
+            </p>
           </div>
 
           {/* Auto-Detect Feedback Toast/Banner */}

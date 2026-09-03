@@ -66,6 +66,7 @@ function AppContent() {
   const [activeDownloadsCount, setActiveDownloadsCount] = useState<number>(0);
   const [hasFoldersConfigured, setHasFoldersConfigured] = useState<boolean>(true);
   const [isBackendOnline, setIsBackendOnline] = useState<boolean>(true);
+  const [isComfyOnline, setIsComfyOnline] = useState<boolean>(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [browseInitialQuery, setBrowseInitialQuery] = useState<string>('');
   const [browseInitialModelId, setBrowseInitialModelId] = useState<number | null>(null);
@@ -336,7 +337,7 @@ function AppContent() {
 
           <button
             onClick={() => setActiveTab('workflows')}
-            className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap ${
+            className={`flex-1 min-w-[100px] max-w-[140px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap relative ${
               activeTab === 'workflows'
                 ? 'bg-linear-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30 scale-105 glow-purple'
                 : 'bg-slate-900/60 text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 border border-slate-800/80'
@@ -344,6 +345,12 @@ function AppContent() {
           >
             <Workflow size={16} className={activeTab === 'workflows' ? 'text-white' : 'text-cyan-400'} />
             <span>Workflows</span>
+            {isComfyOnline && (
+              <span
+                className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/50"
+                title="Live ComfyUI active in background (keep-alive enabled)"
+              />
+            )}
           </button>
 
           <button
@@ -488,13 +495,21 @@ function AppContent() {
             <div style={{ display: activeTab === 'library' ? 'block' : 'none' }}>
               <LibraryTab onCheckUpdate={handleCheckUpdate} />
             </div>
-            <div style={{ display: activeTab === 'workflows' ? 'block' : 'none' }}>
+            {/* Workflows Tab with Keep-Alive to prevent interrupting background ComfyUI generation */}
+            <div
+              className={
+                activeTab === 'workflows'
+                  ? 'block'
+                  : 'opacity-0 pointer-events-none absolute -left-[99999px] top-0 w-full h-0 overflow-hidden'
+              }
+            >
               <WorkflowsTab
                 onSearchModel={(query) => {
                   setBrowseInitialQuery(query);
                   setActiveTab('browse');
                 }}
                 onNavigateToDownloads={() => setActiveTab('downloads')}
+                onComfyStatusChange={(status) => setIsComfyOnline(status.online)}
               />
             </div>
             <div style={{ display: activeTab === 'downloads' ? 'block' : 'none' }}>

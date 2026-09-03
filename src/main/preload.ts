@@ -81,6 +81,12 @@ const api = {
   scanWorkflows: (folderPaths?: string | string[]) => ipcRenderer.invoke('scan-workflows', folderPaths),
   parseWorkflow: (workflowData: any, workflowName?: string) =>
     ipcRenderer.invoke('parse-workflow', workflowData, workflowName),
+  checkComfyUIStatus: (serverUrl?: string) =>
+    ipcRenderer.invoke('check-comfyui-status', serverUrl),
+  saveWorkflowToComfyUI: (fileName: string, data: any, fileType?: string) =>
+    ipcRenderer.invoke('save-comfyui-workflow', fileName, data, fileType),
+  executeComfyUIPrompt: (promptData: any, serverUrl?: string) =>
+    ipcRenderer.invoke('execute-comfyui-prompt', promptData, serverUrl),
   testWebhook: (url: string, event: string) => ipcRenderer.invoke('test-webhook', url, event),
 
   // Node Resolution & GitHub Fallback

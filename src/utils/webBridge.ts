@@ -546,6 +546,45 @@ export function setupWebBridgeIfNeeded() {
         }
       },
 
+      checkComfyUIStatus: async (serverUrl?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/comfyui/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ serverUrl }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { online: false, serverUrl: serverUrl || 'http://127.0.0.1:8188', error: e.message };
+        }
+      },
+
+      saveWorkflowToComfyUI: async (fileName: string, data: any, fileType?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/comfyui/save-workflow`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName, data, fileType }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { success: false, error: e.message };
+        }
+      },
+
+      executeComfyUIPrompt: async (promptData: any, serverUrl?: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/comfyui/prompt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: promptData, serverUrl }),
+          });
+          return await res.json();
+        } catch (e: any) {
+          return { success: false, error: e.message };
+        }
+      },
+
       testWebhook: async (url: string, event: string) => {
         try {
           const res = await fetch(`${API_BASE}/webhooks/test`, {

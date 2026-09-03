@@ -131,6 +131,7 @@ export interface AppConfig {
   default_download_folder?: string;
   local_api_enabled?: boolean;
   local_api_port?: number;
+  comfyui_server_url?: string;
 }
 
 export interface WorkflowModelReference {
@@ -352,5 +353,21 @@ export interface AppUpdateCheckResult {
   remoteCommitAuthor?: string;
   githubUrl: string;
   isPackaged: boolean;
+  error?: string;
+}
+
+export interface ComfyUIStatus {
+  online: boolean;
+  serverUrl: string;
+  version?: string;
+  devices?: string[];
+  os?: string;
+  error?: string;
+}
+
+export interface SaveWorkflowResult {
+  success: boolean;
+  filePath?: string;
+  fileName?: string;
   error?: string;
 }

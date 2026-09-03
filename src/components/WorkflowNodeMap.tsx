@@ -15,7 +15,7 @@ import { ZoomIn, ZoomOut, Maximize2, Crosshair, X, Workflow } from 'lucide-react
 import { CanvasGraph, CanvasNode } from '../types/app';
 
 export type NodeStatus = 'ready' | 'missing-model' | 'missing-node';
-export type WorkflowViewMode = 'both' | 'map' | 'matrix';
+export type WorkflowViewMode = 'both' | 'map' | 'matrix' | 'live' | 'split';
 
 export interface WorkflowNodeMapHandle {
   /** Pans and zooms the map so the first node of the given type fills the viewport. */
@@ -445,10 +445,13 @@ export const WorkflowNodeMap = forwardRef<WorkflowNodeMapHandle, WorkflowNodeMap
           isMapExpanded ? 'shrink-0' : ''
         }`}
       >
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-200 flex-wrap">
           <Workflow size={16} className="text-cyan-400" />
           <span>Visual Node Map</span>
-          <span className="text-[11px] text-slate-500 font-normal">
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-slate-800 text-amber-300/90 border border-amber-500/30">
+            Embedded (Read-Only)
+          </span>
+          <span className="text-[11px] text-slate-500 font-normal hidden sm:inline">
             (Click nodes to focus resolution cards)
           </span>
         </div>

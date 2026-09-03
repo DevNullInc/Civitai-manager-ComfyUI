@@ -6,7 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.4.1]
+
+### 🌟 Added
+
+- **Dynamic Live ComfyUI Workspace Wrapper (untested for now)**:
+  - Added real-time background detection and health probing (`GET /system_stats` with fallback to `GET /prompt`) every 4 seconds to detect running local ComfyUI instances.
+  - Dynamically renders live telemetry in the Workflows tab header: 🟢 `Live ComfyUI: Online (vX.X.X / Connected) — Edit Possible` vs ⚪ `Live ComfyUI: Offline (Read-Only Preview)`.
+  - Added dedicated **Live ComfyUI (`'live'`)** view mode that embeds the live interactive canvas directly into the application window.
+  - Added **Live + Inspector (`'split'`)** split-screen view mode featuring the active ComfyUI instance on the left alongside a sticky right sidebar with 1-click missing node extension resolution and model dependency downloads.
+  - Added Maximize / Fullscreen wrapper (`isComfyFullscreen`) with quick workflow selector dropdown, 1-click canvas push, slide-out missing node drawer, and ComfyUI reload.
+- **Resident Tab Keep-Alive System (untested for now)**:
+  - Enabled continuous background generation so switching away from the Workflows tab to Browse, Library, Downloads, or Settings never pauses or interrupts running ComfyUI tasks.
+  - Replaced `display: none` container unmounting with offscreen keep-alive positioning (`opacity-0 pointer-events-none absolute -left-[99999px] top-0 w-full h-0 overflow-hidden`), preserving active WebSockets and guest WebContents execution.
+  - Set `backgroundThrottling: false` in BrowserWindow `webPreferences` and added `webpreferences="backgroundThrottling=no,contextIsolation=yes"` and `partition="persist:comfyui"` to the guest `<webview>`.
+  - Unified inline, split, and fullscreen wrapper views to share the exact same resident `<webview>` DOM element, preventing canvas reloads or job termination when toggling fullscreen.
+  - Added a pulsing live status dot to the navbar Workflows button indicating background keep-alive is active.
+- **1-Click Workflow Canvas Injection & Auto-Persistence (untested for now)**:
+  - Added **"Push to Canvas"** injection action that loads selected or uploaded workflow graphs directly into the active ComfyUI canvas via `window.app.loadGraphData(graph, true)`.
+  - Added automatic cross-app persistence for uploaded valid `.json` workflows and embedded `.png` metadata workflows, automatically saving copies to `<comfyui_install_dir>/user/default/workflows/` (with fallback to `<comfyui_install_dir>/workflows/`).
+  - Automatically loads drag-and-dropped valid workflows into the live ComfyUI instance when online.
+- **Configurable ComfyUI Server Endpoint (untested for now)**:
+  - Added dedicated ComfyUI Server Endpoint field in Settings with connection test diagnostics and live online/offline badge.
+  - Persisted `comfyui_server_url` (default: `http://127.0.0.1:8188`) in application configuration.
+
+### 🔄 Changed
+
+- **Differentiated Dynamic Status Flags: Read-Only Preview vs Edit Possible (untested for now)**:
+  - Active Workflow Health Banner dynamically displays 🟢 **`Edit Possible (Live Canvas)`** when viewing live ComfyUI and 🟡 **`Embedded (Read-Only Preview)`** when viewing offline LiteGraph previews.
+  - Header status badge updates dynamically between `Live ComfyUI: Online — Edit Possible` and `Live ComfyUI: Offline (Read-Only Preview)`.
+  - Visual Node Map LiteGraph toolbar explicitly displays an `Embedded (Read-Only)` badge to avoid confusing preview maps with editable live canvases.
+
+---
+
+## [1.4.0]
 
 ### 🌟 Added
 

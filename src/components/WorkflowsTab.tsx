@@ -32,6 +32,14 @@ import {
   ArrowRight,
   ChevronDown,
   X,
+  Radio,
+  Maximize2,
+  Minimize2,
+  Play,
+  Send,
+  Columns,
+  MonitorPlay,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   WorkflowInfo,
@@ -40,6 +48,7 @@ import {
   CanvasNode,
   NodeResolutionResult,
   DownloadTask,
+  ComfyUIStatus,
 } from '../types/app';
 import { NodeResolutionCard } from './NodeResolutionCard';
 import WorkflowNodeMap, { NodeStatus, WorkflowNodeMapHandle } from './WorkflowNodeMap';
@@ -82,11 +91,13 @@ function resolveNodeTypeLabel(raw: any, subgraphNames: Map<string, string>): str
 interface WorkflowsTabProps {
   onSearchModel?: (query: string) => void;
   onNavigateToDownloads?: () => void;
+  onComfyStatusChange?: (status: ComfyUIStatus) => void;
 }
 
 export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   onSearchModel,
   onNavigateToDownloads,
+  onComfyStatusChange,
 }) => {
   const [workflows, setWorkflows] = useState<WorkflowInfo[]>(() => {
     try {
@@ -103,9 +114,16 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   const [isLoadingWorkflows, setIsLoadingWorkflows] = useState<boolean>(false);
   const [scanFeedback, setScanFeedback] = useState<{ message: string; success: boolean } | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'both' | 'map' | 'matrix'>('both');
+  const [viewMode, setViewMode] = useState<'both' | 'map' | 'matrix' | 'live' | 'split'>('both');
   const [selectedNodeId, setSelectedNodeId] = useState<string | number | null>(null);
   const [isMapExpanded, setIsMapExpanded] = useState<boolean>(false);
+  const [comfyStatus, setComfyStatus] = useState<ComfyUIStatus | null>(null);
+  const [hasMountedComfyUI, setHasMountedComfyUI] = useState<boolean>(false);
+  const [isComfyFullscreen, setIsComfyFullscreen] = useState<boolean>(false);
+  const [showFullscreenNodeDrawer, setShowFullscreenNodeDrawer] = useState<boolean>(false);
+  const [serverUrl, setServerUrl] = useState<string>('http://127.0.0.1:8188');
+  const [injectionFeedback, setInjectionFeedback] = useState<string | null>(null);
+  const [isInjecting, setIsInjecting] = useState<boolean>(false);
 
   // Resolution states for custom node classes
   const [nodeResolutions, setNodeResolutions] = useState<Record<string, NodeResolutionResult>>({});
@@ -117,6 +135,8 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nodeMapRef = useRef<WorkflowNodeMapHandle>(null);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
+  const webviewRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Sync workflows with sessionStorage whenever they change
   useEffect(() => {
@@ -148,6 +168,51 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       });
     }
   }, []);
+
+  // Background ComfyUI health probing
+  useEffect(() => {
+    let mounted = true;
+    const probeComfy = async () => {
+      try {
+        let target = serverUrl;
+        if (window.civitaiAPI?.getConfig) {
+          const cfg = await window.civitaiAPI.getConfig();
+          if (cfg?.comfyui_server_url && mounted) {
+            target = cfg.comfyui_server_url;
+            setServerUrl(cfg.comfyui_server_url);
+          }
+        }
+        if (window.civitaiAPI?.checkComfyUIStatus) {
+          const status = await window.civitaiAPI.checkComfyUIStatus(target);
+          if (mounted) {
+            setComfyStatus(status);
+            onComfyStatusChange?.(status);
+            if (status.online) {
+              setHasMountedComfyUI(true);
+            }
+          }
+        }
+      } catch {}
+    };
+
+    probeComfy();
+    const interval = setInterval(probeComfy, 4000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [serverUrl]);
+
+  // Fullscreen escape key listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isComfyFullscreen) {
+        setIsComfyFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isComfyFullscreen]);
 
   const loadWorkflows = async (forceRescan = false) => {
     if (!window.civitaiAPI?.scanWorkflows) return;
@@ -188,6 +253,86 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     }
   };
 
+  const handleInjectWorkflowIntoComfyUI = useCallback(
+    async (wf?: WorkflowInfo) => {
+      const targetWf = wf || workflows[selectedWorkflowIndex];
+      if (!targetWf) return;
+
+      setIsInjecting(true);
+      let graphData = targetWf.rawGraph?.workflow || targetWf.rawGraph;
+      if (!graphData?.nodes && targetWf.canvasGraph?.nodes?.length) {
+        graphData = {
+          nodes: targetWf.canvasGraph.nodes,
+          links: targetWf.canvasGraph.links || [],
+          groups: (targetWf.rawGraph as any)?.groups || [],
+          config: (targetWf.rawGraph as any)?.config || {},
+          extra: (targetWf.rawGraph as any)?.extra || {},
+        };
+      }
+
+      if (!graphData) {
+        setInjectionFeedback('No canvas graph found in this workflow.');
+        setIsInjecting(false);
+        setTimeout(() => setInjectionFeedback(null), 3000);
+        return;
+      }
+
+      const script = `
+        (function() {
+          try {
+            const graph = ${JSON.stringify(graphData)};
+            if (window.app && typeof window.app.loadGraphData === 'function') {
+              window.app.loadGraphData(graph, true);
+              return { success: true, api: 'window.app' };
+            } else if (window.comfyAPI && window.comfyAPI.app && window.comfyAPI.app.app && typeof window.comfyAPI.app.app.loadGraphData === 'function') {
+              window.comfyAPI.app.app.loadGraphData(graph, true);
+              return { success: true, api: 'window.comfyAPI' };
+            }
+            return { success: false, error: 'ComfyUI frontend app object not found on window' };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        })()
+      `;
+
+      let executed = false;
+      // 1. Electron webview
+      if (webviewRef.current && typeof webviewRef.current.executeJavaScript === 'function') {
+        try {
+          const res = await webviewRef.current.executeJavaScript(script);
+          if (res && res.success) {
+            executed = true;
+            setInjectionFeedback(`✓ Injected "${targetWf.fileName}" into active ComfyUI canvas!`);
+          } else if (res && res.error) {
+            console.warn('loadGraphData returned error:', res.error);
+          }
+        } catch (err) {
+          console.warn('Failed to execute in webview:', err);
+        }
+      }
+
+      // 2. iframe fallback
+      if (!executed && iframeRef.current) {
+        try {
+          iframeRef.current.contentWindow?.postMessage(
+            {
+              type: 'load_workflow',
+              workflow: graphData,
+            },
+            '*'
+          );
+        } catch {}
+      }
+
+      if (!executed) {
+        setInjectionFeedback(`Pushed "${targetWf.fileName}" to ComfyUI`);
+      }
+      setIsInjecting(false);
+      setTimeout(() => setInjectionFeedback(null), 3500);
+    },
+    [workflows, selectedWorkflowIndex]
+  );
+
   const handleSelectFromDropdown = (targetIdentifier: string) => {
     if (!targetIdentifier) return;
 
@@ -210,6 +355,9 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       setSelectedWorkflowIndex(0);
       setSelectedNodeId(null);
       resolveWorkflowNodes(found);
+      if (viewMode === 'live' || viewMode === 'split' || isComfyFullscreen) {
+        setTimeout(() => handleInjectWorkflowIntoComfyUI(found), 150);
+      }
     }
   };
 
@@ -250,6 +398,9 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
     setSelectedWorkflowIndex(index);
     setSelectedNodeId(null);
     resolveWorkflowNodes(workflows[index]);
+    if (viewMode === 'live' || viewMode === 'split' || isComfyFullscreen) {
+      setTimeout(() => handleInjectWorkflowIntoComfyUI(workflows[index]), 150);
+    }
   };
 
   // "Show in Workflow": make sure the map is actually VISIBLE before zooming to a node.
@@ -287,6 +438,48 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
       resolveWorkflowNodes(nextWorkflows[newIdx]);
     } else if (removeIdx < selectedWorkflowIndex) {
       setSelectedWorkflowIndex((prev) => prev - 1);
+    }
+  };
+
+  // Automatically save valid uploaded workflow to ComfyUI user workflows directory
+  // and pass-through to live ComfyUI instance if online
+  const handleValidWorkflowLoaded = async (
+    parsedWorkflowInfo: WorkflowInfo,
+    rawPayload: any,
+    ext: string,
+    fileName: string
+  ) => {
+    // 1. Cross-app auto-save to ComfyUI user workflows directory
+    if (window.civitaiAPI?.saveWorkflowToComfyUI) {
+      try {
+        const saveRes = await window.civitaiAPI.saveWorkflowToComfyUI(fileName, rawPayload, ext);
+        if (saveRes && saveRes.success) {
+          parsedWorkflowInfo.filePath = saveRes.filePath || parsedWorkflowInfo.filePath;
+          parsedWorkflowInfo.fileName = saveRes.fileName || parsedWorkflowInfo.fileName;
+          setSavedWorkflows((prev) => {
+            if (prev.some((w) => w.fileName === parsedWorkflowInfo.fileName)) return prev;
+            return [parsedWorkflowInfo, ...prev];
+          });
+          setScanFeedback({
+            success: true,
+            message: `Auto-saved "${parsedWorkflowInfo.fileName}" to ComfyUI workflows directory`,
+          });
+        }
+      } catch (saveErr) {
+        console.warn('Auto-save to ComfyUI directory failed:', saveErr);
+      }
+    }
+
+    const updated = [parsedWorkflowInfo, ...workflows];
+    setWorkflows(updated);
+    setSelectedWorkflowIndex(0);
+    resolveWorkflowNodes(parsedWorkflowInfo);
+
+    // 2. Drag-and-drop passthrough: if ComfyUI is online or if currently in Live/Split/Fullscreen view, inject immediately
+    if (comfyStatus?.online || viewMode === 'live' || viewMode === 'split' || isComfyFullscreen) {
+      setTimeout(() => {
+        handleInjectWorkflowIntoComfyUI(parsedWorkflowInfo);
+      }, 150);
     }
   };
 
@@ -403,10 +596,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           return;
         }
 
-        const updated = [parsedWorkflowInfo, ...workflows];
-        setWorkflows(updated);
-        setSelectedWorkflowIndex(0);
-        resolveWorkflowNodes(parsedWorkflowInfo);
+        await handleValidWorkflowLoaded(parsedWorkflowInfo, parsed, 'json', fileName);
       } else if (ext === 'png') {
         // PNG Workflow extraction
         const arrayBuffer = await file.arrayBuffer();
@@ -482,10 +672,7 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
           return;
         }
 
-        const updated = [parsedWorkflowInfo, ...workflows];
-        setWorkflows(updated);
-        setSelectedWorkflowIndex(0);
-        resolveWorkflowNodes(parsedWorkflowInfo);
+        await handleValidWorkflowLoaded(parsedWorkflowInfo, extracted, 'png', fileName);
       }
     } catch (err: any) {
       console.error('Error processing uploaded workflow:', err);
@@ -582,6 +769,167 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
 
   const isWorkflowFullyReady = missingModelsCount === 0 && missingCustomNodesCount === 0;
 
+  // Render Dependency Matrix & Resolution Cards (reusable in preview, split, and fullscreen drawer)
+  const renderDependencyMatrix = (isCompact = false) => {
+    if (!activeWorkflow) return null;
+
+    return (
+      <div className={`space-y-6 ${isCompact ? 'text-xs' : ''}`}>
+        {/* 1. Model Dependencies Section */}
+        <div className={`glass-panel ${isCompact ? 'p-4 rounded-2xl' : 'p-6 rounded-3xl'} border border-slate-800 space-y-4 shadow-xl`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-slate-100 font-bold text-sm md:text-base">
+              <HardDrive className="text-purple-400" size={isCompact ? 16 : 20} />
+              <h2>Model Dependencies ({totalModelsCount})</h2>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              {installedModelsCount} installed • {missingModelsCount} missing
+            </span>
+          </div>
+
+          {activeWorkflow.models.length === 0 ? (
+            <p className="text-xs text-slate-500 italic py-2">
+              No model files detected in this workflow.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {activeWorkflow.models.map((model, mIdx) => {
+                const task = activeTasks[model.modelName.toLowerCase()];
+                const isDownloading = task && (task.status === 'downloading' || task.status === 'pending');
+
+                return (
+                  <div
+                    key={mIdx}
+                    className={`p-3.5 rounded-2xl border transition-all ${
+                      model.isInstalled
+                        ? 'bg-slate-900/60 border-slate-800/80 text-slate-200'
+                        : 'bg-amber-950/10 border-amber-500/30 text-amber-200'
+                    }`}
+                  >
+                    <div className="flex items-start md:items-center justify-between gap-3 flex-col md:flex-row">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {model.isInstalled ? (
+                            <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+                          ) : (
+                            <AlertCircle size={15} className="text-amber-400 shrink-0" />
+                          )}
+                          <span className="font-bold text-xs font-mono text-slate-100 truncate max-w-[280px]">
+                            {model.modelName}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                            {model.nodeType}
+                          </span>
+                        </div>
+
+                        {model.isInstalled ? (
+                          <p className="text-[10px] text-slate-400 font-mono truncate max-w-xl">
+                            {model.localPath}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-amber-300/80">
+                            Model file not found locally. Download from CivitAI or Hugging Face.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      {!model.isInstalled && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          {onSearchModel && (
+                            <button
+                              onClick={() => {
+                                const cleanSearchTerm = model.modelName
+                                  .replace(/\.(safetensors|ckpt|pt|pth|gguf)$/i, '')
+                                  .replace(/[-_]/g, ' ');
+                                onSearchModel(cleanSearchTerm);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow cursor-pointer active:scale-95"
+                            >
+                              <Search size={12} />
+                              <span>Search CivitAI</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Inline Download Progress Bar */}
+                    {isDownloading && task && (
+                      <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-cyan-300">
+                          <span>Downloading: {task.progress}%</span>
+                          <span>{(task.speedBps / (1024 * 1024)).toFixed(1)} MB/s</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className="bg-linear-to-r from-cyan-500 to-blue-500 h-full transition-all duration-300"
+                            style={{ width: `${task.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 2. Custom Node Extensions Section */}
+        <div className={`glass-panel ${isCompact ? 'p-4 rounded-2xl' : 'p-6 rounded-3xl'} border border-slate-800 space-y-4 shadow-xl`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-slate-100 font-bold text-sm md:text-base">
+              <Package className="text-cyan-400" size={isCompact ? 16 : 20} />
+              <h2>Custom Node Extensions ({totalCustomNodesCount})</h2>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              {installedCustomNodesCount} installed • {missingCustomNodesCount} missing
+            </span>
+          </div>
+
+          {Object.keys(nodeResolutions).length === 0 && !isResolvingNodes ? (
+            <p className="text-xs text-slate-500 italic py-2">
+              No custom node classes detected in this workflow.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(nodeResolutions).map(([nodeType, resolution]) => {
+                const isSelected = selectedNodeId === nodeType;
+
+                return (
+                  <div
+                    key={nodeType}
+                    className={`transition-all ${isSelected ? 'ring-2 ring-cyan-400 rounded-2xl' : ''}`}
+                  >
+                    <NodeResolutionCard
+                      nodeType={nodeType}
+                      resolution={resolution}
+                      onLocateInWorkflow={(type) => {
+                        handleLocateInWorkflow(type);
+                      }}
+                      onInstalled={(folderName) => {
+                        setNodeResolutions((prev) => ({
+                          ...prev,
+                          [nodeType]: {
+                            ...prev[nodeType],
+                            isInstalled: true,
+                            installedFolder: folderName,
+                          },
+                        }));
+                        if (activeWorkflow) resolveWorkflowNodes(activeWorkflow, true);
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full w-full space-y-6 pb-12 overflow-y-auto px-6 pt-2 select-none">
       {/* Top Header & Overview */}
@@ -598,6 +946,38 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
               <p className="text-xs text-slate-400">
                 Inspect visual workflow maps, resolve missing Checkpoints/LoRAs, and 1-click install custom node extensions.
               </p>
+              <div className="flex items-center gap-2 pt-1">
+                <span
+                  className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    comfyStatus?.online
+                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                      : 'bg-slate-800/80 border-slate-700 text-slate-400'
+                  }`}
+                  title={comfyStatus?.online ? `ComfyUI online at ${serverUrl} (Interactive Canvas — Edit Possible)` : `ComfyUI offline at ${serverUrl} (Read-Only Preview)`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      comfyStatus?.online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                    }`}
+                  />
+                  <span>
+                    {comfyStatus?.online
+                      ? `Live ComfyUI: Online (${comfyStatus.version || 'Connected'}) — Edit Possible`
+                      : 'Live ComfyUI: Offline (Read-Only Preview)'}
+                  </span>
+                </span>
+                {comfyStatus?.online && (
+                  <button
+                    onClick={() => {
+                      setHasMountedComfyUI(true);
+                      setViewMode((prev) => (prev === 'live' ? 'split' : 'live'));
+                    }}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold underline underline-offset-2 cursor-pointer ml-1"
+                  >
+                    {viewMode === 'live' || viewMode === 'split' ? 'Viewing Live Workspace' : 'Open Live ComfyUI Workspace'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -764,35 +1144,94 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
               <span>Loaded Workflows ({workflows.length})</span>
             </span>
 
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-xl">
-              <button
-                onClick={() => setViewMode('both')}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${viewMode === 'both'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+            {/* View Mode & Live Action Toggles */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-xl">
+                {comfyStatus?.online && (
+                  <>
+                    <button
+                      onClick={() => setViewMode('live')}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                        viewMode === 'live'
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-emerald-400 hover:text-emerald-200'
+                      }`}
+                      title="View live running ComfyUI interface"
+                    >
+                      <MonitorPlay size={13} />
+                      <span>Live ComfyUI</span>
+                    </button>
+                    <button
+                      onClick={() => setViewMode('split')}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                        viewMode === 'split'
+                          ? 'bg-emerald-600 text-white shadow'
+                          : 'text-emerald-400 hover:text-emerald-200'
+                      }`}
+                      title="Live ComfyUI with side-by-side missing node and model installer"
+                    >
+                      <Columns size={13} />
+                      <span>Live + Inspector</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setViewMode('both')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'both'
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
-              >
-                Split View
-              </button>
-              <button
-                onClick={() => setViewMode('map')}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${viewMode === 'map'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  title="Preview LiteGraph map and dependency matrix"
+                >
+                  Preview All
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'map'
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
-              >
-                Visual Map
-              </button>
-              <button
-                onClick={() => setViewMode('matrix')}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${viewMode === 'matrix'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                  title="Read-only visual node map"
+                >
+                  Visual Map
+                </button>
+                <button
+                  onClick={() => setViewMode('matrix')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    viewMode === 'matrix'
+                      ? 'bg-purple-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
-              >
-                Dependency Matrix
-              </button>
+                  title="Missing nodes and model resolver cards"
+                >
+                  Dependencies
+                </button>
+              </div>
+
+              {comfyStatus?.online && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleInjectWorkflowIntoComfyUI(activeWorkflow)}
+                    disabled={isInjecting || !activeWorkflow}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-purple-900/30 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                    title="Push active workflow into running ComfyUI canvas"
+                  >
+                    <Send size={13} className={isInjecting ? 'animate-bounce' : ''} />
+                    <span className="hidden sm:inline">Push to Canvas</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsComfyFullscreen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                    title="Maximize ComfyUI wrapper to full screen"
+                  >
+                    <Maximize2 size={13} />
+                    <span className="hidden sm:inline">Maximize</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -851,11 +1290,21 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
               {isWorkflowFullyReady ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-slate-100">{activeWorkflow.fileName}</h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-slate-800 text-slate-300 border border-slate-700">
                   {activeWorkflow.fileType}
                 </span>
+                {viewMode === 'live' || viewMode === 'split' || isComfyFullscreen ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Edit Possible (Live Canvas)</span>
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-800 text-amber-300/90 border border-amber-500/30 flex items-center gap-1">
+                    <span>Embedded (Read-Only Preview)</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 {isWorkflowFullyReady
@@ -887,181 +1336,306 @@ export const WorkflowsTab: React.FC<WorkflowsTabProps> = ({
         </div>
       )}
 
-      {/* Visual Node Map Canvas */}
-      <div ref={mapSectionRef}>
-        {activeWorkflow && (
-          <WorkflowNodeMap
-            ref={nodeMapRef}
-            graph={activeWorkflow.canvasGraph}
-            getNodeStatus={getNodeStatus}
-            onFocusNode={setSelectedNodeId}
-            viewMode={viewMode}
-            isMapExpanded={isMapExpanded}
-            onToggleExpand={() => setIsMapExpanded((prev) => !prev)}
-          />
-        )}
-      </div>
+      {/* Unified Live ComfyUI Workspace Embed with Resident Keep-Alive */}
+      {hasMountedComfyUI && (
+        <div
+          className={
+            isComfyFullscreen
+              ? 'fixed inset-0 z-50 bg-slate-950 flex flex-col animate-fadeIn select-none'
+              : viewMode === 'live' || viewMode === 'split'
+              ? `flex flex-col ${viewMode === 'split' ? 'xl:flex-row gap-6' : 'w-full'} transition-all`
+              : 'opacity-0 pointer-events-none absolute -left-[99999px] top-0 w-full h-0 overflow-hidden'
+          }
+        >
+          {/* Main ComfyUI Box */}
+          <div
+            className={`flex-1 flex flex-col overflow-hidden ${
+              isComfyFullscreen
+                ? 'w-full h-full'
+                : 'glass-panel rounded-3xl border border-slate-800 shadow-2xl min-h-[640px] h-[75vh]'
+            }`}
+          >
+            {/* Header Toolbar (switches between Fullscreen top bar and Inline top bar) */}
+            {isComfyFullscreen ? (
+              <div className="flex items-center justify-between px-6 py-2.5 bg-slate-900/95 border-b border-slate-800 shadow-2xl backdrop-blur-xl gap-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-1.5 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
+                    <Workflow size={18} />
+                  </div>
+                  <span className="font-black text-sm text-slate-100 hidden md:inline">
+                    ComfyUI Workspace Wrapper
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      comfyStatus?.online
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        comfyStatus?.online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                      }`}
+                    />
+                    <span>{comfyStatus?.online ? 'Online — Edit Possible' : 'Offline'}</span>
+                  </span>
+                </div>
 
-      {/* Dependency Matrix & Resolution Cards */}
-      {activeWorkflow && (viewMode === 'both' || viewMode === 'matrix') && (
-        <div className="space-y-6">
-          {/* 1. Model Dependencies Section */}
-          <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 text-slate-100 font-bold text-base">
-                <HardDrive className="text-purple-400" size={20} />
-                <h2>Model Dependencies ({totalModelsCount})</h2>
-              </div>
-              <span className="text-xs text-slate-400">
-                {installedModelsCount} installed • {missingModelsCount} missing
-              </span>
-            </div>
+                {/* Center: Workflow Quick Selector */}
+                <div className="flex items-center gap-2 flex-1 max-w-xl">
+                  <select
+                    value={activeWorkflow?.filePath || activeWorkflow?.fileName || ''}
+                    onChange={(e) => handleSelectFromDropdown(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-700/80 hover:border-purple-500/60 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-medium truncate focus:outline-none"
+                  >
+                    {savedWorkflows.map((wf, idx) => (
+                      <option key={wf.filePath || `${wf.fileName}-${idx}`} value={wf.filePath || wf.fileName}>
+                        {wf.fileName} ({wf.modelCount} models, {wf.nodeTypes?.length || 0} nodes)
+                      </option>
+                    ))}
+                  </select>
 
-            {activeWorkflow.models.length === 0 ? (
-              <p className="text-xs text-slate-500 italic py-2">
-                No model files detected in this workflow.
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {activeWorkflow.models.map((model, mIdx) => {
-                  const task = activeTasks[model.modelName.toLowerCase()];
-                  const isDownloading = task && (task.status === 'downloading' || task.status === 'pending');
-
-                  return (
-                    <div
-                      key={mIdx}
-                      className={`p-4 rounded-2xl border transition-all ${model.isInstalled
-                        ? 'bg-slate-900/60 border-slate-800/80 text-slate-200'
-                        : 'bg-amber-950/10 border-amber-500/30 text-amber-200'
-                        }`}
+                  {activeWorkflow && (
+                    <button
+                      onClick={() => handleInjectWorkflowIntoComfyUI(activeWorkflow)}
+                      disabled={isInjecting}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                      title="Push this workflow to the live canvas"
                     >
-                      <div className="flex items-start md:items-center justify-between gap-4 flex-col md:flex-row">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            {model.isInstalled ? (
-                              <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-                            ) : (
-                              <AlertCircle size={16} className="text-amber-400 shrink-0" />
-                            )}
-                            <span className="font-bold text-xs font-mono text-slate-100">
-                              {model.modelName}
-                            </span>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                              {model.nodeType}
-                            </span>
-                          </div>
+                      <Send size={12} />
+                      <span>Push to Canvas</span>
+                    </button>
+                  )}
+                </div>
 
-                          {model.isInstalled ? (
-                            <p className="text-[11px] text-slate-400 font-mono truncate max-w-xl">
-                              {model.localPath}
-                            </p>
-                          ) : (
-                            <p className="text-[11px] text-amber-300/80">
-                              Model file not found locally. Download from CivitAI or Hugging Face.
-                            </p>
-                          )}
-                        </div>
+                {/* Right Actions */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowFullscreenNodeDrawer((prev) => !prev)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                      showFullscreenNodeDrawer
+                        ? 'bg-purple-600 text-white border-purple-500 shadow-md'
+                        : missingCustomNodesCount > 0
+                        ? 'bg-rose-950/40 border-rose-500/50 text-rose-300 hover:bg-rose-900/50'
+                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                    title="Toggle missing nodes and model dependencies drawer"
+                  >
+                    <SlidersHorizontal size={13} />
+                    <span>
+                      Missing Nodes {missingCustomNodesCount > 0 && `(${missingCustomNodesCount})`}
+                    </span>
+                  </button>
 
-                        {/* Actions */}
-                        {!model.isInstalled && (
-                          <div className="flex items-center gap-2 shrink-0">
-                            {onSearchModel && (
-                              <button
-                                onClick={() => {
-                                  const cleanSearchTerm = model.modelName
-                                    .replace(/\.(safetensors|ckpt|pt|pth|gguf)$/i, '')
-                                    .replace(/[-_]/g, ' ');
-                                  onSearchModel(cleanSearchTerm);
-                                }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow cursor-pointer"
-                              >
-                                <Search size={13} />
-                                <span>Search CivitAI</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                  <button
+                    onClick={() => {
+                      if (webviewRef.current && typeof webviewRef.current.reload === 'function') {
+                        webviewRef.current.reload();
+                      } else if (iframeRef.current) {
+                        iframeRef.current.src = serverUrl;
+                      }
+                    }}
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs transition-all cursor-pointer"
+                    title="Reload ComfyUI"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
 
-                      {/* Inline Download Progress Bar */}
-                      {isDownloading && task && (
-                        <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-1.5">
-                          <div className="flex items-center justify-between text-xs font-mono text-cyan-300">
-                            <span>Downloading: {task.progress}%</span>
-                            <span>{(task.speedBps / (1024 * 1024)).toFixed(1)} MB/s</span>
-                          </div>
-                          <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                            <div
-                              className="bg-linear-to-r from-cyan-500 to-blue-500 h-full transition-all duration-300"
-                              style={{ width: `${task.progress}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                  <button
+                    onClick={() => setIsComfyFullscreen(false)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer"
+                    title="Exit Fullscreen (Esc)"
+                  >
+                    <Minimize2 size={13} />
+                    <span>Exit Fullscreen</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between px-5 py-3 bg-slate-900/90 border-b border-slate-800/80 gap-3 flex-wrap">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                      comfyStatus?.online
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        comfyStatus?.online ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                      }`}
+                    />
+                    <span>
+                      {comfyStatus?.online
+                        ? `Live ComfyUI (${comfyStatus.version || 'Connected'}) — Edit Possible`
+                        : 'ComfyUI Server Disconnected'}
+                    </span>
+                  </div>
+                  <span className="text-slate-400 text-xs font-mono hidden sm:inline">{serverUrl}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {activeWorkflow && (
+                    <button
+                      onClick={() => handleInjectWorkflowIntoComfyUI(activeWorkflow)}
+                      disabled={isInjecting}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-purple-900/30 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+                      title={`Push "${activeWorkflow.fileName}" into active ComfyUI canvas`}
+                    >
+                      <Send size={13} className={isInjecting ? 'animate-bounce' : ''} />
+                      <span>{isInjecting ? 'Injecting...' : 'Push to Canvas'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      if (webviewRef.current && typeof webviewRef.current.reload === 'function') {
+                        webviewRef.current.reload();
+                      } else if (iframeRef.current) {
+                        iframeRef.current.src = serverUrl;
+                      }
+                    }}
+                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs transition-all cursor-pointer"
+                    title="Reload ComfyUI"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => setIsComfyFullscreen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-purple-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                    title="Maximize ComfyUI wrapper to full screen"
+                  >
+                    <Maximize2 size={13} />
+                    <span>Maximize</span>
+                  </button>
+                </div>
               </div>
             )}
-          </div>
 
-          {/* 2. Custom Node Extensions Section */}
-          <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 text-slate-100 font-bold text-base">
-                <Package className="text-cyan-400" size={20} />
-                <h2>Custom Node Extensions ({totalCustomNodesCount})</h2>
-              </div>
-              <span className="text-xs text-slate-400">
-                {installedCustomNodesCount} installed • {missingCustomNodesCount} missing
-              </span>
-            </div>
-
-            {Object.keys(nodeResolutions).length === 0 && !isResolvingNodes ? (
-              <p className="text-xs text-slate-500 italic py-2">
-                No custom node classes detected in this workflow.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {Object.entries(nodeResolutions).map(([nodeType, resolution]) => {
-                  const isSelected = selectedNodeId === nodeType;
-
-                  return (
-                    <div
-                      key={nodeType}
-                      className={`transition-all ${isSelected ? 'ring-2 ring-cyan-400 rounded-2xl' : ''}`}
-                    >
-                      <NodeResolutionCard
-                        nodeType={nodeType}
-                        resolution={resolution}
-                        onLocateInWorkflow={(type) => {
-                          handleLocateInWorkflow(type);
-                        }}
-                        onInstalled={(folderName) => {
-                          // Update this node's resolution locally so the card flips
-                          // to "installed" immediately.
-                          setNodeResolutions((prev) => ({
-                            ...prev,
-                            [nodeType]: {
-                              ...prev[nodeType],
-                              isInstalled: true,
-                              installedFolder: folderName,
-                            },
-                          }));
-                          // Re-resolve every node in the active workflow against disk
-                          // (bypassing the SQLite cache) so sibling node classes shipped
-                          // by the same extension also stop showing as missing.
-                          if (activeWorkflow) resolveWorkflowNodes(activeWorkflow, true);
-                        }}
-                      />
-                    </div>
-                  );
-                })}
+            {/* Injection Toast */}
+            {injectionFeedback && (
+              <div className="px-5 py-2 bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-between animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={14} className="text-emerald-400" />
+                  <span>{injectionFeedback}</span>
+                </div>
+                <button
+                  onClick={() => setInjectionFeedback(null)}
+                  className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
               </div>
             )}
+
+            {/* Frame Container & Fullscreen Drawer */}
+            <div className="relative flex-1 w-full h-full flex overflow-hidden bg-slate-950">
+              <div className="flex-1 w-full h-full bg-slate-950">
+                {comfyStatus?.online ? (
+                  window.civitaiAPI && !window.civitaiAPI._isMock ? (
+                    <webview
+                      ref={webviewRef}
+                      src={serverUrl}
+                      className="w-full h-full border-none"
+                      style={{ width: '100%', height: '100%' }}
+                      partition="persist:comfyui"
+                      webpreferences="backgroundThrottling=no,contextIsolation=yes"
+                    />
+                  ) : (
+                    <iframe
+                      ref={iframeRef}
+                      src={serverUrl}
+                      className="w-full h-full border-none"
+                      style={{ width: '100%', height: '100%' }}
+                      title="ComfyUI Live Workspace"
+                    />
+                  )
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
+                    <div className="p-4 rounded-3xl bg-slate-900/80 text-slate-400 border border-slate-800 shadow-inner">
+                      <Radio size={36} />
+                    </div>
+                    <div className="space-y-1 max-w-md">
+                      <h3 className="font-bold text-slate-100 text-base">ComfyUI Server is not responding</h3>
+                      <p className="text-xs text-slate-400">
+                        No active ComfyUI instance detected at <code className="text-cyan-300 font-mono">{serverUrl}</code>. Start ComfyUI in your terminal or verify your endpoint in Settings.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={async () => {
+                          if (window.civitaiAPI?.checkComfyUIStatus) {
+                            const s = await window.civitaiAPI.checkComfyUIStatus(serverUrl);
+                            setComfyStatus(s);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+                      >
+                        <RefreshCw size={13} />
+                        <span>Retry Connection</span>
+                      </button>
+                      <button
+                        onClick={() => setViewMode('both')}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      >
+                        Switch to Preview Map
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Fullscreen Drawer */}
+              {isComfyFullscreen && showFullscreenNodeDrawer && (
+                <div className="w-[460px] bg-slate-950/95 border-l border-slate-800 p-6 overflow-y-auto z-20 custom-scrollbar shadow-2xl backdrop-blur-xl animate-slideLeft">
+                  <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+                    <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                      <SlidersHorizontal size={16} className="text-purple-400" />
+                      <span>Node & Model Dependencies</span>
+                    </h3>
+                    <button
+                      onClick={() => setShowFullscreenNodeDrawer(false)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  {renderDependencyMatrix(true)}
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Split Mode: Side Inspector Panel (when not fullscreen) */}
+          {!isComfyFullscreen && viewMode === 'split' && (
+            <div className="xl:w-[460px] shrink-0 space-y-6 overflow-y-auto max-h-[75vh] pr-1 custom-scrollbar">
+              {renderDependencyMatrix(true)}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Visual Node Map Canvas (when viewMode is 'both' or 'map' and not fullscreen) */}
+      {!isComfyFullscreen && (viewMode === 'both' || viewMode === 'map') && (
+        <div ref={mapSectionRef}>
+          {activeWorkflow && (
+            <WorkflowNodeMap
+              ref={nodeMapRef}
+              graph={activeWorkflow.canvasGraph}
+              getNodeStatus={getNodeStatus}
+              onFocusNode={setSelectedNodeId}
+              viewMode={viewMode}
+              isMapExpanded={isMapExpanded}
+              onToggleExpand={() => setIsMapExpanded((prev) => !prev)}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Dependency Matrix & Resolution Cards (when viewMode is 'both' or 'matrix' and not fullscreen) */}
+      {!isComfyFullscreen && (viewMode === 'both' || viewMode === 'matrix') && renderDependencyMatrix(false)}
     </div>
   );
 };

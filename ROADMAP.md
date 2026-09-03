@@ -8,8 +8,9 @@ This document outlines the planned milestones, upcoming features, and architectu
 
 ```mermaid
 graph LR
-    v13["✅ v1.3.0<br/>CLI + HF Hub + Webhooks"] --> v14["🎯 v1.4.0<br/>Workflow Auto-Resolver & UI"]
-    v14 --> v15["🎯 v1.5.0<br/>Native HF & GGUF Engine"]
+    v13["✅ v1.3.0<br/>CLI + HF Hub + Webhooks"] --> v14["✅ v1.4.0<br/>Workflow Auto-Resolver & UI"]
+    v14 --> v141["🎯 v1.4.1<br/>Live ComfyUI & Keep-Alive"]
+    v141 --> v15["🎯 v1.5.0<br/>Native HF & GGUF Engine"]
     v15 --> v16["🎯 v1.6.0<br/>Hardlink Storage Optimizer"]
     v16 --> v20["🎯 v2.0.0<br/>Smart Collections & Trigger Hub"]
 ```
@@ -44,6 +45,32 @@ graph LR
   - ~~Direct raw JSON / prompt dictionary extraction without requiring disk file paths.~~
 - [x] ~~**4-Tier Node Resolution & GitHub Fallback Engine**:~~
   - ~~Local directory & `NODE_CLASS_MAPPINGS` scanning, SQLite ETag registry cache, rate-limited GitHub Search API fallback (top 3 candidate cards with topic scoping and query sanitization), and targeted Python runtime dependency installation (`requirements.txt` / `install.py`).~~
+
+---
+
+### 🎯 Phase 1.1: v1.4.1 — Dynamic Live ComfyUI Workspace Wrapper, Canvas Injection & Tab Keep-Alive
+>
+> **Goal**: Seamlessly bridge the Workflows tab directly into running ComfyUI instances with real-time health probing, 1-click canvas graph pushing, cross-app auto-saving, and background generation keep-alive.
+
+- [x] ~~**Dynamic Live ComfyUI Workspace Wrapper**~~ *(untested for now)*:
+  - ~~Dynamic background health probing (`/system_stats` / `/prompt`) detecting running ComfyUI instances every 4s.~~
+  - ~~Dedicated **Live ComfyUI (`'live'`)** view mode embedding the interactive canvas directly into the application window.~~
+  - ~~**Live + Inspector (`'split'`)** view displaying ComfyUI side-by-side with missing node resolution cards and model dependency lists.~~
+  - ~~Maximize / Fullscreen ComfyUI wrapper (`isComfyFullscreen`) with quick workflow dropdown, slide-out node drawer, and ComfyUI reload.~~
+- [x] ~~**Resident Tab Keep-Alive System**~~ *(untested for now)*:
+  - ~~Continuous background execution preserving guest WebContents, WebSockets, and running generation queue jobs when switching to Browse, Library, Downloads, or Settings.~~
+  - ~~Disabled background CPU throttling (`backgroundThrottling: false`) in Electron main process and guest `<webview>`.~~
+  - ~~Unified single resident `<webview>` shared across inline, split, and fullscreen views to prevent canvas unmounting.~~
+  - ~~Live indicator dot on Workflows tab button in navbar reflecting active background connection.~~
+- [x] ~~**1-Click Workflow Canvas Injection & Auto-Persistence**~~ *(untested for now)*:
+  - ~~"Push to Canvas" injection loading selected or uploaded workflows directly into active ComfyUI canvas via `window.app.loadGraphData(graph, true)`.~~
+  - ~~Automatic cross-app persistence saving uploaded `.json` and embedded `.png` workflows directly to `<comfyui_install_dir>/user/default/workflows/`.~~
+  - ~~Drag-and-drop passthrough into active ComfyUI instance when online.~~
+- [x] ~~**Differentiated Status Flags: Read-Only vs Edit Possible**~~ *(untested for now)*:
+  - ~~Dynamic header status and workflow health badges clearly distinguishing between `Embedded (Read-Only Preview)` and `Live ComfyUI (Edit Possible)`.~~
+  - ~~`Embedded (Read-Only)` badge on embedded LiteGraph visual node map.~~
+- [x] ~~**Configurable ComfyUI Server Endpoint**~~ *(untested for now)*:
+  - ~~Dedicated endpoint configuration in Settings tab with connection testing and persistent SQLite storage.~~
 
 ---
 
