@@ -30,7 +30,7 @@ import { nodeResolverService } from '../services/nodeResolverService';
 import { encryptKey, decryptKey } from '../utils/secureStorage';
 import { logger } from '../utils/logger';
 import { AppConfig, AppUpdateCheckResult } from '../types/app';
-import { BUILD_CONFIG } from '../version';
+import { APP_VERSION, BUILD_CONFIG } from '../version';
 
 app.setName('renegadecmm');
 
@@ -835,10 +835,31 @@ async function pullMissingModel(modelData: any, targetRoot?: string) {
   return { success: true, task, message: `Download queued for ${modelName}` };
 }
 
+function isNewerVersion(remoteTag: string, localVersion: string): boolean {
+  const cleanRemote = remoteTag.replace(/^v/i, '').trim();
+  const cleanLocal = localVersion.replace(/^v/i, '').trim();
+  if (!cleanRemote) return false;
+  if (!cleanLocal) return true;
+  if (cleanRemote === cleanLocal) return false;
+
+  const rParts = cleanRemote.split('.').map((p) => parseInt(p, 10) || 0);
+  const lParts = cleanLocal.split('.').map((p) => parseInt(p, 10) || 0);
+  const maxLen = Math.max(rParts.length, lParts.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const r = rParts[i] || 0;
+    const l = lParts[i] || 0;
+    if (r > l) return true;
+    if (r < l) return false;
+  }
+  return false;
+}
+
 async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
   const repoOwner = 'DevNullInc';
   const repoName = 'RenegadeCMM';
   const githubUrl = `https://github.com/${repoOwner}/${repoName}`;
+  const releasesUrl = `https://github.com/${repoOwner}/${repoName}/releases`;
 
   let isPackaged = false;
   try {
@@ -847,15 +868,50 @@ async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
     isPackaged = false;
   }
 
-  // If built/configured for formal production release, bypass development commit checks entirely
-  if (!BUILD_CONFIG.IS_DEV_BUILD || process.env.CMM_RELEASE_BUILD === 'true') {
-    logger.info('Release build mode active: Development update commit checking and banners are disabled.');
-    return {
-      isUpdateAvailable: false,
-      isDevelopmentVersion: false,
-      githubUrl,
-      isPackaged,
-    };
+  const isReleaseMode = !BUILD_CONFIG.IS_DEV_BUILD || process.env.CMM_RELEASE_BUILD === 'true';
+
+  // If built/configured for formal production release, check GitHub Releases API
+  if (isReleaseMode) {
+    try {
+      const res = await axios.get(`https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`, {
+        timeout: 4500,
+        headers: {
+          'User-Agent': 'RenegadeCMM',
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      });
+
+      const releaseData = res.data;
+      const remoteTag: string = releaseData?.tag_name || '';
+      const releaseHtmlUrl: string = releaseData?.html_url || releasesUrl;
+      const releaseMsg: string = releaseData?.name || releaseData?.body?.split('\n')[0] || '';
+      const releaseDate: string = releaseData?.published_at || '';
+
+      const isUpdateAvailable = Boolean(remoteTag && isNewerVersion(remoteTag, APP_VERSION));
+
+      return {
+        isUpdateAvailable,
+        isDevelopmentVersion: false,
+        isReleaseMode: true,
+        currentVersion: APP_VERSION,
+        latestReleaseTag: remoteTag || undefined,
+        remoteCommitMessage: releaseMsg,
+        remoteCommitDate: releaseDate,
+        githubUrl: releasesUrl,
+        isPackaged,
+      };
+    } catch (releaseErr: any) {
+      logger.warn('Failed to check for latest GitHub release:', releaseErr?.message || releaseErr);
+      return {
+        isUpdateAvailable: false,
+        isDevelopmentVersion: false,
+        isReleaseMode: true,
+        currentVersion: APP_VERSION,
+        githubUrl: releasesUrl,
+        isPackaged,
+        error: releaseErr?.message || 'Failed to check GitHub releases',
+      };
+    }
   }
 
   let currentCommit = '';
@@ -904,6 +960,8 @@ async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
     return {
       isUpdateAvailable,
       isDevelopmentVersion: true,
+      isReleaseMode: false,
+      currentVersion: APP_VERSION,
       currentCommit: shortLocal || undefined,
       remoteCommit: shortRemote || undefined,
       remoteCommitMessage: remoteMsg,
@@ -917,6 +975,8 @@ async function checkDevelopmentGitUpdate(): Promise<AppUpdateCheckResult> {
     return {
       isUpdateAvailable: false,
       isDevelopmentVersion: true,
+      isReleaseMode: false,
+      currentVersion: APP_VERSION,
       currentCommit: currentCommit ? currentCommit.substring(0, 7) : undefined,
       githubUrl,
       isPackaged,
@@ -2547,13 +2607,16 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('get-system-info', () => {
+    const isDevBuild = BUILD_CONFIG.IS_DEV_BUILD && process.env.CMM_RELEASE_BUILD !== 'true';
     return {
-      version: app.getVersion(),
+      version: APP_VERSION || app.getVersion(),
       electronVersion: process.versions.electron,
       nodeVersion: process.versions.node,
       chromeVersion: process.versions.chrome,
       platform: process.platform,
       arch: process.arch,
+      isDevBuild,
+      releaseChannel: isDevBuild ? 'development' : 'stable',
     };
   });
 

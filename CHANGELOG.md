@@ -29,6 +29,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Configurable ComfyUI Server Endpoint (untested for now)**:
   - Added dedicated ComfyUI Server Endpoint field in Settings with connection test diagnostics and live online/offline badge.
   - Persisted `comfyui_server_url` (default: `http://127.0.0.1:8188`) in application configuration.
+- **About Tab Version & GitHub Update Checking (untested for now)**:
+  - Added live application version display (`v{version}`) and build mode badge (`Stable Release` vs `Development Build`) to the About tab header and runtime card.
+  - Added automatic and on-demand GitHub update checking with a dynamic **"Update Available"** badge and status indicator.
+  - Clicking the update badge opens the GitHub repository in development mode, or the GitHub Releases page when the Full Release switch is flagged.
+  - Hovering over the update badge provides explicit instructions directing users to use the launcher script with the `update` flag (`./cmm.sh update` or `.\cmm.ps1 update`) to automatically update to the latest committed version.
 
 ### 🔄 Changed
 

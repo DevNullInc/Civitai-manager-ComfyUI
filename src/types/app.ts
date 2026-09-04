@@ -346,6 +346,9 @@ export interface ScanProgress {
 export interface AppUpdateCheckResult {
   isUpdateAvailable: boolean;
   isDevelopmentVersion: boolean;
+  isReleaseMode?: boolean;
+  currentVersion?: string;
+  latestReleaseTag?: string;
   currentCommit?: string;
   remoteCommit?: string;
   remoteCommitMessage?: string;

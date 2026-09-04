@@ -7,6 +7,8 @@
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  */
+import { APP_VERSION, BUILD_CONFIG } from '../version';
+
 // Always target the native HTTP bridge (same process that serves the Electron UI) so the
 // browser/headless frontend hits the exact same endpoints and config as the desktop app.
 // The relative '/api' path would resolve against the Vite dev-server origin, which does not
@@ -731,9 +733,11 @@ export function setupWebBridgeIfNeeded() {
 
       getSystemInfo: async () => {
         return {
-          version: '1.3.0',
+          version: APP_VERSION,
           platform: navigator.platform || 'web',
           userAgent: navigator.userAgent,
+          isDevBuild: BUILD_CONFIG.IS_DEV_BUILD,
+          releaseChannel: BUILD_CONFIG.RELEASE_CHANNEL,
         };
       },
 

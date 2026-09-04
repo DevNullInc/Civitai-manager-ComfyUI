@@ -72,6 +72,9 @@ graph LR
   - ~~`Embedded (Read-Only)` badge on embedded LiteGraph visual node map.~~
 - [x] ~~**Configurable ComfyUI Server Endpoint**~~ _(untested for now)_:
   - ~~Dedicated endpoint configuration in Settings tab with connection testing and persistent SQLite storage.~~
+- [x] ~~**About Tab Version & Dynamic Update Checking**~~ _(untested for now)_:
+  - ~~Prominent app version display (`v{version}`) and release channel status (`Stable Release` vs `Development Build`).~~
+  - ~~Dynamic **"Update Available"** badge checking GitHub with release vs dev routing and launcher script update instructions.~~
 
 ---
 

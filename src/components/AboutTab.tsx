@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Info as InfoIcon,
   RefreshCw,
+  Sparkles,
+  GitBranch,
 } from 'lucide-react';
 import {
   subscribeLogs,
@@ -24,13 +26,39 @@ import {
   generateDiagnosticReport,
   LogEntry,
 } from '../utils/consoleCapture';
+import { APP_VERSION, BUILD_CONFIG } from '../version';
+import { AppUpdateCheckResult } from '../types/app';
 
 export function AboutTab() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filterLevel, setFilterLevel] = useState<'all' | 'error' | 'warn'>('all');
   const [copied, setCopied] = useState(false);
-  const [sysInfo, setSysInfo] = useState<any>({ version: '1.3.0' });
+  const [sysInfo, setSysInfo] = useState<any>({ version: APP_VERSION });
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'up-to-date' | 'error'>('idle');
+  const [updateResult, setUpdateResult] = useState<AppUpdateCheckResult | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+
+  const isFullRelease = !BUILD_CONFIG.IS_DEV_BUILD || sysInfo.isDevBuild === false;
+
+  const handleCheckUpdates = async () => {
+    setUpdateStatus('checking');
+    try {
+      if (window.civitaiAPI && typeof window.civitaiAPI.checkAppUpdate === 'function') {
+        const res = await window.civitaiAPI.checkAppUpdate();
+        setUpdateResult(res);
+        if (res && res.isUpdateAvailable) {
+          setUpdateStatus('available');
+        } else {
+          setUpdateStatus('up-to-date');
+        }
+      } else {
+        setUpdateStatus('up-to-date');
+      }
+    } catch (e) {
+      console.warn('Failed to check for updates:', e);
+      setUpdateStatus('error');
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = subscribeLogs((newLogs) => {
@@ -43,6 +71,8 @@ export function AboutTab() {
       });
     }
 
+    handleCheckUpdates();
+
     return () => unsubscribe();
   }, []);
 
@@ -51,6 +81,19 @@ export function AboutTab() {
       window.civitaiAPI.openExternal(url);
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const updateTooltip = (isFullRelease || updateResult?.isReleaseMode)
+    ? "A new release is available! Click to open the GitHub Releases page to download the latest installer or portable executable."
+    : "A new update is available! Use the launcher script with the 'update' flag (./cmm.sh update or .\\cmm.ps1 update) to automatically update to the latest committed version.";
+
+  const handleUpdateClick = () => {
+    if (isFullRelease || updateResult?.isReleaseMode) {
+      openLink('https://github.com/DevNullInc/RenegadeCMM/releases');
+    } else {
+      const url = updateResult?.githubUrl || 'https://github.com/DevNullInc/RenegadeCMM';
+      openLink(url);
     }
   };
 
@@ -97,16 +140,61 @@ export function AboutTab() {
               <Layers size={36} />
             </div>
             <div>
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-2xl font-black text-slate-100 tracking-tight">
                   Renegade Core Model Manager
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  v{sysInfo.version || '1.3.0'}
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">
+                  v{sysInfo.version || APP_VERSION}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  RenegadeCMM
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                  isFullRelease
+                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                }`}>
+                  {isFullRelease ? 'Stable Release' : 'Development Build'}
                 </span>
+
+                {/* Dynamic Update Available Badge */}
+                {updateStatus === 'available' && (
+                  <button
+                    onClick={handleUpdateClick}
+                    title={updateTooltip}
+                    className="px-3 py-1 rounded-full text-xs font-extrabold bg-linear-to-r from-emerald-500/25 via-teal-500/25 to-emerald-500/25 hover:from-emerald-500/40 hover:to-teal-500/40 text-emerald-300 hover:text-emerald-100 border border-emerald-500/60 hover:border-emerald-400 flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-emerald-500/20 animate-pulse hover:animate-none group"
+                  >
+                    <Sparkles size={13} className="text-emerald-400 group-hover:rotate-12 transition-transform" />
+                    <span>Update Available</span>
+                    {updateResult?.latestReleaseTag && (
+                      <span className="font-mono text-[11px] opacity-80">({updateResult.latestReleaseTag})</span>
+                    )}
+                    {updateResult?.remoteCommit && !updateResult?.latestReleaseTag && (
+                      <span className="font-mono text-[11px] opacity-80">({updateResult.remoteCommit})</span>
+                    )}
+                    <ExternalLink size={11} className="text-emerald-400/80" />
+                  </button>
+                )}
+
+                {/* Up to date indicator */}
+                {updateStatus === 'up-to-date' && (
+                  <span
+                    title="You are currently running the latest version."
+                    className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800/80 text-emerald-400/90 border border-emerald-500/30 flex items-center gap-1 cursor-default"
+                  >
+                    <Check size={11} className="text-emerald-400" />
+                    <span>Up to Date</span>
+                  </span>
+                )}
+
+                {/* Manual Check Updates Button */}
+                <button
+                  onClick={handleCheckUpdates}
+                  disabled={updateStatus === 'checking'}
+                  title="Check GitHub for newer updates or releases"
+                  className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/60 hover:border-slate-500 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw size={11} className={updateStatus === 'checking' ? 'animate-spin text-purple-400' : 'text-slate-400'} />
+                  <span>{updateStatus === 'checking' ? 'Checking...' : 'Check Updates'}</span>
+                </button>
               </div>
               <p className="text-sm text-slate-400 mt-1">
                 The missing model manager and automated folder router for ComfyUI.
@@ -249,6 +337,12 @@ export function AboutTab() {
               <span>System & Runtime</span>
             </div>
             <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Application Version:</span>
+                <span className="font-semibold text-purple-300">
+                  v{sysInfo.version || APP_VERSION} ({isFullRelease ? 'Stable Release' : 'Development Build'})
+                </span>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">Platform / OS:</span>
                 <span className="font-semibold text-slate-200">
