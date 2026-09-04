@@ -112,4 +112,4 @@ We take application security seriously. If you discover a security vulnerability
 
 ## 8. Updates to this Policy
 
-As Renegade CMM continues to evolve (e.g. multi-generation backend support, local LLM orchestration), this privacy policy may be updated. All updates will be published directly in the repository with a revised "Last Updated" timestamp. Our fundamental commitment to **zero telemetry, local-first computing, and strict credential isolation** will never change.
+As Renegade CMM continues to evolve (e.g. multi-generation backend support, local LLM orchestration), this privacy policy may be updated. All updates will be published directly in the repository with a revised "Last Updated" timestamp. Our fundamental commitment to **zero telemetry, local-first computing, and strict credential isolation** will never chang
