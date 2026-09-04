@@ -21,12 +21,17 @@
     "electron:build": "npm run build && electron-builder",
     "electron:preview": "npm run build && electron . --preview",
     "dist": "npm run build && electron-builder --win",
+    "dist:win": "npm run build && electron-builder --win",
     "dist:portable": "npm run build && electron-builder --win portable",
     "dist:installer": "npm run build && electron-builder --win nsis",
-    "dist:linux": "npm run build && electron-builder --linux tar.gz zip",
-    "dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:mac": "npm run build && electron-builder --mac",
     "dist:dir": "npm run build && electron-builder --dir",
     "dist:all": "npm run build && electron-builder -wlm",
+    "package:win": "npm run build && electron-builder --win",
+    "package:linux": "npm run build && electron-builder --linux",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:all": "npm run build && electron-builder -wlm",
     "cmm:start": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 start",
     "cmm:stop": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 stop",
     "cmm:restart": "powershell -ExecutionPolicy Bypass -File ./cmm.ps1 restart",
@@ -136,14 +141,21 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "portable": {
-      "artifactName": "${productName}-Standalone-v${version}.exe"
+      "artifactName": "${productName}-Portable-v${version}.exe"
     },
     "linux": {
       "maintainer": "TheStygianRenegade / /dev/null Inc <devnull@devnullinc.com>",
       "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
         {
           "target": "tar.gz",
           "arch": [
@@ -157,7 +169,8 @@
           ]
         }
       ],
-      "category": "Graphics"
+      "category": "Graphics",
+      "artifactName": "${productName}-Linux-${version}-${arch}.${ext}"
     },
     "mac": {
       "category": "public.app-category.graphics-design",
@@ -178,7 +191,8 @@
         }
       ],
       "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "artifactName": "${productName}-Mac-${version}-${arch}.${ext}"
     },
     "dmg": {
       "contents": [

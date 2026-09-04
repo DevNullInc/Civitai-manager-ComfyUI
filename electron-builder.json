@@ -1,20 +1,106 @@
 {
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.devnullinc.renegadecmm",
   "productName": "RenegadeCMM",
-  "copyright": "Copyright © 2026",
+  "copyright": "Copyright (C) 2025-2026 TheStygianRenegade / /dev/null Inc",
   "directories": {
-    "output": "dist-app"
+    "output": "release",
+    "buildResources": "build"
   },
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "node_modules/**/*",
+    "package.json"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "**/*.node"
   ],
   "win": {
-    "target": "nsis"
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
   },
-  "mac": {
-    "target": "dmg"
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  },
+  "portable": {
+    "artifactName": "${productName}-Portable-v${version}.exe"
   },
   "linux": {
-    "target": "AppImage"
+    "maintainer": "TheStygianRenegade / /dev/null Inc <devnull@devnullinc.com>",
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "tar.gz",
+        "arch": [
+          "x64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "category": "Graphics",
+    "artifactName": "${productName}-Linux-${version}-${arch}.${ext}"
+  },
+  "mac": {
+    "category": "public.app-category.graphics-design",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      }
+    ],
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "artifactName": "${productName}-Mac-${version}-${arch}.${ext}"
+  },
+  "dmg": {
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
   }
 }

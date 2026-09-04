@@ -1,0 +1,114 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: 'Custom release notes / description (optional)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            artifact_name: release-windows
+            dist_cmd: npm run dist:win
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: release-linux
+            dist_cmd: npm run dist:linux
+          - os: macos-latest
+            platform: macos
+            artifact_name: release-macos
+            dist_cmd: npm run dist:mac
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-1-dev libarchive-tools fuse libfuse2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit & integration tests
+        run: npm test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package with electron-builder
+        run: ${{ matrix.dist_cmd }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            release/*.exe
+            release/*.AppImage
+            release/*.tar.gz
+            release/*.zip
+            release/*.dmg
+            release/*.deb
+            release/latest*.yml
+          if-no-files-found: warn
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect and stage release binaries
+        run: |
+          mkdir -p release-binaries
+          find artifacts -type f \( -name "*.exe" -o -name "*.AppImage" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.dmg" -o -name "*.deb" -o -name "latest*.yml" \) -exec cp -v {} release-binaries/ \;
+          echo "Staged release binaries:"
+          ls -lh release-binaries/
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          files: release-binaries/*
+          generate_release_notes: true
+          draft: false
+          prerelease: contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha')
+          body: ${{ github.event.inputs.release_notes }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
