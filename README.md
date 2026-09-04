@@ -156,14 +156,25 @@ chmod +x RenegadeCMM-<version>.AppImage
 > [!NOTE]
 > **Maintainer Hardware Notice**: The development and primary CI/CD environments are Linux and Windows. Because maintainers do not currently possess active Mac hardware, macOS builds are community-tested and provided on a best-effort basis.
 
-```bash
-# 1. Mount downloaded disk image (.dmg) or extract .zip
-# Drag "RenegadeCMM.app" to /Applications
+1. **Install**: Mount the downloaded disk image (`.dmg`) and drag `RenegadeCMM.app` into `/Applications`.
+2. **Apple Gatekeeper Bypass**: Because RenegadeCMM is an open-source project built without a paid Apple Developer ID certificate, modern macOS versions (Sequoia, Sonoma) attach a `com.apple.quarantine` attribute to files downloaded via web browsers, triggering the prompt: _"RenegadeCMM cannot be opened because the developer cannot be verified"_.
 
-# 2. If macOS Gatekeeper blocks the unsigned application, clear the quarantine attribute:
-xattr -cr "/Applications/RenegadeCMM.app"
-# Or: Right-click the app icon in Finder → click "Open" → select "Open" in the prompt
-```
+To open the app, choose either method:
+
+- **Terminal Method (Recommended — 3 Seconds)**:
+  Open Terminal on your Mac and strip the quarantine flag:
+
+  ```bash
+  xattr -cr /Applications/RenegadeCMM.app
+  ```
+
+  Once cleared, the application launches normally on double-click like any native software.
+
+- **GUI Method (System Settings)**:
+  1. Click **Cancel** on the Gatekeeper prompt.
+  2. Open **System Settings → Privacy & Security** and scroll down to the **Security** section.
+  3. Under _"Allow applications downloaded from"_, click **Open Anyway** next to the notification stating `"RenegadeCMM" was blocked from use`.
+  4. Authenticate with your Mac password to permanently whitelist the app.
 
 ### Build & Run from Source
 
@@ -300,9 +311,7 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
 
 Please keep the following platform differences and limitations in mind when running or building on macOS:
 
-- **No Official Mac Test Device**: Primary development occurs on Linux and Windows. macOS support relies on standard cross-platform Electron APIs and community bug reports.
-- **Unsigned Binaries & Gatekeeper**: Self-built or unsigned macOS applications will be flagged by Apple Gatekeeper as from an "Unidentified Developer". You must right-click $\rightarrow$ Open or execute `xattr -cr "/Applications/RenegadeCMM.app"` to bypass the quarantine check.
-- **Native C++ Node Module Compilation**: Packages utilizing native C++ bindings (`sqlite3` and `keytar`) must compile locally for your target architecture (`arm64` vs `x64`). Run `npm run postinstall` (or `npx electron-builder install-app-deps`) if architecture mismatches occur.
+- **Unsigned Binaries & Gatekeeper**: Self-built or unsigned open-source macOS applications downloaded via web browsers (Chrome, Safari) will be flagged by Apple Gatekeeper as from an "Unidentified Developer" (or "developer cannot be verified"). Strip the quarantine attribute via `xattr -cr /Applications/RenegadeCMM.app` or whitelist it under **System Settings → Privacy & Security → Open Anyway**.
 - **Python Environment Resolution**: Automatic detection of Windows-specific embedded Python environments (`ComfyUI_windows_portable\python_embeded\python.exe`) is bypassed on macOS; CMM will look for virtualenvs (`venv/bin/python`, `.venv/bin/python`), Conda environments (`conda`/`miniconda`), or your active system Python interpreter when running companion node dependency installers.
 - **Dedicated macOS Launcher**: Use `./cmm-mac.sh` (and `./cmm-dev-mac.sh` for development) instead of `./cmm.sh` on macOS. The macOS script uses `osascript` (AppleScript) for window focus, macOS-specific Electron binary paths (`Electron.app/Contents/MacOS/Electron`), and macOS-specific protected process lists.
 - **Hardware Acceleration**: CPU-level SHA256 file hashing leverages ARM NEON and Apple Crypto engines on Apple Silicon Macs, while x86_64 uses Intel/AMD AVX-512 and SHA-NI extensions.
