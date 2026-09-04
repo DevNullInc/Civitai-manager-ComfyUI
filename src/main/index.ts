@@ -94,6 +94,24 @@ function sanitizeFolderList(list: any): string[] {
   return out;
 }
 
+function getAppIcon(): string | undefined {
+  const candidates = [
+    path.join(__dirname, '../icon.png'),
+    path.join(__dirname, '../../public/icon.png'),
+    path.join(__dirname, '../../build/icon.png'),
+    path.join(app.getAppPath(), 'dist/icon.png'),
+    path.join(app.getAppPath(), 'build/icon.png'),
+    path.join(app.getAppPath(), 'public/icon.png'),
+    path.join(app.getAppPath(), 'build/icons/512x512.png'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      return c;
+    }
+  }
+  return undefined;
+}
+
 async function createWindow() {
   Menu.setApplicationMenu(null);
 
@@ -105,6 +123,7 @@ async function createWindow() {
     title: 'Renegade Core Model Manager (RenegadeCMM)',
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
+    icon: getAppIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

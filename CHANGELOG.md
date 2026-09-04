@@ -12,6 +12,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🛡️ Fixed & Hardened
 
+- **Linux Desktop Window Association (`desktopName` & `syncDesktopName`)**:
+  - Configured `"desktopName": "renegadecmm.desktop"` in `package.json` and `"syncDesktopName": true` in Linux electron-builder options.
+  - Automatically matches window `WM_CLASS` / `StartupWMClass` to the installed `.desktop` launcher entry on Linux desktop environments (GNOME, KDE, Wayland), ensuring proper dock grouping, application icon binding, and eliminating the electron-builder build warning.
+- **Proactive GitHub Actions Node 24 Runner Migration**:
+  - Configured `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` at workflow root in `.github/workflows/release.yml` to ensure all runner action plugins execute under Node 24 ahead of GitHub's Node 20 deprecation deadline.
+- **Cross-Platform Application Icon Assets**:
+  - Integrated official Renegade CMM neon violet squircle icon (`icon.svg`).
+  - Configured electron-builder `buildResources` in `build/` with multi-platform assets: `build/icon.ico` (Windows 16x16 to 256x256), `build/icon.icns` (macOS 16x16 to 1024x1024 retina), `build/icon.png` (512x512 master fallback), and full Freedesktop Linux icon sets in `build/icons/` (16x16 up to 1024x1024 + scalable SVG).
+  - Integrated static web favicons in `public/` and hooked runtime window icon in `src/main/index.ts` and `index.html`.
 - **Tracked Automated Test Suite in Version Control**:
   - Removed `tests/` directory exclusion from `.gitignore` and committed the complete unit and integration test suite to Git.
   - Resolved the root cause of CI build failures across Windows, Linux, and macOS runners where `vitest run` reported `No test files found, exiting with code 1` during the `Run npm test` workflow step.

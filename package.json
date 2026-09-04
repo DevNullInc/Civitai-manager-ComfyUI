@@ -1,6 +1,7 @@
 {
   "name": "renegadecmm",
   "version": "1.4.2",
+  "desktopName": "renegadecmm.desktop",
   "description": "Renegade Core Model Manager - the missing model manager for ComfyUI with verified CivitAI API integration and intelligent auto-sorting.",
   "engines": {
     "node": ">=22.12.0",
@@ -155,6 +156,7 @@
       "artifactName": "${productName}-Portable-v${version}.exe"
     },
     "linux": {
+      "syncDesktopName": true,
       "maintainer": "TheStygianRenegade / /dev/null Inc <devnull@devnullinc.com>",
       "target": [
         {

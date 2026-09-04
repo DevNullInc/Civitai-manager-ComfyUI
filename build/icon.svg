@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181824" />
+      <stop offset="100%" stop-color="#0b0c14" />
+    </linearGradient>
+    <linearGradient id="neonViolet" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="50%" stop-color="#9333ea" />
+      <stop offset="100%" stop-color="#6b21a8" />
+    </linearGradient>
+    <linearGradient id="strokeBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#3b0764" stop-opacity="0.2" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Dark Squircle Base Plate -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bgGrad)" stroke="url(#strokeBorder)" stroke-width="4" />
+
+  <!-- Ambient Inner Rim Accent -->
+  <circle cx="256" cy="245" r="160" fill="none" stroke="#7e22ce" stroke-width="2" stroke-opacity="0.2" filter="url(#glow)" />
+
+  <!-- Biohazard Geometry Group -->
+  <g transform="translate(256, 252) scale(1.12)" filter="url(#glow)">
+    <!-- Central Ring -->
+    <circle cx="0" cy="-10" r="70" fill="none" stroke="url(#neonViolet)" stroke-width="14" opacity="0.85" />
+    
+    <!-- Outer Arc Nodes -->
+    <path d="M 0,-145 C -45,-145 -85,-110 -98,-65 C -75,-85 -40,-95 0,-95 C 40,-95 75,-85 98,-65 C 85,-110 45,-145 0,-145 Z" fill="url(#neonViolet)" />
+    <path d="M -125,72 C -148,32 -145,-18 -120,-58 C -112,-28 -90,-2 -55,18 C -90,38 -112,65 -125,72 Z" fill="url(#neonViolet)" />
+    <path d="M 125,72 C 112,65 90,38 55,18 C 90,-2 112,-28 120,-58 C 145,-18 148,32 125,72 Z" fill="url(#neonViolet)" />
+
+    <!-- Center Hub Void -->
+    <circle cx="0" cy="-10" r="22" fill="#0b0c14" stroke="url(#neonViolet)" stroke-width="8" />
+  </g>
+
+  <!-- Bottom Brand Text -->
+  <text x="256" y="448" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="900" letter-spacing="5" fill="#c084fc" opacity="0.95">RENEGADE CMM</text>
+</svg>

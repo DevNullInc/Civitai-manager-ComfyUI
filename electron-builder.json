@@ -46,6 +46,7 @@
     "artifactName": "${productName}-Portable-v${version}.exe"
   },
   "linux": {
+    "syncDesktopName": true,
     "maintainer": "TheStygianRenegade / /dev/null Inc <devnull@devnullinc.com>",
     "target": [
       {
