@@ -1,6 +1,10 @@
 # Renegade Core Model Manager (CMM)
 
-![Renegade Core Model Manager Logo](build/icon.svg)
+<!-- markdownlint-disable MD033 -->
+<p align="center">
+  <img src="build/icon.svg" alt="Renegade CMM Logo" width="96" height="96" />
+</p>
+<!-- markdownlint-enable MD033 -->
 
 **The missing model manager for ComfyUI.** A unified desktop application for discovering, downloading, organizing, and version-managing generative AI models across multiple CivitAI sources with intelligent auto-sorting into ComfyUI's folder structure.
 
