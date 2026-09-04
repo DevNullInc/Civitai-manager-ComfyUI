@@ -21,7 +21,7 @@ graph LR
 ## 📌 Planned Releases
 
 ### 🎯 Phase 1: v1.4.0 — Workflow "1-Click Auto-Resolver" & Local API Custom Node Bridge
->
+
 > **Goal**: Turn the Workflow Scanner engine into an interactive visual tab with automatic missing model resolution, and provide a secure Local API bridge for external ComfyUI custom nodes.
 
 - [x] ~~**Dedicated "Workflows" UI Tab**:~~
@@ -35,7 +35,7 @@ graph LR
 - [x] ~~**Process Safety & Health Monitoring**:~~
   - ~~Strict process blacklist protections in `cmm.sh`, `cmm.ps1`, and `src/main/index.ts` to prevent closing external web browsers (Firefox, Chrome, Opera, Brave, etc.) and foreign processes during shutdown or restart.~~
   - ~~Real-time backend heartbeat monitoring (`/api/health`) and dynamic red **"Offline"** status badge.~~
-- [x] ~~**Decoupled ComfyUI Custom Node Extension Package**~~ *(Completed but currently Untested)*:
+- [x] ~~**Decoupled ComfyUI Custom Node Extension Package**~~ _(Completed but currently Untested)_:
   - ~~Maintained as an independent companion repository/package with ComfyUI's custom node folder structure (`custom_nodes/comfyui-civitai-manager-node`).~~
   - ~~Seamlessly communicates with CMM via the native HTTP Bridge on `127.0.0.1:5174`.~~
 - [x] ~~**Localhost-Only Security Hardening**:~~
@@ -50,33 +50,33 @@ graph LR
 ---
 
 ### 🎯 Phase 1.1: v1.4.1 — Dynamic Live ComfyUI Workspace Wrapper, Canvas Injection & Tab Keep-Alive
->
+
 > **Goal**: Seamlessly bridge the Workflows tab directly into running ComfyUI instances with real-time health probing, 1-click canvas graph pushing, cross-app auto-saving, and background generation keep-alive.
 
-- [x] ~~**Dynamic Live ComfyUI Workspace Wrapper**~~ *(untested for now)*:
+- [x] ~~**Dynamic Live ComfyUI Workspace Wrapper**~~ _(untested for now)_:
   - ~~Dynamic background health probing (`/system_stats` / `/prompt`) detecting running ComfyUI instances every 4s.~~
   - ~~Dedicated **Live ComfyUI (`'live'`)** view mode embedding the interactive canvas directly into the application window.~~
   - ~~**Live + Inspector (`'split'`)** view displaying ComfyUI side-by-side with missing node resolution cards and model dependency lists.~~
   - ~~Maximize / Fullscreen ComfyUI wrapper (`isComfyFullscreen`) with quick workflow dropdown, slide-out node drawer, and ComfyUI reload.~~
-- [x] ~~**Resident Tab Keep-Alive System**~~ *(untested for now)*:
+- [x] ~~**Resident Tab Keep-Alive System**~~ _(untested for now)_:
   - ~~Continuous background execution preserving guest WebContents, WebSockets, and running generation queue jobs when switching to Browse, Library, Downloads, or Settings.~~
   - ~~Disabled background CPU throttling (`backgroundThrottling: false`) in Electron main process and guest `<webview>`.~~
   - ~~Unified single resident `<webview>` shared across inline, split, and fullscreen views to prevent canvas unmounting.~~
   - ~~Live indicator dot on Workflows tab button in navbar reflecting active background connection.~~
-- [x] ~~**1-Click Workflow Canvas Injection & Auto-Persistence**~~ *(untested for now)*:
+- [x] ~~**1-Click Workflow Canvas Injection & Auto-Persistence**~~ _(untested for now)_:
   - ~~"Push to Canvas" injection loading selected or uploaded workflows directly into active ComfyUI canvas via `window.app.loadGraphData(graph, true)`.~~
   - ~~Automatic cross-app persistence saving uploaded `.json` and embedded `.png` workflows directly to `<comfyui_install_dir>/user/default/workflows/`.~~
   - ~~Drag-and-drop passthrough into active ComfyUI instance when online.~~
-- [x] ~~**Differentiated Status Flags: Read-Only vs Edit Possible**~~ *(untested for now)*:
+- [x] ~~**Differentiated Status Flags: Read-Only vs Edit Possible**~~ _(untested for now)_:
   - ~~Dynamic header status and workflow health badges clearly distinguishing between `Embedded (Read-Only Preview)` and `Live ComfyUI (Edit Possible)`.~~
   - ~~`Embedded (Read-Only)` badge on embedded LiteGraph visual node map.~~
-- [x] ~~**Configurable ComfyUI Server Endpoint**~~ *(untested for now)*:
+- [x] ~~**Configurable ComfyUI Server Endpoint**~~ _(untested for now)_:
   - ~~Dedicated endpoint configuration in Settings tab with connection testing and persistent SQLite storage.~~
 
 ---
 
 ### 🎯 Phase 2: v1.5.0 — Native Hugging Face & GGUF Download Engine
->
+
 > **Goal**: Equal-citizen support for Hugging Face `.safetensors`, GGUF quantizations, and next-gen video/image models.
 
 - [ ] **Native Hugging Face Download Pipeline**:
@@ -89,7 +89,7 @@ graph LR
 ---
 
 ### 🎯 Phase 3: v1.6.0 — Storage Optimizer & Hardlink Deduplication
->
+
 > **Goal**: Reclaim tens or hundreds of gigabytes of disk space across multiple ComfyUI installations.
 
 - [ ] **NTFS / ext4 Hardlink Deduplication**:
@@ -105,20 +105,20 @@ graph LR
 ---
 
 ### 🎯 Phase 4: v1.7.0 — Smart Collections, Trigger Word Hub & Semantic Search
->
+
 > **Goal**: Complete creative workstation and prompt curation engine.
 
 - [ ] **LoRA Trigger Word & Prompt Injector**:
   - One-click copy or direct ComfyUI node injection of trained trigger words and recommended LoRA strength weights.
 - [ ] **Custom Collections & Smart Playlists**:
-  - Group models by project, art style, or architecture (e.g., *"Flux Realism Setup"*, *"SDXL Inpainting Kit"*, *"Anime Style LoRAs"*).
+  - Group models by project, art style, or architecture (e.g., _"Flux Realism Setup"_, _"SDXL Inpainting Kit"_, _"Anime Style LoRAs"_).
 - [ ] **Local Semantic Search**:
-  - Embed local model descriptions and prompt tags with an embedded vector store to allow natural language search (e.g., *"find high-contrast cinematic lighting LoRAs"*).
+  - Embed local model descriptions and prompt tags with an embedded vector store to allow natural language search (e.g., _"find high-contrast cinematic lighting LoRAs"_).
 
 ---
 
 ### 🎯 Phase 5: v2.0.0 — Unified Multi-Gen Ecosystem & Automated Package Launch Hub
->
+
 > **Goal**: Expand Renegade CMM into an all-in-one AI generation workstation and runtime manager. Launch, orchestrate, and automatically install multiple generative backends, model engines, and LLM suites directly from a single native launchpad.
 
 - [ ] **Universal Multi-Gen Launchpad & Suite Selector**:

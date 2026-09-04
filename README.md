@@ -16,6 +16,7 @@
 
 ## 📸 Screenshots
 
+<!-- markdownlint-disable MD033 -->
 <p align="center">
   <sub><i>Click any screenshot to expand and view full resolution.</i></sub>
 </p>
@@ -28,9 +29,10 @@
 | :-----------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------: |
 | <a href="docs/screenshots/downloads-tab.png"><img src="docs/screenshots/downloads-tab.png" alt="Downloads Manager" width="460" /></a> | <a href="docs/screenshots/settings-tab.png"><img src="docs/screenshots/settings-tab.png" alt="Settings & Backup" width="460" /></a> |
 
-|                                            **Workflow & Missing Node Resolver**                                             |                                                  **About & Project Info**                                                  |
-| :--------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
+|                                                         **Workflow & Missing Node Resolver**                                                         |                                                     **About & Project Info**                                                     |
+| :--------------------------------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------------: |
 | <a href="docs/screenshots/workflows-tab.png"><img src="docs/screenshots/workflows-tab.png" alt="Workflow & Missing Node Resolver" width="460" /></a> | <a href="docs/screenshots/about-tab.png"><img src="docs/screenshots/about-tab.png" alt="About & Project Info" width="460" /></a> |
+<!-- markdownlint-enable MD033 -->
 
 ---
 
@@ -340,11 +342,11 @@ Outputs will be saved in the `release/` directory:
 
 | Parameter / Flag | Type     | Default | Description                                                                                                                                        |
 | :--------------- | :------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Action`         | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, `package`, `publish`, or `clean-assets`.                                                  |
+| `Action`         | `string` | `start` | Operation to execute: `start`, `stop`, `restart`, `status`, `package`, `publish`, or `clean-assets`.                                               |
 | `-Port <int>`    | `int`    | `5173`  | Port for the Vite web server & HTTP bridge.                                                                                                        |
 | `-Headless`      | `switch` | `false` | Runs background server and web UI without launching the Electron desktop window. Ideal for remote servers, Docker, WSL, or browser-only workflows. |
 | `-NoWindow`      | `switch` | `false` | Alias for `-Headless`.                                                                                                                             |
-| `-CleanAssets`   | `switch` | `false` | Also run the asset janitor (prune orphaned `dist/assets` bundles). `stop`/`restart` always prune; `start` prunes first only when this flag is set.  |
+| `-CleanAssets`   | `switch` | `false` | Also run the asset janitor (prune orphaned `dist/assets` bundles). `stop`/`restart` always prune; `start` prunes first only when this flag is set. |
 
 ---
 
@@ -708,6 +710,7 @@ For the full legal text, see [https://www.gnu.org/licenses/gpl-3.0.en.html](http
 
 Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI models or makes your workflow easier, consider supporting ongoing development!!
 
+<!-- markdownlint-disable MD033 -->
 <p align="center">
   <a href="https://cash.app/$StygianRenegade/1.00">
     <img src="https://img.shields.io/badge/CashApp-$1.00_Coffee-00D632?style=for-the-badge&logo=cashapp&logoColor=white" alt="Buy $1 Coffee" />
@@ -721,10 +724,7 @@ Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI 
     <img src="https://img.shields.io/badge/CashApp-$10.00_Lunch_%26_Fuel-00D632?style=for-the-badge&logo=cashapp&logoColor=white" alt="Buy $10 Lunch & Fuel" />
   </a>
 </p>
-
-- ☕ **[$1.00 — Quick Coffee](https://cash.app/$StygianRenegade/1.00)**
-- 🥪 **[$5.00 — Coffee & Snack](https://cash.app/$StygianRenegade/5.00)**
-- 🍕 **[$10.00 — Lunch & Fuel](https://cash.app/$StygianRenegade/10.00)**
+<!-- markdownlint-enable MD033 -->
 
 ---
 
