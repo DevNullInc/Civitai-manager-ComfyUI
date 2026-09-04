@@ -1,5 +1,7 @@
 # Renegade Core Model Manager (CMM)
 
+![Renegade Core Model Manager Logo](build/icon.svg)
+
 **The missing model manager for ComfyUI.** A unified desktop application for discovering, downloading, organizing, and version-managing generative AI models across multiple CivitAI sources with intelligent auto-sorting into ComfyUI's folder structure.
 
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
@@ -362,7 +364,7 @@ In **Settings**:
 
 ### 2. Scan Existing Library & Resolve Duplicates
 
-```
+```text
 Library → Scan ComfyUI Folders → Start Scan
 ```
 
@@ -376,7 +378,7 @@ CMM will:
 
 ### 3. Search and Download
 
-```
+```text
 Browse → Search "realistic vision" → Select model → Download
 ```
 
@@ -558,7 +560,7 @@ CMM recognizes and manages models in these ComfyUI folders:
 
 ### Adding to CMM
 
-```
+```text
 Settings → API Sources → CivitAI → Paste Key → Test Connection
 ```
 
@@ -641,7 +643,7 @@ Configure webhooks for download completion:
 
 ### Backup and Restore
 
-```
+```text
 Settings → Backup → Create Backup
 ```
 
@@ -754,4 +756,4 @@ Free code signing provided by [SignPath.io](https://signpath.io), certificate by
 
 ---
 
-**Happy modeling! 🎨**
+Happy modeling! 🎨
