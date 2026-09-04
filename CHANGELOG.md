@@ -1,5 +1,7 @@
 # Changelog
 
+<!-- markdownlint-disable MD024 -->
+
 All notable changes, fixes, and unversioned enhancements to **Renegade Core Model Manager** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
@@ -35,12 +37,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Clicking the update badge opens the GitHub repository in development mode, or the GitHub Releases page when the Full Release switch is flagged.
   - Hovering over the update badge provides explicit instructions directing users to use the launcher script with the `update` flag (`./cmm.sh update` or `.\cmm.ps1 update`) to automatically update to the latest committed version.
 
+- **Automated Version Synchronization Tooling (`scripts/update-version.js`) (untested for now)**:
+  - Added dedicated version synchronization engine (`npm run version:bump -- <version>`, `node scripts/update-version.js <version>`, `.\update-version.ps1 <version>`) updating `package.json`, `package-lock.json`, `src/version.ts`, CLI runners, API manifests, backup schemas, and HTTP user agents in a single command.
+
 ### 🔄 Changed
 
 - **Differentiated Dynamic Status Flags: Read-Only Preview vs Edit Possible (untested for now)**:
   - Active Workflow Health Banner dynamically displays 🟢 **`Edit Possible (Live Canvas)`** when viewing live ComfyUI and 🟡 **`Embedded (Read-Only Preview)`** when viewing offline LiteGraph previews.
   - Header status badge updates dynamically between `Live ComfyUI: Online — Edit Possible` and `Live ComfyUI: Offline (Read-Only Preview)`.
   - Visual Node Map LiteGraph toolbar explicitly displays an `Embedded (Read-Only)` badge to avoid confusing preview maps with editable live canvases.
+
+### 🛡️ Fixed & Hardened
+
+- **Eliminated Windows Elevation Helper & Resolved GitHub Malware False Positives (untested for now)**:
+  - Stripped `elevate.exe` / `elevation.exe` from Windows NSIS installer packages by configuring `"packElevateHelper": false`, `"allowElevation": false`, and `"perMachine": false` in Electron Builder.
+  - Resolved root cause of automated GitHub account moderation and soft-ban actions triggered during the 1.4.0 release: automated GitHub Release scanners and Microsoft Defender heuristics frequently misidentify unsigned NSIS elevation helper binaries as generic security threats (`HackTool:Win32/AutoElevate`).
+  - Enforced 100% non-elevated user-space installation profile (`%LOCALAPPDATA%\Programs\RenegadeCMM`), guaranteeing RenegadeCMM never prompts for or requires Windows administrative privileges.
 
 ---
 

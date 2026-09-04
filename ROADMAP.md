@@ -9,7 +9,7 @@ This document outlines the planned milestones, upcoming features, and architectu
 ```mermaid
 graph LR
     v13["✅ v1.3.0<br/>CLI + HF Hub + Webhooks"] --> v14["✅ v1.4.0<br/>Workflow Auto-Resolver & UI"]
-    v14 --> v141["🎯 v1.4.1<br/>Live ComfyUI & Keep-Alive"]
+    v14 --> v141["✅ v1.4.1<br/>Live ComfyUI & Binary Hardening"]
     v141 --> v15["🎯 v1.5.0<br/>Native HF & GGUF Engine"]
     v15 --> v16["🎯 v1.6.0<br/>Hardlink Storage Optimizer"]
     v16 --> v17["🎯 v1.7.0<br/>Smart Collections & Trigger Hub"]
@@ -51,7 +51,7 @@ graph LR
 
 ### 🎯 Phase 1.1: v1.4.1 — Dynamic Live ComfyUI Workspace Wrapper, Canvas Injection & Tab Keep-Alive
 
-> **Goal**: Seamlessly bridge the Workflows tab directly into running ComfyUI instances with real-time health probing, 1-click canvas graph pushing, cross-app auto-saving, and background generation keep-alive.
+> **Goal**: Seamlessly bridge the Workflows tab directly into running ComfyUI instances with real-time health probing, 1-click canvas graph pushing, cross-app auto-saving, background generation keep-alive, and binary integrity hardening.
 
 - [x] ~~**Dynamic Live ComfyUI Workspace Wrapper**~~ _(untested for now)_:
   - ~~Dynamic background health probing (`/system_stats` / `/prompt`) detecting running ComfyUI instances every 4s.~~
@@ -75,6 +75,10 @@ graph LR
 - [x] ~~**About Tab Version & Dynamic Update Checking**~~ _(untested for now)_:
   - ~~Prominent app version display (`v{version}`) and release channel status (`Stable Release` vs `Development Build`).~~
   - ~~Dynamic **"Update Available"** badge checking GitHub with release vs dev routing and launcher script update instructions.~~
+- [x] ~~**Windows Elevation Helper Elimination & Malware False-Positive Mitigation**~~ _(untested for now)_:
+  - ~~Stripped NSIS `elevate.exe` (`packElevateHelper: false`, `allowElevation: false`, `perMachine: false`) to permanently resolve AV false positives and GitHub release scanner moderation triggers.~~
+- [x] ~~**Automated Version Synchronization Tooling**~~ _(untested for now)_:
+  - ~~Engineered `scripts/update-version.js` and `npm run version:bump` to synchronize versions across all manifests, configs, and client User-Agent headers.~~
 
 ---
 

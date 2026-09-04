@@ -2,7 +2,7 @@
  * Renegade Core Model Manager (RenegadeCMM)
  * Central application version & build configuration
  */
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.1';
 
 /**
  * Build Configuration & Release Mode Toggle
@@ -12,8 +12,8 @@ export const APP_VERSION = '1.3.0';
  *   - false : Release Mode (disables the development banner and commit checks entirely for official production .exe / release packages)
  */
 export const BUILD_CONFIG = {
-  IS_DEV_BUILD: true, // <-- TOGGLE THIS: true = Dev Mode (commit alerts on), false = Release Mode (alerts off)
-  RELEASE_CHANNEL: 'development' as 'development' | 'stable',
+  IS_DEV_BUILD: false, // <-- TOGGLE THIS: true = Dev Mode (commit alerts on), false = Release Mode (alerts off)
+  RELEASE_CHANNEL: 'stable' as 'development' | 'stable',
   APP_VERSION,
 } as const;
 
