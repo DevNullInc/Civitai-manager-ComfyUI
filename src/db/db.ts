@@ -17,7 +17,29 @@ export class DatabaseManager {
   private dbPath: string;
 
   constructor(customDbPath?: string) {
-    this.dbPath = customDbPath || path.join(process.cwd(), 'civitai_manager.sqlite');
+    const defaultNewPath = path.join(process.cwd(), 'renegadecmm.sqlite');
+    const legacyPath = path.join(process.cwd(), 'civitai_manager.sqlite');
+
+    // Auto-migrate legacy civitai_manager.sqlite to renegadecmm.sqlite if not already migrated
+    if (!customDbPath && !fs.existsSync(defaultNewPath) && fs.existsSync(legacyPath)) {
+      try {
+        fs.renameSync(legacyPath, defaultNewPath);
+        if (fs.existsSync(`${legacyPath}-wal`)) {
+          fs.renameSync(`${legacyPath}-wal`, `${defaultNewPath}-wal`);
+        }
+        if (fs.existsSync(`${legacyPath}-shm`)) {
+          fs.renameSync(`${legacyPath}-shm`, `${defaultNewPath}-shm`);
+        }
+        logger.info(`Migrated legacy database civitai_manager.sqlite to renegadecmm.sqlite`);
+      } catch (renameErr) {
+        logger.warn('Could not rename legacy civitai_manager.sqlite, copying instead:', renameErr);
+        try {
+          fs.copyFileSync(legacyPath, defaultNewPath);
+        } catch {}
+      }
+    }
+
+    this.dbPath = customDbPath || defaultNewPath;
   }
 
   async init(): Promise<void> {

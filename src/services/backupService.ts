@@ -85,12 +85,14 @@ export class BackupService {
       zip.addFile('ignored_duplicates.json', Buffer.from(JSON.stringify(ignoredDuplicatesRows, null, 2), 'utf8'));
 
       // 3. Raw SQLite DB snapshot if file exists
-      const dbPath = path.join(process.cwd(), 'civitai_manager.sqlite');
-      if (fs.existsSync(dbPath)) {
+      const dbPath = path.join(process.cwd(), 'renegadecmm.sqlite');
+      const legacyDbPath = path.join(process.cwd(), 'civitai_manager.sqlite');
+      const targetDbPath = fs.existsSync(dbPath) ? dbPath : (fs.existsSync(legacyDbPath) ? legacyDbPath : null);
+      if (targetDbPath) {
         try {
           // Checkpoint WAL to flush to main DB before reading
           await dbManager.exec('PRAGMA wal_checkpoint(TRUNCATE);').catch(() => {});
-          const dbBuffer = fs.readFileSync(dbPath);
+          const dbBuffer = fs.readFileSync(targetDbPath);
           zip.addFile('database.sqlite', dbBuffer);
         } catch (dbReadErr) {
           logger.warn('Could not attach raw SQLite file to zip, JSON tables will be used:', dbReadErr);

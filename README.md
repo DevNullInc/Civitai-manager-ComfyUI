@@ -4,11 +4,13 @@
 
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
+[![Privacy Policy](https://img.shields.io/badge/Privacy-100%25%20Local--First-00D632.svg)](PRIVACY.md)
 [![Features](https://img.shields.io/badge/Features-Quick%20Crib--Notes-00D632.svg)](FEATURES.md)
 [![Roadmap](https://img.shields.io/badge/Roadmap-View%20Upcoming%20Milestones-8a2be2.svg)](ROADMAP.md)
 
 > ⚡ **Want the quick summary without the long read? Check out the [Feature Crib-Notes (FEATURES.md)](FEATURES.md).**  
-> 🗺️ **Looking for upcoming features and releases? Check out the [Product Roadmap](ROADMAP.md).**
+> 🗺️ **Looking for upcoming features and releases? Check out the [Product Roadmap](ROADMAP.md).**  
+> 🛡️ **Questions about data security or credentials? Read our [Privacy Policy (PRIVACY.md)](PRIVACY.md).**
 
 ---
 
@@ -726,9 +728,16 @@ Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI 
 
 ---
 
+## 🔐 Code Signing
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+---
+
 ## 🙏 Author & Acknowledgments
 
 - **Lead Developer / Maintainer**: **TheStygianRenegade** / **/dev/null Inc**
+- [SignPath Foundation](https://signpath.org) & [SignPath.io](https://signpath.io) for providing free open-source code signing
 - [CivitAI](https://civitai.com) for the amazing platform and API
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI) for the incredible node-based interface
 - The generative AI community for creating and sharing models
@@ -740,6 +749,8 @@ Seeing how you scrolled this far, if CMM saves you time organizing your ComfyUI 
 - **Issues**: [GitHub Issues](https://github.com/DevNullInc/RenegadeCMM/issues)
 - **Vulnerability Reporting**: [GitHub Security](https://github.com/DevNullInc/RenegadeCMM/security)
 - **Discussions**: [GitHub Discussions](https://github.com/DevNullInc/RenegadeCMM/discussions)
+- **Privacy Policy**: [PRIVACY.md](PRIVACY.md)
+- **API Key & Security Architecture**: [docs/APISecurity.md](docs/APISecurity.md)
 
 ---
 

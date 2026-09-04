@@ -125,6 +125,15 @@ export function AboutTab() {
             </button>
 
             <button
+              onClick={() => openLink('https://github.com/DevNullInc/RenegadeCMM/blob/main/PRIVACY.md')}
+              className="px-4 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/70 hover:border-emerald-500/50 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-lg"
+            >
+              <ShieldCheck size={15} className="text-emerald-400" />
+              <span>Privacy Policy</span>
+              <ExternalLink size={12} className="text-slate-500" />
+            </button>
+
+            <button
               onClick={() => openLink('https://github.com/DevNullInc/RenegadeCMM/issues')}
               className="px-4 py-2.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-200 border border-rose-800/60 hover:border-rose-500/80 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-lg"
             >
@@ -211,14 +220,25 @@ export function AboutTab() {
             </div>
           </div>
 
-          <button
-            onClick={() => openLink('https://www.gnu.org/licenses/gpl-3.0.html')}
-            className="text-indigo-400 hover:text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer pt-2 border-t border-slate-800/80"
-          >
-            <ShieldCheck size={14} />
-            <span>Read full GPL-3.0 License</span>
-            <ExternalLink size={11} className="text-indigo-400/60" />
-          </button>
+          <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+            <button
+              onClick={() => openLink('https://www.gnu.org/licenses/gpl-3.0.html')}
+              className="text-indigo-400 hover:text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Scale size={14} />
+              <span>Read full GPL-3.0 License</span>
+              <ExternalLink size={11} className="text-indigo-400/60" />
+            </button>
+            <div className="text-[11px] text-slate-500 flex items-center gap-1">
+              <span>Code signing by</span>
+              <button
+                onClick={() => openLink('https://signpath.org')}
+                className="text-slate-400 hover:text-indigo-300 transition-colors underline cursor-pointer"
+              >
+                SignPath Foundation
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Runtime & Environment Info Card */}
