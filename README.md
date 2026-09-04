@@ -20,6 +20,61 @@
 
 ---
 
+## 📑 Table of Contents
+
+- [📸 Screenshots](#-screenshots)
+- [🎯 Why CMM?](#-why-cmm)
+- [✨ Features](#-features)
+  - [🔍 Discovery & Search](#-discovery--search)
+  - [📥 Download Management & Version Updating](#-download-management--version-updating)
+  - [📁 Library Management & Persistent Scanner](#-library-management--persistent-scanner)
+  - [⚙️ System Backup & Diagnostics](#-system-backup--diagnostics)
+  - [🔧 ComfyUI Integration & Companion Custom Node](#-comfyui-integration--companion-custom-node)
+  - [🎨 Live ComfyUI Workspace & Workflow Resolver](#-live-comfyui-workspace--workflow-resolver)
+- [📦 Installation](#-installation)
+  - [Windows](#windows)
+  - [Linux](#linux)
+  - [macOS (Community & Self-Build)](#macos-community--self-build)
+  - [Build & Run from Source](#build--run-from-source)
+- [🚀 Quick Start](#-quick-start)
+  - [1. First Launch Setup](#1-first-launch-setup)
+  - [2. Scan Existing Library & Resolve Duplicates](#2-scan-existing-library--resolve-duplicates)
+  - [3. Search and Download](#3-search-and-download)
+- [⚙️ Configuration](#-configuration)
+  - [Folder Mappings](#folder-mappings)
+  - [API Sources](#api-sources)
+- [📂 Supported Folder Structure](#-supported-folder-structure)
+  - [Core Model Folders](#core-model-folders)
+  - [Specialized Folders](#specialized-folders)
+  - [Utility Folders](#utility-folders)
+- [🎮 Usage Guide](#-usage-guide)
+  - [Searching & Browsing Models](#searching--browsing-models)
+  - [Downloading & Safe Version Updating](#downloading--safe-version-updating)
+  - [Managing & Deleting Library Models](#managing--deleting-library-models)
+  - [👥 Duplicate Resolution & Ignored Duplicate Sets](#-duplicate-resolution--ignored-duplicate-sets)
+  - [🔄 Persistent Background Scanning](#-persistent-background-scanning)
+  - [📦 Complete System Backup & Restore (.ZIP)](#-complete-system-backup--restore-zip)
+  - [📊 About & Diagnostics Reporting](#-about--diagnostics-reporting)
+- [🔐 API Key Setup](#-api-key-setup)
+  - [Getting Your CivitAI API Key](#getting-your-civitai-api-key)
+  - [Adding to CMM](#adding-to-cmm)
+- [🛠️ Troubleshooting](#-troubleshooting)
+  - [Downloads Failing](#downloads-failing)
+  - [Models Not Auto-Sorting](#models-not-auto-sorting)
+  - [Hash Mismatch After Download](#hash-mismatch-after-download)
+  - [Scan Taking Forever](#scan-taking-forever)
+  - [Model Not Found on CivitAI](#model-not-found-on-civitai)
+- [🧪 Advanced Features](#-advanced-features)
+  - [Command Line Interface](#command-line-interface)
+  - [Webhook Integration](#webhook-integration)
+  - [Backup and Restore](#backup-and-restore)
+- [🤝 Contributing](#-contributing)
+- [📜 License](#-license)
+- [🙏 Author & Acknowledgments](#-author--acknowledgments)
+- [📧 Support & Feedback](#-support--feedback)
+
+---
+
 ## 📸 Screenshots
 
 <!-- markdownlint-disable MD033 -->
@@ -96,7 +151,7 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - **Ignore Intentionally Duplicated Sets**: Suppress duplicate warnings for models needed across specific custom node paths, with automatic re-flagging if new duplicate copies are discovered
 - **Selective Update Ignoring**: Mark version updates as ignored so LoRAs or Checkpoints uploaded for different base models don't trigger unwanted update badges
 
-### ⚙️ System Backup & Diagnostics
+### ⚙ System Backup & Diagnostics
 
 - **Complete System Backup & Restore (.ZIP)**: Create and restore comprehensive `.zip` archives containing your raw SQLite database, model catalog, download records, folder settings, and ignore sets (with live missing file counts upon restore)
 - **Development Build Update Checker**: Top notification banner and startup script Git checks notifying users when newer development commits are pushed to GitHub (with 1-click `./cmm.sh update` / `.\cmm.ps1 update` support and dismiss buttons)
@@ -311,7 +366,7 @@ To build standalone macOS binaries (`.dmg` installer and `.zip` archive) directl
    - `RenegadeCMM-<version>-x64.dmg` (Intel x86_64)
    - `RenegadeCMM-<version>-mac.zip`
 
-#### ⚠️ macOS Platform Caveats & Limitations
+#### ⚠ macOS Platform Caveats & Limitations
 
 Please keep the following platform differences and limitations in mind when running or building on macOS:
 
@@ -399,7 +454,7 @@ The model automatically routes to the correct folder (e.g., `checkpoints/`, `lor
 
 ---
 
-## ⚙️ Configuration
+## ⚙ Configuration
 
 ### Folder Mappings
 
@@ -549,7 +604,7 @@ CMM recognizes and manages models in these ComfyUI folders:
    - **Restore Backup (.ZIP)**: Select any `.zip` backup archive (or legacy `.json` file) to restore your entire library state, download queue records, and configurations.
    - **Copy Config / Paste Config**: Quickly copy or paste raw JSON settings for fast pattern rule sharing across browsers.
 
-### ℹ️ About & Diagnostics Reporting
+### 📊 About & Diagnostics Reporting
 
 1. Navigate to the **About** tab.
 2. View application version information, author credits (**TheStygianRenegade / /dev/null Inc**), license details (GPL-3.0), and active runtime telemetry.
@@ -588,7 +643,7 @@ Settings → API Sources → CivitAI → Paste Key → Test Connection
 
 ---
 
-## 🛠️ Troubleshooting
+## 🛠 Troubleshooting
 
 ### Downloads Failing
 
