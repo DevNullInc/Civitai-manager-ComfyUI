@@ -56,12 +56,27 @@
 
 ---
 
-## 🗺️ 5. Interactive Workflows & Dependency Engine
+## 🗺️ 5. Interactive Workflows & Live ComfyUI Workspace
 
-* **Saved Workflows Selector Dropdown**: Instantly dropdown-select existing `.json` and `.png` workflows discovered in your ComfyUI directories (`workflows/`, `user/default/workflows/`).
-* **Visual Spatial Node Map**: Full interactive pan/zoom canvas displaying nodes, bezier connections, and readiness color codes.
+* **Dynamic Live ComfyUI Workspace Wrapper**:
+  * Automatically detects running ComfyUI instances via background health probing (`/system_stats` / `/prompt`).
+  * **Live Canvas Mode (`'live'`)**: Embeds the active ComfyUI interface directly into CMM with interactive node editing, prompt adjustment, and generation queueing.
+  * **Live + Inspector Split Mode (`'split'`)**: Displays ComfyUI side-by-side with missing node resolution cards and model dependencies.
+  * **Maximize / Fullscreen Mode**: Expand to an immersive workspace with workflow dropdown, 1-click canvas push, slide-out node drawer, and ComfyUI reload.
+* **Resident Tab Keep-Alive System**:
+  * Generations continue running uninterrupted in the background when switching to Browse, Library, Downloads, or Settings.
+  * Offscreen keep-alive DOM positioning and zero-throttling preferences (`backgroundThrottling: false`) prevent Chromium from suspending WebSockets or guest execution.
+  * Unified single resident `<webview>` shared across inline, split, and fullscreen views so toggling modes never reloads or aborts generation.
+  * Navbar indicator dot displays real-time connection status to ComfyUI.
+* **1-Click "Push to Canvas" Workflow Injection**:
+  * Injects selected or uploaded workflow graphs directly into the active ComfyUI canvas via `window.app.loadGraphData(graph, true)`.
+* **Automatic Cross-App Persistence & Drag-and-Drop**:
+  * Uploaded `.json` and embedded `.png` workflows automatically persist to `<comfyui_install_dir>/user/default/workflows/` (with fallback to `workflows/`) and load directly onto the canvas when ComfyUI is online.
+* **Saved Workflows Selector Dropdown**: Instantly select and inspect any existing `.json` or `.png` workflow discovered in your ComfyUI directory.
+* **Visual Spatial Node Map**: High-performance offline LiteGraph pan/zoom canvas displaying nodes, bezier connections, and readiness color codes.
 * **Dual PNG Metadata Extraction**: Parses embedded workflow and prompt graphs from ComfyUI generated `.png` images in-memory.
 * **Model Dependency Matrix**: Lists required checkpoints, LoRAs, and VAEs with installed vs. missing status and 1-click downloads.
+* **Differentiated Status Flags**: Clearly marks offline preview maps as `Embedded (Read-Only)` while identifying live connected workspaces as `Live ComfyUI (Edit Possible)`.
 * **4-Tier Custom Node Resolver**:
   1. *Local Check*: Inspects installed `custom_nodes/` extensions.
   2. *Registry Cache*: Checks ComfyUI-Manager registry database.

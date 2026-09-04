@@ -102,7 +102,19 @@ If you've been manually downloading models from CivitAI, creating folders, movin
 - Recognizes **50+ specialized folders** (ipadapter, photomaker, pulid, reactor, sam3, ultralytics, etc.)
 - **Filename pattern matching**: Routes `ip-adapter_*.safetensors` to `ipadapter/`, `*.gguf` to `gguf/`, etc.
 - **Custom folder mappings**: Override defaults to match your workflow
-- **Visual Workflow Canvas & Missing Node Resolver**: Scans `.png` and `.json` workflows for embedded models and missing custom node extensions with 4-tier dependency resolution (Local $\rightarrow$ Node List $\rightarrow$ GitHub Search $\rightarrow$ Pip Runner)
+
+### 🎨 Live ComfyUI Workspace & Workflow Resolver
+
+- **Dynamic Background Detection & Health Probing**: Periodically probes local ComfyUI endpoints (`/system_stats` / `/prompt`) every 4 seconds to identify online status, ComfyUI version, and active GPU devices.
+- **Embedded Live ComfyUI Canvas (`'live'`)**: Run, edit, and queue generations directly inside CMM with full prompt editing, node wiring, and queue management.
+- **Live + Inspector Split View (`'split'`)**: Displays the live ComfyUI instance side-by-side with missing node resolution cards and model dependencies.
+- **Resident Tab Keep-Alive System**: Running generations continue in the background without interruptions, WebSocket timeouts, or CPU throttling when switching between tabs (Browse, Library, Downloads, Settings). Powered by offscreen DOM keep-alive positioning, `backgroundThrottling: false` Electron preferences, and a unified resident `<webview>`.
+- **1-Click "Push to Canvas" Workflow Injection**: Instantly pushes selected or uploaded workflow graphs directly into the active ComfyUI canvas (`window.app.loadGraphData(graph, true)`).
+- **Cross-App Workflow Persistence**: Uploaded `.json` workflows and embedded `.png` metadata workflows automatically save to `<comfyui_install_dir>/user/default/workflows/` (with fallback to `workflows/`) for cross-application compatibility.
+- **Maximize / Fullscreen Workspace Wrapper**: Expands to an immersive distraction-free workspace with quick workflow switching, 1-click canvas push, slide-out missing node drawer, and ComfyUI reload controls.
+- **Differentiated Dynamic Flags**: Dynamically labels offline previews as `Embedded (Read-Only Preview)` while identifying connected live sessions as `Live ComfyUI: Online (Edit Possible)`.
+- **Saved Workflows Selector Dropdown**: Automatically indexes and quick-selects any workflow stored in your ComfyUI directories.
+- **Visual Spatial Node Map & 4-Tier Dependency Resolver**: Pan/zoom LiteGraph map with 4-tier missing node resolution (Local $\rightarrow$ Registry Cache $\rightarrow$ GitHub Search $\rightarrow$ Pip Runner).
 
 ---
 
