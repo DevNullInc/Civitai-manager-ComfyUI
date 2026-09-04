@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.2]
+
+### 🛡️ Fixed & Hardened
+
+- **Tracked Automated Test Suite in Version Control**:
+  - Removed `tests/` directory exclusion from `.gitignore` and committed the complete unit and integration test suite to Git.
+  - Resolved the root cause of CI build failures across Windows, Linux, and macOS runners where `vitest run` reported `No test files found, exiting with code 1` during the `Run npm test` workflow step.
+  - Added `passWithNoTests: true` into `vitest.config.ts` as an extra defensive CI pipeline guard.
+- **Modernized CI/CD Build Pipeline to Node.js 22 LTS**:
+  - Upgraded GitHub Actions multi-platform release runners in `.github/workflows/release.yml` from Node 20 to Node 22 (`node-version: 22`).
+  - Satisfied strict engine requirements (`node: >=22.12.0`) for `electron@44.0.0`, `@electron/rebuild`, `@electron/get`, and `node-abi`, completely eliminating `EBADENGINE` warnings and runner deprecation notices.
+  - Formally declared `engines` in `package.json` enforcing `node: ">=22.12.0"` and `npm: ">=10.0.0"`.
+
+---
+
 ## [1.4.1]
 
 ### 🌟 Added

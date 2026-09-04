@@ -264,7 +264,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
         const configRows = await dbManager.all('SELECT * FROM app_config;');
         const exportData = {
           exportedAt: new Date().toISOString(),
-          version: '1.4.1',
+          version: '1.4.2',
           config: configRows,
           models: rows,
         };

@@ -16,7 +16,6 @@ scratch/
 .cmm.pid
 .cmm-update-check
 .installed
-tests/
 release/
 build-release.*
 build-local.*

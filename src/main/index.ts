@@ -1255,7 +1255,7 @@ function startHttpBridgeServer() {
             uptime: process.uptime(),
             pid: process.pid,
             name: 'RenegadeCMM',
-            version: '1.4.1',
+            version: '1.4.2',
             port: apiPort,
             host: '127.0.0.1',
             localhostOnly: true,

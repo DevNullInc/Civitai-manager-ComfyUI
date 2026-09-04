@@ -1,7 +1,11 @@
 {
   "name": "renegadecmm",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Renegade Core Model Manager - the missing model manager for ComfyUI with verified CivitAI API integration and intelligent auto-sorting.",
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10.0.0"
+  },
   "main": "dist/main/index.js",
   "bin": {
     "cmm": "bin/cmm.js"

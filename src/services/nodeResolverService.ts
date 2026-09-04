@@ -501,7 +501,7 @@ export class NodeResolverService {
 
           const data = await this.fetchHttpJson(url, {
             headers: {
-              'User-Agent': 'RenegadeCMM/1.4.1',
+              'User-Agent': 'RenegadeCMM/1.4.2',
               Accept: 'application/vnd.github.v3+json',
             },
           });
@@ -1171,7 +1171,7 @@ export class NodeResolverService {
   private httpGet(urlStr: string): Promise<string | null> {
     return new Promise((resolve) => {
       https
-        .get(urlStr, { headers: { 'User-Agent': 'RenegadeCMM/1.4.1' } }, (res) => {
+        .get(urlStr, { headers: { 'User-Agent': 'RenegadeCMM/1.4.2' } }, (res) => {
           if (res.statusCode !== 200) {
             res.resume();
             return resolve(null);
@@ -1301,7 +1301,7 @@ export class NodeResolverService {
         } catch {}
 
         const headers: Record<string, string> = {
-          'User-Agent': 'RenegadeCMM/1.4.1',
+          'User-Agent': 'RenegadeCMM/1.4.2',
         };
         if (etag) {
           headers['If-None-Match'] = etag;

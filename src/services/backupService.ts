@@ -61,7 +61,7 @@ export class BackupService {
 
       const manifest: BackupManifest = {
         format: 'renegadecmm-backup-zip',
-        version: '1.4.1',
+        version: '1.4.2',
         createdAt: new Date().toISOString(),
         stats: {
           modelsCount: modelRows.length,

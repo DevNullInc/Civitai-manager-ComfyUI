@@ -10,7 +10,8 @@ This document outlines the planned milestones, upcoming features, and architectu
 graph LR
     v13["✅ v1.3.0<br/>CLI + HF Hub + Webhooks"] --> v14["✅ v1.4.0<br/>Workflow Auto-Resolver & UI"]
     v14 --> v141["✅ v1.4.1<br/>Live ComfyUI & Binary Hardening"]
-    v141 --> v15["🎯 v1.5.0<br/>Native HF & GGUF Engine"]
+    v141 --> v142["✅ v1.4.2<br/>CI Node 22 & Test Pipeline"]
+    v142 --> v15["🎯 v1.5.0<br/>Native HF & GGUF Engine"]
     v15 --> v16["🎯 v1.6.0<br/>Hardlink Storage Optimizer"]
     v16 --> v17["🎯 v1.7.0<br/>Smart Collections & Trigger Hub"]
     v17 --> v20["🎯 v2.0.0<br/>Unified Multi-Gen & Package Launch Hub"]
@@ -79,6 +80,19 @@ graph LR
   - ~~Stripped NSIS `elevate.exe` (`packElevateHelper: false`, `allowElevation: false`, `perMachine: false`) to permanently resolve AV false positives and GitHub release scanner moderation triggers.~~
 - [x] ~~**Automated Version Synchronization Tooling**~~ _(untested for now)_:
   - ~~Engineered `scripts/update-version.js` and `npm run version:bump` to synchronize versions across all manifests, configs, and client User-Agent headers.~~
+
+---
+
+### 🎯 Phase 1.2: v1.4.2 — CI/CD Multi-Platform Pipeline Modernization & Test Tracking
+
+> **Goal**: Upgrade continuous delivery runners to Node 22 LTS, track unit tests in source control, and eliminate all build-time engine and runner deprecation errors.
+
+- [x] ~~**Tracked Automated Test Suite in Version Control**~~:
+  - ~~Unignored `tests/` in `.gitignore` and committed all test suites so GitHub Actions runners execute `npm test` successfully.~~
+  - ~~Added `passWithNoTests: true` in `vitest.config.ts` as a pipeline safety net.~~
+- [x] ~~**Modernized CI/CD Runners to Node.js 22 LTS**~~:
+  - ~~Configured `node-version: 22` in release workflow, satisfying Electron 44 engine requirements (`>=22.12.0`) and eliminating all `EBADENGINE` warnings.~~
+  - ~~Declared `engines` specification in `package.json` enforcing `node: ">=22.12.0"` and `npm: ">=10.0.0"`.
 
 ---
 
