@@ -1,7 +1,7 @@
 # 🛡️ Renegade Core Model Manager (CMM) — Privacy Policy
 
 **Effective Date:** September 3, 2026  
-**Last Updated:** September 3, 2026  
+**Last Updated:** September 4, 2026  
 **Project:** Renegade Core Model Manager (RenegadeCMM)  
 **Maintainer:** TheStygianRenegade / /dev/null Inc
 
