@@ -114,7 +114,7 @@ We take application security seriously. If you discover a security vulnerability
 
 As Renegade CMM continues to evolve (e.g. multi-generation backend support, local LLM orchestration), this privacy policy may be updated. All updates will be published directly in the repository with a revised "Last Updated" timestamp. Our fundamental commitment to **zero telemetry, local-first computing, and strict credential isolation** will never change.
 
-**Major Changes:** Significant updates to data handling (e.g., adding new external services, changing encryption methods) will be announced in release notes and via GitHub repository notifications at least 30 days before taking effect.
+**Major Changes:** Changes that may affect user privacy or data handling (e.g., adding new external services, modifying encryption methods, introducing telemetry) will be announced in release notes and via GitHub repository notifications at least 30 days before taking effect. **Security hardening improvements** (e.g., strengthening encryption, removing unnecessary network calls, hardening the API bridge) may be deployed immediately without advance notice to protect users.
 
 ---
 
