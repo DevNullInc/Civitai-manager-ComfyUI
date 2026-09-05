@@ -106,10 +106,16 @@ Because CMM does not collect your data on remote servers:
 We take application security seriously. If you discover a security vulnerability or privacy concern regarding how credentials or files are handled, please disclose it responsibly via our [Security Policy](SECURITY.md) or open a private security advisory on GitHub:
 
 - **Security Advisory:** [https://github.com/DevNullInc/RenegadeCMM/security](https://github.com/DevNullInc/RenegadeCMM/security)
-- **Maintainer Contact:** `dev.null.industries@gmail.com`
+- **Maintainer Contact:** `contact-us@renegadeinc.net`
 
 ---
 
 ## 8. Updates to this Policy
 
-As Renegade CMM continues to evolve (e.g. multi-generation backend support, local LLM orchestration), this privacy policy may be updated. All updates will be published directly in the repository with a revised "Last Updated" timestamp. Our fundamental commitment to **zero telemetry, local-first computing, and strict credential isolation** will never chang
+As Renegade CMM continues to evolve (e.g. multi-generation backend support, local LLM orchestration), this privacy policy may be updated. All updates will be published directly in the repository with a revised "Last Updated" timestamp. Our fundamental commitment to **zero telemetry, local-first computing, and strict credential isolation** will never change.
+
+**Major Changes:** Significant updates to data handling (e.g., adding new external services, changing encryption methods) will be announced in release notes and via GitHub repository notifications at least 30 days before taking effect.
+
+---
+
+*Last reviewed against source: September 3, 2026*
